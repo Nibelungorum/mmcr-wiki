@@ -6,9 +6,16 @@ import { defineConfig, type DefaultTheme } from 'vitepress'
 const locale = 'zh-cn'
 const docsDir = resolve(dirname(fileURLToPath(import.meta.url)), '..', locale)
 const sectionTitles: Record<string, string> = {
-  api: 'API 参考',
-  quickstart: '快速开始',
-  usage: '用法',
+  '快速开始': '快速开始',
+  '示例': '全部示例',
+  'API': 'API 参考',
+}
+
+/** Sidebar section order: lower number comes first. Sections not listed here fall back to pinyin sort. */
+const sectionOrders: Record<string, number> = {
+  '快速开始': 1,
+  '示例': 2,
+  'API': 3,
 }
 
 export const zh = defineConfig({
@@ -47,15 +54,26 @@ function nav(): DefaultTheme.NavItem[] {
 function sidebar(): DefaultTheme.Sidebar {
   return readdirSync(docsDir, { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
-    .sort((left, right) => left.name.localeCompare(right.name))
+    .sort((left, right) =>
+      orderCompare(sectionOrders[left.name], sectionOrders[right.name],
+        () => left.name.localeCompare(right.name)))
     .map((section) => ({
       text: sectionTitles[section.name] ?? section.name,
-      items: markdownFiles(resolve(docsDir, section.name)).map((file) => ({
-        text: pageTitle(file),
-        link: pageLink(file),
-      })),
+      items: readPages(resolve(docsDir, section.name)),
     }))
     .filter((section) => section.items.length > 0)
+}
+
+function readPages(directory: string): DefaultTheme.SidebarItem[] {
+  return markdownFiles(directory)
+    .map((file) => ({ file, meta: pageMeta(file) }))
+    .sort((left, right) =>
+      orderCompare(left.meta.order, right.meta.order,
+        () => basename(left.file, '.md').localeCompare(basename(right.file, '.md'))))
+    .map(({ file, meta }) => ({
+      text: meta.title ?? basename(file, '.md'),
+      link: pageLink(file),
+    }))
 }
 
 function markdownFiles(directory: string): string[] {
@@ -67,13 +85,43 @@ function markdownFiles(directory: string): string[] {
       }
       return entry.isFile() && extname(entry.name) === '.md' ? [path] : []
     })
-    .sort()
 }
 
-function pageTitle(file: string): string {
-  const frontmatter = readFileSync(file, 'utf8').match(/^---\s*\n([\s\S]*?)\n---(?:\s*\n|$)/)?.[1]
-  const title = frontmatter?.match(/^title:\s*(?:"([^"]*)"|'([^']*)'|(.+?))\s*$/m)
-  return title?.[1] ?? title?.[2] ?? title?.[3]?.trim() ?? basename(file, '.md')
+interface PageMeta {
+  title?: string
+  order?: number
+}
+
+function pageMeta(file: string): PageMeta {
+  const block = readFileSync(file, 'utf8')
+    .match(/^---\s*\n([\s\S]*?)\n---(?:\s*\n|$)/)?.[1]
+  return {
+    title: block ? stringField(block, 'title') : undefined,
+    order: block ? numberField(block, 'order') : undefined,
+  }
+}
+
+function stringField(block: string, key: string): string | undefined {
+  const match = block.match(
+    new RegExp(`^${key}:\\s*(?:"([^"]*)"|'([^']*)'|(.+?))\\s*$`, 'm'))
+  return match?.[1] ?? match?.[2] ?? match?.[3]?.trim()
+}
+
+function numberField(block: string, key: string): number | undefined {
+  const raw = stringField(block, key)
+  if (raw === undefined) return undefined
+  const n = Number(raw)
+  return Number.isFinite(n) ? n : undefined
+}
+
+function orderCompare(
+  left: number | undefined,
+  right: number | undefined,
+  tiebreak: () => number,
+): number {
+  const lo = left ?? Number.POSITIVE_INFINITY
+  const ro = right ?? Number.POSITIVE_INFINITY
+  return lo !== ro ? lo - ro : tiebreak()
 }
 
 function pageLink(file: string): string {

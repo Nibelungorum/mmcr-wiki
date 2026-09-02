@@ -237,7 +237,7 @@ ServerEvents.recipes(event => {
 如果你有使用KubeJS的经验，不难看出，这就是符合原版策略的有一点点特殊的数据格式。其中各字段为:
 
 - `type`: 必须为'mmcr:machine_recipe'。
-- `machine`：虽然这个字段为machine，实际上它是recipeFamily。
+- `machine`：你的机器注册名（机器 ID）。MMCR 会用它去查找对应的机器定义，必须和 `MMCREvents.startup` 里 `createMachine()` 的字符串保持一致。注意：它跟 `builder.recipeFamily` 设置的 `recipeFamily` 并不是同一个东西，后者为机器自身的一个标签，只在 `MachineRegistration` 里用来给机器分类，并不会用来匹配配方文件。
 - `tick_time`: 配方运行总耗时，以tick为单位。
 - `requirements`: MMCR 的配方系统，在此处只是创建简单配方，无需深入了解。你只需要知道它声明了输入和输出。
 

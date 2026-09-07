@@ -1,0 +1,199 @@
+---
+title: DISTILLATION_TOWER
+order: 6
+---
+
+# DISTILLATION_TOWER — 蒸馏塔
+
+本文是 MMCR 第三个 Java API 示例。我们拆解 [DISTILLATION_TOWER.java](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/main/src/main/java/org/nibelungorum/builtin/DISTILLATION_TOWER.java)，看看一台使用 **多阶段扩展结构** 的蒸馏塔，以及如何在一条配方里同时给出**多个输出**与**概率输出**。
+
+## 概览
+
+蒸馏塔（DISTILLATION_TOWER）是一台处理"原材料 → 多产物 + 副产物"的机器。它把"宽窄两种形态"拆成结构上的**三个阶段**：基础塔体（4 层 z-slice）+ 一段扩展（5 层）+ 再一段扩展（6 层）。玩家可以只搭基础塔体跑配方，也可以继续往上加层解锁更大的并行上限。
+
+为什么选它做示例：
+
+- 演示 [`MachineStructureBuilder.expandStructure(...)`](../API/JavaAPI#machinestructurebuilder) 的**多阶段结构**：一台机器可以按层级解锁形态；
+- 演示**多输出配方**：同一条配方同时给多个物品输出；
+- 演示**概率输出** `outputChance(...)`：副产物不一定掉落；
+- 演示 [`allowPartialOutputs(true)`](../API/JavaAPI#machinerecipebuilder) 的"部分输出"语义——输出位放不下时允许丢弃剩余产物。
+
+涉及的全部 API：
+
+| 用到的 API | API 参考 |
+| --- | --- |
+| `MachineBuilder` | [链接](../API/JavaAPI#machinebuilder) |
+| `MMCRMachineDefinationsEvent` | [链接](../API/JavaAPI#mmcrmachinedefinationsevent) |
+| `MMCRMachineStructuresEvent` | [链接](../API/JavaAPI#mmcrmachinestructuresevent) |
+| `MMCRMachineRecipesEvent` | [链接](../API/JavaAPI#mmcrmachinerecipesevent) |
+| `MachineStructureBuilder` | [链接](../API/JavaAPI#machinestructurebuilder) |
+| `StructureStage` | [链接](../API/JavaAPI#structurestage) |
+| `PatternBuilder` | [链接](../API/JavaAPI#patternbuilder) |
+| `BlockPredicate` | [链接](../API/JavaAPI#blockpredicate) |
+| `InterfacePredicates` | [链接](../API/JavaAPI#interfacepredicates) |
+| `MachineRecipeBuilder` | [链接](../API/JavaAPI#machinerecipebuilder) |
+
+## 机器定义
+
+蒸馏塔的机器定义非常简短：
+
+```java
+private static final Identifier DISTILLATION_TOWER = id("distillation_tower");
+
+public static void registerDefinitions(MMCRMachineDefinationsEvent event) {
+    if (!event.definitions().containsKey(DISTILLATION_TOWER)) {
+        var machine = MachineBuilder
+                .machine(DISTILLATION_TOWER)
+                .displayNameKey("machine.mmcr.distillation_tower")
+                .appearance(a -> a.machineBasicBlock(Identifier.parse("polished_blackstone")))
+                .maxParallelism(32)
+                .parallelizable(true)
+                .build();
+        event.registerMachine(machine);
+    }
+}
+```
+
+三个要点：
+
+- `.appearance(a -> a.machineBasicBlock(Identifier.parse("polished_blackstone")))`：蒸馏塔主题色为磨制黑石（[`AppearanceSpec`](../API/JavaAPI#appearancespec)）。
+- `.maxParallelism(32).parallelizable(true)`：允许并行，并行上限 32。注意这里**没有**调用 [`MachineBuilder.allowMultithreading()`](../API/JavaAPI#machinebuilder) 与 `factory(...)`——蒸馏塔不开多线程工厂，所有并行都在同一根线程上排队执行（详见 BLAST_FURNACE 的对比）。
+- 没有声明智能接口、没有音效、没有任何修饰符——蒸馏塔只关心"能不能并行"。
+
+## 多方块结构：基础 + 两段扩展
+
+蒸馏塔的结构由三个 [`StructureStage`](../API/JavaAPI#structurestage) 组成：`fullStructure` 给出基础塔体；之后两次 `expandStructure(...)` 给出可选的塔身扩展。每一段都是独立的 PatternBuilder。
+
+### 第一阶段：基础塔体（4 层 z-slice）
+
+```java
+.fullStructure(s -> s
+        .pattern(p -> p
+                .layer("  XXX  ", "  AAA  ", "       ", "       ")
+                .layer(" XXXXX ", " B   B ", "  ACA  ", "       ")
+                .layer("XXXXXXX", "A     A", " B   B ", "  DDD  ")
+                .layer("XXXXXXX", "A     A", " B   B ", "  DDD  ")
+                .layer("XXXXXXX", "A     A", " B   B ", "  DDD  ")
+                .layer(" XXXXX ", " B   B ", "  BBB  ", "       ")
+                .layer("  XXX  ", "  BEB  ", "       ", "       ")
+                .where('C', any(
+                        InterfacePredicates.anyOfItemInput(),
+                        InterfacePredicates.anyOfItemOutput(),
+                        InterfacePredicates.anyOfEnergyInput(),
+                        block("minecraft:deepslate_bricks")
+                ))
+                .where('X', block("minecraft:polished_blackstone"))
+                .where('A', block("minecraft:deepslate_bricks"))
+                .where('B', block("minecraft:polished_blackstone_bricks"))
+                .where('D', block("minecraft:gilded_blackstone"))
+                .controller('E')
+        )
+)
+```
+
+基础塔体在 `z = 0..3` 共 4 个切片：
+
+- 外壳 `X` 是 `polished_blackstone`；
+- 内部 `A` 是 `deepslate_bricks`——也就是端口位（`C` 位置也匹配 `deepslate_bricks`，所以玩家也可以直接摆成装饰块）；
+- `B` 是 `polished_blackstone_bricks` 内壁；
+- `D` 是 `gilded_blackstone`，作为塔顶装饰；
+- `C` 是端口位：物品输入 / 输出、能量输入，或直接装饰用 `deepslate_bricks`；
+- `E` 是控制器位置。
+
+### 第二阶段：第一次扩展（5 层）
+
+```java
+.expandStructure(s -> s
+        .pattern(p -> p
+                .layer("  XXX  ", "  AAA  ", "       ", "       ", "       ")
+                ...
+        )
+)
+```
+
+`expandStructure(...)` 必须在 `fullStructure(...)` 之后调用，且模式中包含完整的塔体（不是"在基础塔体上额外加 1 层"）。这一段把 `z = 0..4` 的 5 个切片完整声明一遍——z=3 与 z=4 多了新的切片，但 z=0..2 必须**与基础塔体一致**，MMCR 用它来保证三段结构是同一台机器的不同形态，而不是三台机器。
+
+### 第三阶段：第二次扩展（6 层）
+
+```java
+.expandStructure(s -> s
+        .pattern(p -> p
+                .layer("  XXX  ", "  AAA  ", "       ", "       ", "       ", "       ")
+                ...
+        )
+)
+```
+
+同理，第三次把 z 拉到 6 层。每一次扩展相当于"把塔做高一层"。MMCR 会按 `z` 方向累计扩展，最终结构总高度等于最大扩展段的高。
+
+> **关于多阶段结构的"这是什么、为什么用"**：[`MachineStructureBuilder.expandStructure(...)`](../API/JavaAPI#machinestructurebuilder) 是"同台机器的不同形态"。搭建者搭出基础塔体（4 层）就能跑配方；继续往上加层解锁扩展形态（5/6 层）可以解锁更大的并行度（与 `maxParallelism` 配合），或只是单纯的视觉差异。MMCR 在结构匹配阶段会按"z 方向最长的合法模式"决定当前形态——这意味着搭建不完整的塔体会失败。
+
+`build(DISTILLATION_TOWER)` 把三段结构合并后绑定到机器 ID；`event.registerStructure(structure)` 提交。
+
+## 配方：多输出 + 概率输出 + 部分输出
+
+蒸馏塔只有一条配方，但这条配方把所有"多产物"相关的机制都用上了：
+
+```java
+@SubscribeEvent
+public static void register(MMCRMachineRecipesEvent event) {
+    var recipe = MachineRecipeBuilder
+            .recipe(DISTILLATION_TOWER.withSuffix("_recipe_1"), DISTILLATION_TOWER)
+            .inputItem(ItemTags.LOGS, 1)
+            .outputItem(Items.COAL, 4)
+            .outputItem(Items.GUNPOWDER,3)
+            .outputChance(new ItemStack(Items.STICK,2),0.5f)
+            .inputEnergy(20)
+            .allowPartialOutputs(true)
+            .duration(200)
+            .build();
+    event.registerRecipe(recipe);
+}
+```
+
+逐项拆解：
+
+- `.inputItem(ItemTags.LOGS, 1)`：输入是任意一种原木（标签输入），1 个。注意原木是物品标签 [ItemTags]，不是单一物品。
+- `.outputItem(Items.COAL, 4)`：第一个确定产物——4 个煤炭。
+- `.outputItem(Items.GUNPOWDER, 3)`：第二个确定产物——3 个火药。同一条配方可以多次调用 `outputItem(...)`，每次追加一个产物条目。
+- `.outputChance(new ItemStack(Items.STICK,2), 0.5f)`：概率产物——2 个木棍，50% 概率掉落。`outputChance(stack, chance)` 接受 `ItemStack` 与 `float chance`（0.0–1.0）。
+- `.inputEnergy(20)`：每 tick 20 FE。
+- `.allowPartialOutputs(true)`：允许部分输出。详细说明见下。
+- `.duration(200)`：10 秒。
+
+> **关于 `allowPartialOutputs(true)`**：默认情况下，配方要求**全部产物一次性放入输出端口**。如果输出端口空间不够（比如煤炭占 4 格、火药占 3 格，但输出端口只有 5 格），整条配方就不能执行。`allowPartialOutputs(true)` 改变这一行为：MMCR 会按顺序放入，能放多少放多少；放不下的产物被**丢弃**，但配方仍算成功。
+
+> **关于"概率输出"**：概率输出与确定输出共用输出空间，但**先放确定输出**。50% 概率的木棍在确定输出（4 煤炭 + 3 火药 = 7 格）放完之后，按概率尝试放入。如果 `allowPartialOutputs(true)` 关闭但概率空间不够，可能导致整条配方无法执行——这是设计阶段的常见踩坑点。
+
+`build()` 返回 `MachineRecipeDefinition`；`event.registerRecipe(recipe)` 提交。注意这台机器的配方 ID 是 `mmcr:distillation_tower_recipe_1`，带 `_recipe_1` 后缀是因为源码预留了后续添加更多配方的空间（同样地，`event.recipes().containsKey(...)` 的判断也以**完整配方 ID** 为准，不是机器 ID）。
+
+## 多阶段结构与并行的协作
+
+蒸馏塔的 `maxParallelism(32)` 是机器上限，但**实际可用并行数**取决于结构形态：
+
+- 玩家只搭基础塔体（4 层）→ 默认并行 1（无并行控制器）；
+- 玩家把结构扩展到 5 层或 6 层 → 并行仍受机器上限 32 约束，但若此时在结构中放置并行控制器，并行上限会按控制器的等级与机器上限取较小值。
+
+也就是说，扩展段在蒸馏塔里主要起**视觉与玩法**作用（"做出更高的塔"），并不直接改变并行上限。真正改变并行上限的是结构里的并行控制器方块 + 机器定义的 `maxParallelism(...)`。
+
+## 与 BLAST_FURNACE 的对比
+
+| 维度 | BLAST_FURNACE | DISTILLATION_TOWER |
+| --- | --- | --- |
+| 多线程工厂 | `hasFactory(true).threadLimit(4)` | 无（不开多线程） |
+| 并行上限 | `Integer.MAX_VALUE` | `32` |
+| 多输出配方 | 无 | 2 个确定输出 + 1 个概率输出 |
+| 部分输出 | 默认 `false` | `allowPartialOutputs(true)` |
+| 结构阶段数 | 1（`fullStructure`） | 3（1 × `fullStructure` + 2 × `expandStructure`） |
+| 结构大小 | 3×3×3 | 7×7×6（最大形态） |
+
+BLAST_FURNACE 关心"如何快"（并行 + 多线程），DISTILLATION_TOWER 关心"如何多产物"（多输出 + 概率 + 部分输出）。两者共同覆盖了 MMCR 内置机器里"性能方向"与"配方表达方向"的两个典型代表。
+
+## 延伸阅读
+
+- [BLAST_FURNACE](BLAST_FURNACE) — 并行与多线程工厂的对照。
+- [PURPUR_FURNACE](PURPUR_FURNACE) — 智能接口与多配方家族的对照。
+- [`MachineStructureBuilder`](../API/JavaAPI#machinestructurebuilder) — `expandStructure` 与 `fullStructure` 的签名约束。
+- [`StructureStage`](../API/JavaAPI#structurestage) — 阶段构建器内部接口。
+- [`MachineRecipeBuilder`](../API/JavaAPI#machinerecipebuilder) — `outputItem` / `outputChance` / `allowPartialOutputs` 的完整签名。
+- [`MachineStructureBuilder`](../KubeJS/A_Simple_Machine) — KubeJS 端的 `expandStructure` 写法。

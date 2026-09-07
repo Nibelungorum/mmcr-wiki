@@ -5,16 +5,18 @@ order: 4
 
 ## 一些准备
 
-本节面向具备 NeoForge Mod 开发经验的读者。在阅读之前，请确认已经熟悉以下前置知识：
+本节面向具备 NeoForge Mod 开发经验的读者，属于**有门槛**的内容。
 
-- NeoForge Mod 的工程结构、`build.gradle` 与依赖声明方式。
-- `ServiceLoader` 机制的工作原理，以及 `META-INF/services` 文件的格式。
-- NeoForge 事件总线与 `@SubscribeEvent`、`@EventBusSubscriber` 的注册方式。
+在阅读之前，请确认已经熟悉以下前置知识：
+
+- NeoForge Mod 的开发流程。
+- `ServiceLoader` 机制(不需要特别懂)，以及编写 `META-INF` 目录下文件的能力。
+- 了解并能使用 NeoForge 事件总线与 `@SubscribeEvent`、`@EventBusSubscriber`。
 - Java 注解、函数式接口与流式 API（`UnaryOperator`、`Consumer`）的基本用法。
 
 ### 工程要求
 
-Java API 方式不要求安装 KubeJS，但要求目标工程具备以下条件：
+Java API 没有任何硬性依赖，但要求目标工程具备以下条件：
 
 - 工程的 `modid` 已确定并固定。本教程示例中假定 `modid` 为 `my_mod`。
 - 工程的 `mods.toml` 声明 MMCR 为必需依赖（`[[dependencies.${modid}]]` 段中包含 `modId="mmcr"` 且 `mandatory=true`），否则机器定义事件不会被发布到该 mod 的事件总线。
@@ -22,37 +24,23 @@ Java API 方式不要求安装 KubeJS，但要求目标工程具备以下条件�
 
 ### 添加 MMCR 依赖
 
-MMCR 的发布仓库托管于 [HowXu 的 Maven 仓库](https://maven.howxu.cn/#/cn/howxu/ModularMachinery-Community-Refoxed)，使用前需先在 `settings.gradle` 中声明仓库地址：
+MMCR 的发布仓库托管于 [HowXu's Maven](https://maven.howxu.cn/)，使用前需先在 `build.gradle` 中声明仓库地址：
 
 ```groovy
-pluginManagement {
-    repositories {
-        gradlePluginPortal()
-        maven { url = 'https://maven.neoforged.net/releases' }
-    }
-}
-
-dependencyResolutionManagement {
-    repositories {
-        maven { url = 'https://maven.howxu.cn/' }
+repositories {
+    maven {
+        name = 'HowXu Maven'
+        url = 'https://maven.howxu.cn/' 
     }
 }
 ```
 
-随后在 `build.gradle` 中按需声明 MMCR 依赖。MMCR 在仓库中以两个分类发布：
+随后按需声明 MMCR 依赖。MMCR 在仓库中以两个分类发布：
 
 - `cn.howxu:ModularMachinery-Community-Refoxed:<version>`：完整 Mod JAR，包含运行时类、Mixin、资源等。
 - `cn.howxu:ModularMachinery-Community-Refoxed:<version>:api`：仅含 `cn/howxu/mmcr/api/publicapi/**` 公共 API 的精简 JAR，无运行时类。
 
-最简的引入方式（推荐用作开发期调试）：
-
-```groovy
-dependencies {
-    implementation "cn.howxu:ModularMachinery-Community-Refoxed:0.0.2+efa2122d"
-}
-```
-
-若仅需在编译期引用公共 API、运行时由玩家自行安装 MMCR：
+建议通常情况下使用 `compileOnly`的API 和 `runtimeOnly`的本体：
 
 ```groovy
 dependencies {
@@ -61,17 +49,15 @@ dependencies {
 }
 ```
 
-版本号以仓库当前最新发布为准，可在 [https://maven.howxu.cn/](https://maven.howxu.cn/) 浏览版本列表。本教程示例采用 `0.0.2+efa2122d`。
+如果你希望解锁更多更高级的功能，可以完全引入：
 
-### 推荐包结构
-
-为便于维护，建议将与 MMCR 相关的 Java 类集中在同一包下：
-
+```groovy
+dependencies {
+    implementation "cn.howxu:ModularMachinery-Community-Refoxed:0.0.2+efa2122d"
+}
 ```
-com.example.myfirstmachine/
-├── MyFirstMachineProvider.java     # 机器定义（ServiceLoader 入口）
-└── MyFirstMachineRegistrar.java    # 结构与配方订阅
-```
+
+版本号以仓库当前最新发布为准，可在 [https://maven.howxu.cn/](https://maven.howxu.cn/#/cn/howxu/ModularMachinery-Community-Refoxed) 浏览版本列表。本教程示例采用 `0.0.2+efa2122d`。
 
 ### 为什么使用 ServiceLoader
 
@@ -81,7 +67,7 @@ MMCR 的机器定义采用 `ServiceLoader` 进行发现，主要基于以下三�
 - **多 Mod 隔离**：每个 Mod 独立提供自己的 Provider，互不耦合；MMCR 启动期统一遍历所有已声明的 Provider。
 - **生命周期正确性**：`ServiceLoader` 在 `ServiceLoader#load` 调用时实例化 Provider，确保机器定义事件发布时所有 Provider 都已可用。
 
-结构与配方事件不属于 `ServiceLoader` 范畴，它们通过 NeoForge 事件总线发布，必须通过 `@SubscribeEvent` 订阅。
+结构与配方事件不属于 `ServiceLoader` 范畴，它们通过 NeoForge 事件总线发布，通过 `@SubscribeEvent` 订阅。
 
 ### 三个事件的顺序与关系
 
@@ -91,13 +77,13 @@ MMCR 的注册流程严格按以下顺序执行：
 2. **结构**（`MMCRMachineStructuresEvent`）：通过 NeoForge 事件总线发布，订阅者向已定义的机器追加 `MachineStructureDefinition`。
 3. **配方**（`MMCRMachineRecipesEvent`）：通过 NeoForge 事件总线发布，订阅者注册 `MachineRecipeDefinition`。
 
-后两个阶段在生产环境下不可热加载。所有内容一旦提交即被冻结，注册窗口关闭后再次注册会抛出 `IllegalStateException`。
+后两个阶段在对于Java API也是不可热加载的。所有内容一旦提交即被冻结，注册窗口关闭后再次注册会抛出 `IllegalStateException`。
 
 ## 机器定义阶段
 
-机器定义通过 `cn.howxu.mmcr.api.publicapi.machine.MachineBuilder` 流式构建，并通过 `MachineDefinitionProvider` 接口 + `ServiceLoader` 提交到 MMCR 的注册窗口。
+机器定义通过 `MachineBuilder` 流式构建，并通过 `MachineDefinitionProvider` 接口 + `ServiceLoader` 提交到 MMCR 的注册窗口。
 
-### 第一步：实现 Provider 类
+### 1. 实现 Provider 类
 
 新建 `MyFirstMachineProvider.java`，文件路径为：
 
@@ -136,7 +122,7 @@ public final class MyFirstMachineProvider implements MachineDefinitionProvider {
 }
 ```
 
-### 第二步：声明 ServiceLoader 文件
+### 2. 声明 ServiceLoader 文件
 
 在资源目录下创建 `META-INF/services/` 目录，新建文件：
 
@@ -165,13 +151,13 @@ MMCR 启动时会通过 `ServiceLoader.load(MachineDefinitionProvider.class)` �
 - `AppearanceSpec.Builder.machineBasicBlock(Identifier)`：设置外观方块 ID（如 `minecraft:purpur_block`）。
 - `MachineBuilder.build()`：终结构建，返回不可变的 `MachineDefinition`。
 
-未显式指定行为时，构建器默认使用 `RecipeBehavior.defaults()`：机械运转完全由配方数据驱动。这与 KubeJS 版 `createMachine(...).register()` 等价。
+未显式指定行为时，构建器默认使用 `RecipeBehavior.defaults()`：机械运转完全由配方数据驱动。与 KubeJS 版 `createMachine(...).register()` 等价。
 
 ## 结构阶段
 
 结构在机器定义注册完成后，通过订阅 `MMCRMachineStructuresEvent` 提交。
 
-### 第一步：创建订阅类
+### 1. 创建订阅类
 
 新建 `MyFirstMachineRegistrar.java`，文件路径为：
 
@@ -223,7 +209,7 @@ public final class MyFirstMachineRegistrar {
 }
 ```
 
-### 字段说明
+### 2. 字段说明
 
 本示例中调用的接口含义：
 
@@ -246,7 +232,7 @@ public final class MyFirstMachineRegistrar {
 
 机械搭建完成后，若要接收物品与能量，必须在结构中预留可替换接口位置。MMCR 提供了 `InterfacePredicates` 静态方法，覆盖全部内置端口、控制器与升级总线的快捷谓词。
 
-### 修改模式绑定
+### 1. 修改模式绑定
 
 将字符 `H` 的谓词从固定方块改为端口并集。在 `MyFirstMachineRegistrar.java` 中追加导入：
 
@@ -268,7 +254,7 @@ import static cn.howxu.mmcr.api.publicapi.machine.BlockPredicate.any;
 
 修改完成后，重新编译工程并重启游戏。
 
-### 字段说明
+### 2. 字段说明
 
 本示例中调用的接口含义：
 
@@ -283,7 +269,7 @@ Java API 不支持运行时热重载接口绑定。修改谓词后必须重新�
 
 配方通过订阅 `MMCRMachineRecipesEvent` 注册。一台机器可以注册多个配方，配方 ID 必须全局唯一。
 
-### 第一步：扩展订阅类
+### 1. 扩展订阅类
 
 在 `MyFirstMachineRegistrar.java` 中追加导入：
 
@@ -323,7 +309,7 @@ public static void registerRecipes(MMCRMachineRecipesEvent event) {
 - `MachineRecipeBuilder.duration(int)`：配方总耗时（tick），必须为正整数。
 - `MachineRecipeBuilder.build()`：终结构建，返回不可变的 `MachineRecipeDefinition`。
 
-### 配方字段含义对照
+### 2. 配方字段含义对照
 
 | 字段 | 值 | 含义 |
 | --- | --- | --- |
@@ -334,7 +320,7 @@ public static void registerRecipes(MMCRMachineRecipesEvent event) {
 | `inputEnergy` | `10 FE/tick` | 每 tick 消耗 10 FE |
 | `duration` | `200 tick` | 配方总耗时 10 秒 |
 
-### 后续步骤
+## 后续步骤
 
 完成编译并启动游戏后：
 

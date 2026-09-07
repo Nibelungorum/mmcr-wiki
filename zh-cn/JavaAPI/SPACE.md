@@ -1,0 +1,263 @@
+---
+title: SPACE
+order: 7
+---
+
+# SPACE — 太空电梯 + 太空重组机（HOST + MODULE）
+
+本文是 MMCR 第四个 Java API 示例。我们拆解 [SPACE.java](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/main/src/main/java/org/nibelungorum/builtin/SPACE.java)，看看**一个 .java 文件如何注册两台机器**（一台 HOST、一台 MODULE），以及配方如何用 `requiredHost(...)` 把自己限定在"宿主在场时才能执行"。
+
+## 概览
+
+SPACE 这一个文件里实际有两台机器：
+
+1. **太空电梯**（`SPACE_ELEVATOR`）—— `MachineRole.HOST`，负责放苹果换金苹果；
+2. **太空重组机**（`SPACE_REASSEMBLER`）—— `MachineRole.MODULE`，把水药变成治疗药水（带数据组件匹配）。
+
+宿主电梯通过 `MachineBuilder.acceptedModule(...)` 接受重组机模块；重组机的配方 `requiredHost(SPACE_ELEVATOR)` 把自己绑在电梯旁边才能跑。这套 HOST + MODULE 模式是 MMCR 处理"一台大机器 + 多台挂件小机器"的标准做法。
+
+为什么选它做示例：
+
+- 演示 [`MachineRole.HOST`](../API/JavaAPI#machinerole) / [`MachineRole.MODULE`](../API/JavaAPI#machinerole) 与 [`MachineBuilder.acceptedModule(...)`](../API/JavaAPI#machinebuilder) 的约束；
+- 演示 [`MachineRecipeBuilder.requiredHost(...)`](../API/JavaAPI#machinerecipebuilder) 与 [`RequiredHost`](../API/JavaAPI#requiredhost) 记录；
+- 演示**数据组件匹配**：配方输入用 `DataComponentPredicateSet` 精确匹配 `minecraft:potion_contents` 组件，输出再用一个全新的组件——这是 MMCR 对原版药水/物品 NBT 的官方接入方式；
+- 演示 `parallelized(true)` 配方级并行开关（与机器级 `parallelizable(true)` 互补）；
+- 演示 [`BlockPredicate.coupler()`](../API/JavaAPI#blockpredicate) 机器耦合器，作为 HOST 与 MODULE 的物理拼合点。
+
+涉及的全部 API：
+
+| 用到的 API | API 参考 |
+| --- | --- |
+| `MachineBuilder` | [链接](../API/JavaAPI#machinebuilder) |
+| `MachineRole` | [链接](../API/JavaAPI#machinerole) |
+| `MachineStructureBuilder` | [链接](../API/JavaAPI#machinestructurebuilder) |
+| `PatternBuilder` | [链接](../API/JavaAPI#patternbuilder) |
+| `BlockPredicate` | [链接](../API/JavaAPI#blockpredicate) |
+| `InterfacePredicates` | [链接](../API/JavaAPI#interfacepredicates) |
+| `AppearanceSpec` | [链接](../API/JavaAPI#appearancespec) |
+| `MachineRecipeBuilder` | [链接](../API/JavaAPI#machinerecipebuilder) |
+| `RequiredHost` | [链接](../API/JavaAPI#requiredhost) |
+| `ComponentPredicate` | [链接](../API/JavaAPI#componentpredicate) |
+| `DataComponentPredicateSet` | [链接](../API/JavaAPI#datacomponentpredicateset) |
+
+## 机器定义：两台机器一台文件
+
+`SPACE.java` 的 `registerDefinitions(...)` 注册两台机器。注意两台机器共用同一个 `if (!event.definitions().containsKey(SPACE_ELEVATOR) && !event.definitions().containsKey(SPACE_REASSEMBLER))` 幂等检查——这是因为它们必须成对注册，单独注册其中一台会导致 `HOST` 找不到被接受的模块。
+
+```java
+private static final Identifier SPACE_ELEVATOR = id("space_elevator");
+private static final Identifier SPACE_REASSEMBLER = id("space_reassembler");
+
+public static void registerDefinitions(MMCRMachineDefinationsEvent event) {
+    if (!event.definitions().containsKey(SPACE_ELEVATOR) && !event.definitions().containsKey(SPACE_REASSEMBLER)) {
+        var machine = MachineBuilder
+                .machine(SPACE_ELEVATOR)
+                .displayNameKey("machine.mmcr.space_elevator")
+                .appearance(a -> a
+                        .machineBasicBlock("smooth_quartz")
+                        .controllerBaseTexture(Identifier.parse("block/quartz_block_bottom"))
+                        .formedPortBaseTexture(Identifier.parse("block/quartz_block_bottom"))
+                )
+                .role(MachineRole.HOST)
+                .acceptedModule(SPACE_REASSEMBLER)
+                .build();
+        event.registerMachine(machine);
+
+        machine = MachineBuilder
+                .machine(SPACE_REASSEMBLER)
+                .displayNameKey("machine.mmcr.space_reassembler")
+                .appearance(a -> a.machineBasicBlock("quartz_pillar"))
+                .role(MachineRole.MODULE)
+                .build();
+        event.registerMachine(machine);
+    }
+}
+```
+
+逐项拆解电梯：
+
+- `.appearance(a -> a.machineBasicBlock("smooth_quartz").controllerBaseTexture(...).formedPortBaseTexture(...))`：电梯主题色为平滑石英（[`AppearanceSpec`](../API/JavaAPI#appearancespec)）；`controllerBaseTexture` 与 `formedPortBaseTexture` 分别控制控制器方块底面纹理与成型后端口底面纹理——这里都设为石英块底面。
+- `.role(MachineRole.HOST)`：把电梯标记为**模块宿主**。
+- `.acceptedModule(SPACE_REASSEMBLER)`：声明电梯接受的模块 ID——只有 `SPACE_REASSEMBLER` 这台机器的方块可以作为电梯的模块。如果不调用 `acceptedModule(...)`，`build()` 会在 `role == HOST` 时抛 `IllegalStateException`。
+
+重组机部分：
+
+- `.role(MachineRole.MODULE)`：标记为**模块机器**。模块机器通常不能独立形成结构——它们必须依附于宿主存在。
+- 没有调用 `acceptedModule(...)`，因为模块机器自己不接受别的模块。
+
+> **关于"HOST + MODULE 的约束"**：MMCR 在 `MachineBuilder.build()` 阶段强制检查 `role` 与 `acceptedModule` 的对应关系：
+>
+> - `role == HOST` 但 `acceptedModuleIds` 为空 → `IllegalStateException`；
+> - `role != HOST` 但 `acceptedModuleIds` 非空 → `IllegalStateException`；
+> - 模块机器（`role == MODULE`）必须被某台 `HOST` 通过 `acceptedModule(...)` 显式接受，否则其结构无法放置。
+
+两台机器都注册到事件后，注册窗口才继续接受后续机器。**这是注册阶段唯一的耦合点**——电梯结构里是否真的存在重组机方块，是运行时由 `BlockPredicate.coupler()` 在结构匹配阶段检查的。
+
+## 多方块结构：电梯与重组机各一份
+
+电梯结构和重组机结构分别声明，但用同一个 `if (!event.structures().containsKey(...))` 包裹。两者都用 `fullStructure(...)` 单段声明，没有 `expandStructure`——这台机器没有"不同形态"的概念。
+
+### 电梯结构
+
+```java
+var structure = MachineStructureBuilder
+        .structure()
+        .fullStructure(s -> s
+                .pattern(p -> p
+                        .layer("        X        ", "                 ", ... )
+                        ...
+                        .where('X', block("minecraft:smooth_quartz"))
+                        .where('A', block("minecraft:amethyst_block"))
+                        .where('B', coupler())
+                        .where('D', any(
+                                block("minecraft:smooth_quartz"),
+                                InterfacePredicates.anyOfItemInput(),
+                                InterfacePredicates.anyOfItemOutput(),
+                                InterfacePredicates.anyOfEnergyInput()
+                        ))
+                        .controller('E')
+                )
+        )
+        .build(SPACE_ELEVATOR);
+event.registerStructure(structure);
+```
+
+要点：
+
+- 17 个 `layer`（z = 0..11 的 17 个切片），每个切片 17 列宽——这是 MMCR 内置机器里最大的多方块结构之一。
+- `B` 位置绑定 [`BlockPredicate.coupler()`](../API/JavaAPI#blockpredicate) 机器耦合器：玩家在电梯塔体两侧的 `B` 位置放上耦合器方块，电梯结构就能"吸附"重组机模块。
+- `D` 位置是多选并集：装饰用的平滑石英、或任意物品/能量端口。
+- 控制器 `E` 是石英底面方块（被 `block("minecraft:smooth_quartz")` 匹配）。
+
+### 重组机结构
+
+```java
+structure = MachineStructureBuilder
+        .structure()
+        .fullStructure(s -> s
+                .pattern(p -> p
+                        .layer("AAA", "XBX", "XBX", "XDX")
+                        .layer("AAA", "BEB", "B B", "DDD")
+                        .layer("AAA", "XFX", "XBX", "XDX")
+                        .where('X', block("minecraft:quartz_pillar"))
+                        .where('A', block("minecraft:amethyst_block"))
+                        .where('B', any(
+                                block("minecraft:smooth_quartz"),
+                                InterfacePredicates.anyOfItemInput(),
+                                InterfacePredicates.anyOfItemOutput(),
+                                InterfacePredicates.anyOfEnergyInput()
+                        ))
+                        .where('D', block("minecraft:glass"))
+                        .where('E', coupler())
+                        .controller('F')
+                )
+        )
+        .build(SPACE_REASSEMBLER);
+```
+
+重组机结构小巧得多——只有 3×4×3 共 12 格：
+
+- `E` 是 `coupler()`——与电梯结构里的 `B` 配对；
+- `F` 是控制器；
+- `D` 是玻璃（装饰）；
+- `B` 是端口位。
+
+> **关于 `coupler()` 的匹配机制**：[`BlockPredicate.coupler()`](../API/JavaAPI#blockpredicate)（别名 `machineCoupler()`）匹配 MMCR 的所有机器耦合器方块。玩家在电梯结构旁边放上耦合器方块，再把重组机结构嵌进耦合器位置——MMCR 通过耦合器识别"这台模块机器挂在了哪台宿主上"。这是 HOST + MODULE 模式在物理层面的对应物。
+
+## 配方：宿主限定 + 数据组件匹配
+
+`SPACE.java` 注册两条配方：一条跑在重组机上（受宿主电梯约束），一条跑在电梯上。
+
+### 重组机配方：药水 → 药水
+
+```java
+private static DataComponentPredicateSet potion(String potionId) {
+    JsonObject contents = new JsonObject();
+    contents.addProperty("potion", potionId);
+
+    return new DataComponentPredicateSet(Map.of(
+            Identifier.parse("minecraft:potion_contents"),
+            ComponentPredicate.exact(contents)));
+}
+
+@SubscribeEvent
+public static void register(MMCRMachineRecipesEvent event) {
+    var recipe = MachineRecipeBuilder
+            .recipe(SPACE_REASSEMBLER.withSuffix("_space_reassembler_1"), SPACE_REASSEMBLER)
+            .inputItem(Ingredient.of(Items.POTION), 1, potion("minecraft:water"), 1F)
+            .outputItem(new ItemStack(Items.POTION), potion("minecraft:healing"))
+            .inputEnergy(100)
+            .parallelized(true)
+            .duration(100)
+            .requiredHost(SPACE_ELEVATOR)
+            .build();
+
+    event.registerRecipe(recipe);
+    ...
+}
+```
+
+逐项拆解：
+
+- `.inputItem(Ingredient.of(Items.POTION), 1, potion("minecraft:water"), 1F)`：输入是 1 个**任意药水**，但必须满足数据组件 `minecraft:potion_contents` 精确等于 `{potion: "minecraft:water"}`——也就是说只接受水瓶。`potion(...)` 是文件内定义的私有辅助方法，返回一个 `DataComponentPredicateSet`。
+- `.outputItem(new ItemStack(Items.POTION), potion("minecraft:healing"))`：输出是 1 个治疗药水。这里传的是 `ItemStack`，**完整覆盖**——不复制输入物品的状态，而是创建一个全新的 `Items.POTION` 实例并附加 `potion_contents = {potion: "minecraft:healing"}`。
+- `.inputEnergy(100)`：每 tick 100 FE。
+- `.parallelized(true)`：**配方级**并行开关。即使机器本身没声明 `parallelizable(true)`，只要配方声明 `parallelized(true)`，玩家就能用并行控制器跑多份。
+- `.duration(100)`：5 秒。
+- `.requiredHost(SPACE_ELEVATOR)`：配方要求宿主是 `SPACE_ELEVATOR`。如果重组机没有被吸附到电梯上（没有耦合器连接），这条配方不执行。
+
+### 电梯配方：苹果 → 金苹果
+
+```java
+recipe = MachineRecipeBuilder
+        .recipe(SPACE_ELEVATOR.withSuffix("_recipe_1"), SPACE_ELEVATOR)
+        .inputItem(Items.APPLE, 1)
+        .outputItem(Items.GOLDEN_APPLE, 3)
+        .inputEnergy(100)
+        .parallelized(true)
+        .duration(1000)
+        .build();
+
+event.registerRecipe(recipe);
+```
+
+电梯自己的配方是简单的"1 苹果 → 3 金苹果"，50 秒、每 tick 100 FE、`parallelized(true)`。这条配方**没有** `requiredHost(...)`——因为电梯本身是 HOST，不需要宿主。
+
+> **关于"数据组件匹配"**：[`DataComponentPredicateSet`](../API/JavaAPI#datacomponentpredicateset) + [`ComponentPredicate.exact(...)`](../API/JavaAPI#componentpredicate) 是 MMCR 处理 1.20.5+ 原版数据组件的官方方式。`exact(JsonElement)` 把整个 JSON 值作为匹配条件——`{potion: "minecraft:water"}` 只匹配水瓶，不匹配喷溅水瓶（后者还有 `custom_effects` 等额外字段）。输出端的 `outputItem(ItemStack, DataComponentPredicateSet)` 也是 `exact` 语义：MMCR 会直接把数据组件写到输出物品上，**不允许模糊谓词**（参见 `ComponentPredicate` 的"注意事项"）。
+
+> **关于"配方并行 vs 机器并行"**：机器级的 `parallelizable(true)` + `maxParallelism(N)` 是机器允许并行的硬上限；配方级的 `parallelized(true)` 是"此配方可被并行"的开关。两者必须**同时为 true**，玩家用并行控制器才能跑多份。电梯与重组机的机器定义都**没有**调用 `parallelizable(true)`——它们的配方级 `parallelized(true)` 是为了让配方走并行控制器而绕过了机器声明。这套组合在 MMCR 里是合法的，但需要测试时验证。
+
+## HOST + MODULE 的运行时关系
+
+把整套放在一起看：
+
+1. **注册期**：电梯 `role = HOST`、`acceptedModule = SPACE_REASSEMBLER`；重组机 `role = MODULE`。`MachineBuilder.build()` 在两者都注册后才允许继续。
+2. **搭建期**：玩家在世界中搭出电梯结构；在电梯的 `B` 位置（耦合器位）放上耦合器方块；把重组机结构嵌进耦合器。MMCR 通过 `BlockPredicate.coupler()` 在结构匹配阶段识别出"这台重组机挂在了电梯上"。
+3. **运行期**：玩家把水瓶塞进重组机的端口。如果重组机此时**没有**吸附到电梯，重组机的配方 `requiredHost(SPACE_ELEVATOR)` 不满足，配方不执行。如果吸附成功，配方跑，水瓶变治疗药水。
+
+注意电梯的配方（苹果 → 金苹果）**不依赖**重组机——电梯是宿主，但宿主本身可以独立运行；模块机器只能作为宿主的一部分运行（因为它的结构要求耦合器连接）。
+
+## 与 BLAST_FURNACE / DISTILLATION_TOWER / PURPUR_FURNACE 的对比
+
+| 维度 | BLAST_FURNACE | DISTILLATION_TOWER | PURPUR_FURNACE | SPACE |
+| --- | --- | --- | --- | --- |
+| 机器数 / 文件 | 1 | 1 | 1 | 2（HOST + MODULE） |
+| 多线程工厂 | 有 | 无 | 无 | 无 |
+| 智能接口 | 无 | 无 | 有 | 无 |
+| 配方并行 | 机器级 + 配方级 | 机器级 | 机器级 | 仅配方级 |
+| 数据组件匹配 | 无 | 无 | 无 | 有（药水） |
+| 多阶段结构 | 无 | 有（3 段） | 无 | 无 |
+| 模块宿主 | 无 | 无 | 无 | 有 |
+
+SPACE 是 MMCR 内置机器中**唯一**演示了 HOST + MODULE 与数据组件匹配的案例。它和 BLAST_FURNACE / DISTILLATION_TOWER / PURPUR_FURNACE 几乎不重叠，正好补齐"机器协作方向"的演示。
+
+## 延伸阅读
+
+- [BLAST_FURNACE](BLAST_FURNACE) — 并行与多线程工厂的对照。
+- [PURPUR_FURNACE](PURPUR_FURNACE) — 智能接口与多配方家族的对照。
+- [DISTILLATION_TOWER](DISTILLATION_TOWER) — 多阶段扩展结构与多输出配方的对照。
+- [`MachineRole`](../API/JavaAPI#machinerole) — `HOST` / `MODULE` / `NORMAL` 的约束矩阵。
+- [`RequiredHost`](../API/JavaAPI#requiredhost) — 配方宿主机器要求记录。
+- [`ComponentPredicate`](../API/JavaAPI#componentpredicate) — 数据组件谓词全集。
+- [`DataComponentPredicateSet`](../API/JavaAPI#datacomponentpredicateset) — 数据组件集合。
+- [MachineBuilder](../KubeJS/A_Simple_Machine) — KubeJS 端 `role` / `host` 的脚本对应。

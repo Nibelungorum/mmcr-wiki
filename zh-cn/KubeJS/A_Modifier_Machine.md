@@ -1,0 +1,348 @@
+---
+title: A_Modifier_Machine
+order: 8
+---
+
+# A_Modifier_Machine — 修饰器系统（合金炉）
+
+本文演示 MMCR 的 **Modifier 系统**：把一类"对配方的修饰规则"打包成可复用的修饰器，再用结构上的特殊方块位作为修饰器"使用处"。代码对应 [Java 端的 ALLOY_FURNACE](../JavaAPI/ALLOY_FURNACE)。
+
+## 机器简介
+
+`A_Modifier_Machine` 由三个文件组成：
+
+- `example/startup_scripts/A_Modifier_Machine.js` — 注册 `kubejs_alloy_furnace` 机器，并注册两个修饰器（绿宝石加速、青金石加倍）以及它们的触发物品。
+- `example/server_scripts/structure/A_Modifier_Machine.js` — 3×3×3 的多方块结构，中间层有四个修饰器使用位（`M`），每个 `M` 上放一个绿宝石块 / 青金石块即可触发对应修饰器。
+- `example/server_scripts/recipe/A_Modifier_Machine.js` — 一把带锋利 II 的剑 → 两颗锋利 III 铁锭；配方本身不带修饰器效果，效果由结构里摆的绿宝石 / 青金石动态叠加。
+
+修饰器系统把"配方本身"与"机器里有什么方块"解耦。配方作者只关心"输入输出什么"，机器摆放者用结构上的方块决定"本次配方应该加速多少、加倍多少"。同一份配方放到不同机器里，因为修饰器方块不同，效果也跟着不同。
+
+## 本教程涉及的文件
+
+| 文件 | 阶段 | 角色 |
+| --- | --- | --- |
+| `example/startup_scripts/A_Modifier_Machine.js` | `MMCREvents.startup` | 注册机器 + 注册修饰器 + 注册修饰器触发物品 |
+| `example/server_scripts/structure/A_Modifier_Machine.js` | `MMCREvents.server` | 把修饰器使用位绑定到结构字符 |
+| `example/server_scripts/recipe/A_Modifier_Machine.js` | `ServerEvents.recipes` | 数据驱动配方 |
+
+## 本教程涉及的 API 跳转表
+
+| KubeJS API | 文档位置 |
+| --- | --- |
+| `MachineBuilderJS.allowModifiers()` | [API/KubeJS#machinebuilderjs](../API/KubeJS#machinebuilderjs) |
+| `KubeJSApi.modifier(...)` / `.modifierDefinition(...)` / `.modifierUse(...)` / `.anyOfUpgradeBus()` | [API/KubeJS#kubejsapi](../API/KubeJS#kubejsapi) |
+| `MMCRStartupEventJS.registerModifier(...)` / `.registerModifierItem(...)` | [API/KubeJS#mmcrstartupeventjs](../API/KubeJS#mmcrstartupeventjs) |
+| `MachineStructureBuilderJS.modifier(...)` | [API/KubeJS#machinestructurebuilderjs](../API/KubeJS#machinestructurebuilderjs) |
+| `MachineRecipeSchema` 数据驱动配方字段 | [API/KubeJS#machinerecipeschema](../API/KubeJS#machinerecipeschema) |
+| `MachineRecipeBuilderJS` | [API/KubeJS#machinerecipebuilderjs](../API/KubeJS#machinerecipebuilderjs) |
+
+## 机器定义详解（`MMCREvents.startup`）
+
+打开 [A_Modifier_Machine.js（启动期）](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/main/example/startup_scripts/A_Modifier_Machine.js)：
+
+```js
+// Use MMCR's machine modifier system.
+
+MMCREvents.startup(event => {
+
+    const api = event.getAPI()
+
+    const builder = event
+        .createMachine("mmcr_kubejs:kubejs_alloy_furnace")
+        .displayNameKey("machine.mmcr_kubejs.kubejs_alloy_furnace")
+        .recipeFamily("mmcr_kubejs:kubejs_alloy_furnace")
+        .appearance('minecraft:bricks')
+        .allowModifiers()                          // ← 关键：开启修饰器系统
+
+    builder.register()
+
+    // 注册第一个修饰器：绿宝石块加速
+    event.registerModifier(
+        "mmcr_kubejs:alloy_furnace_emerald_speedup",
+        api.modifierDefinition([
+            api.modifier("duration", "input", 0.5, "multiply", false)
+        ])
+    )
+
+    event.registerModifierItem(
+        Item.of("minecraft:emerald_block"),
+        "mmcr_kubejs:alloy_furnace_emerald_speedup"
+    )
+
+    // 注册第二个修饰器：青金石块加倍
+    event.registerModifier(
+        "mmcr_kubejs:alloy_furnace_lapis_doubling",
+        api.modifierDefinition([
+            api.modifier("item", "output", 2, "multiply", false)
+        ])
+    )
+
+    event.registerModifierItem(
+        Item.of("minecraft:lapis_block"),
+        "mmcr_kubejs:alloy_furnace_lapis_doubling"
+    )
+})
+```
+
+### 机器定义上的 `.allowModifiers()`
+
+```js
+.allowModifiers()
+```
+
+不调用 `.allowModifiers()` 的机器不允许使用修饰器结构位——`.modifier('M', ...)` 在结构注册阶段会被拒绝。本教程的合金炉明确开启修饰器系统。
+
+### 修饰器注册
+
+```js
+event.registerModifier(
+    "mmcr_kubejs:alloy_furnace_emerald_speedup",
+    api.modifierDefinition([
+        api.modifier("duration", "input", 0.5, "multiply", false)
+    ])
+)
+```
+
+`registerModifier(id, definition)` 把一个 `ModifierDefinition`（不可变的修饰器规则集）注册到当前机器结构注册窗口，参数：
+
+- `id`：修饰器 ID，配方作者和结构作者都会引用它。命名建议 `命名空间:机器_效果`。
+- `definition`：通过 `KubeJSApi.modifierDefinition([...])` 创建，内部是 [`RecipeModifier`](../API/KubeJS#kubejsapi) 列表。
+
+### 单条修饰规则 `api.modifier(...)`
+
+```js
+api.modifier("duration", "input", 0.5, "multiply", false)
+```
+
+五个参数：`target`（`duration` / `energy` / `item` 等字段）、`io`（`input` / `output`）、`value`（修饰数值）、`operation`（`add` / `multiply` / `subtract` / `divide`）、`chance`（是否作用于输出概率）。绿宝石加速 = 配方耗时 × 0.5；青金石加倍 = 输出物品 × 2。
+
+### 修饰器触发物品 `registerModifierItem(...)`
+
+```js
+event.registerModifierItem(
+    Item.of("minecraft:emerald_block"),
+    "mmcr_kubejs:alloy_furnace_emerald_speedup"
+)
+```
+
+`registerModifierItem(stack, modifierId)` 把一个 `ItemStack` 绑定到已注册的修饰器 ID 上。注册器内部把数量归一化为 1——你传 `Item.of("minecraft:emerald_block")` 还是 `Item.of("minecraft:emerald_block", 64)` 效果一样。
+
+这个绑定是修饰器触发物品的"全局注册"，但是否在某个机器结构上生效还要看那个结构的 `modifier(...)` 调用。
+
+### 启动期不可热加载
+
+机器、修饰器、修饰器触发物品全部由启动期窗口统一管理，详见 [API/KubeJS#mmcrstartupeventjs](../API/KubeJS#mmcrstartupeventjs) 的注意事项："`registerModifier` 和 `registerModifierItem` 虽然位于启动回调 API 中，最终由机器结构注册快照统一校验。"
+
+## 结构详解（`MMCREvents.server`）
+
+打开 [A_Modifier_Machine.js（结构阶段）](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/main/example/server_scripts/structure/A_Modifier_Machine.js)：
+
+```js
+MMCREvents.server(event => {
+    const api = event.getAPI()
+
+    const structure = event.createStructure("mmcr_kubejs:kubejs_alloy_furnace")
+
+    structure
+        .pattern(['DXD', 'XIX', 'XXX'])
+        .pattern(['XMX', 'I I', 'XMX'])
+        .pattern(['DXD', 'XCX', 'XXX'])
+        .set('X', api.block('minecraft:bricks'))
+        .set('D', api.anyOf(
+            api.block('minecraft:bricks'),
+            api.anyOfUpgradeBus()                  // ← 允许在角落放升级舱
+        ))
+        .set('M', api.block('minecraft:blast_furnace'))
+        // 把 'M' 字符提升为修饰器使用位：
+        .modifier('M', api.modifierUse(
+            'mmcr_kubejs:alloy_furnace_emerald_speedup',
+            api.block('minecraft:emerald_block')    // 替换方块必须是绿宝石块
+        ))
+        .modifier('M', api.modifierUse(
+            'mmcr_kubejs:alloy_furnace_lapis_doubling',
+            api.block('minecraft:lapis_block')      // 替换方块必须是青金石块
+        ))
+        .set('I', api.anyOf(api.block('mmcr:item_input_bus'), api.block('mmcr:item_output_bus'), api.block('mmcr:energy_input_hatch')))
+        .controller('C')
+        .build()
+})
+```
+
+### `.modifier(symbol, use)` 升级字符为修饰器使用位
+
+```js
+.modifier('M', api.modifierUse(
+    'mmcr_kubejs:alloy_furnace_emerald_speedup',
+    api.block('minecraft:emerald_block')
+))
+```
+
+这是修饰器系统的"使用处"声明。`api.modifierUse(modifierId, replacement)` 返回 [`ModifierUse`](../API/KubeJS#kubejsapi)，参数：
+
+- `modifierId`：必须先用 `event.registerModifier(...)` 注册过。
+- `replacement`：当玩家在结构上这个位置放了对应方块（这里是绿宝石块），MMCR 就把对应修饰器"激活"。
+
+`.modifier('M', ...)` 把字符 `M` 升级为修饰器使用位。同一个字符 `M` 可以链式调用多次 `.modifier(...)`——所有这些 `ModifierUse` 共享 `M` 的位置。
+
+### 默认方块 + 修饰器替换方块
+
+```js
+.set('M', api.block('minecraft:blast_furnace'))
+.modifier('M', api.modifierUse('...', api.block('minecraft:emerald_block')))
+```
+
+`M` 的默认方块是 `minecraft:blast_furnace`（高炉）。当玩家把这个位置替换为绿宝石块时，修饰器被激活。**注意：替换方块必须是绿宝石块或青金石块之一**——其他方块（如钻石块）放在这里既不会触发修饰器，也不会让结构成型失败；它就当默认高炉用。
+
+> 注意：修饰器 `modifierUse` 的"替换方块"在 [API/KubeJS](../API/KubeJS#kubejsapi) 中明确禁止传入 `any()`——必须是一个具体的方块谓词。
+
+### 角落升级舱
+
+```js
+.set('D', api.anyOf(
+    api.block('minecraft:bricks'),
+    api.anyOfUpgradeBus()
+))
+```
+
+`api.anyOfUpgradeBus()` 是 [KubeJSApi](../API/KubeJS#kubejsapi) 提供的升级舱并集谓词，方便玩家在结构角落摆升级舱而不破坏结构。
+
+### 端口与控制器
+
+`I` 是物品输入 / 输出 / 能量输入的并集，`C` 是控制器。和 A_Simple_Machine 的处理方式一致。
+
+### 结构在生产构建中不可热加载
+
+详见 [API/KubeJS#machinestructurebuilderjs](../API/KubeJS#machinestructurebuilderjs) 的 `build()` 注意事项。
+
+## 配方详解（`ServerEvents.recipes`）
+
+打开 [A_Modifier_Machine.js（配方阶段）](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/main/example/server_scripts/recipe/A_Modifier_Machine.js)：
+
+```js
+ServerEvents.recipes( event => {
+
+    event.custom({
+        type: 'mmcr:machine_recipe',
+        machine: 'mmcr_kubejs:kubejs_alloy_furnace',
+        tick_time: 300,
+        parallelized: true,
+        requirements: [
+            {
+                type: 'minecraft:item',
+                io: 'input',
+                item: '#minecraft:swords',
+                components: {
+                    'minecraft:enchantments': {
+                        'minecraft:sharpness': 2
+                    }
+                },
+                count: 1,
+                // consume_chance: 0.5  ← 输入物品消耗概率，默认 1
+            },
+            {
+                type: 'minecraft:item',
+                io: 'output',
+                stack: {
+                    id: 'minecraft:iron_ingot',
+                    count: 2,
+                    components: {
+                        'minecraft:custom_name': {
+                            text: 'What an amazing design!'
+                        },
+                        'minecraft:enchantments': {
+                            'minecraft:sharpness': 3
+                        }
+                    }
+                },
+                // chance: 0.5  ← 输出概率，默认 1
+            },
+            {
+                type: 'neoforge:energy',
+                io: 'input',
+                fe_per_tick: 10
+            }
+        ]
+    })
+})
+```
+
+### 配方本身不带修饰器效果
+
+这个配方的输入是"一把锋利 II 的剑"，输出是"两颗带自定义名 + 锋利 III 的铁锭"，300 tick，10 FE/tick——**和修饰器无关**。修饰器效果在配方运行时由结构里实际摆的绿宝石块 / 青金石块动态叠加。
+
+如果机器结构里摆了两个绿宝石块（而不是一个），修饰器 `duration` × 0.5 会**重复叠加**：第一次 × 0.5、第二次 × 0.5，总效果 × 0.25。修饰器是否重复叠加由修饰器定义里的 [`LevelModifier`](../API/JavaAPI#modifierdefinition) 决定，本教程的两个修饰器都允许重复。
+
+### 数据驱动配方字段
+
+本配方的字段含义已在 [A_Simple_Machine](A_Simple_Machine) 中详述；本教程新增的是输入 / 输出都用 `components` 做数据组件匹配（`#minecraft:swords` 任意剑 + `sharpness: 2`，输出带 `custom_name` + `sharpness: 3`），以及 `consume_chance` / `chance` 这两个可选概率字段。完整字段表见 [API/KubeJS#machinerecipeschema](../API/KubeJS#machinerecipeschema)。
+
+数据驱动配方支持热加载。
+
+## 特殊机制：Modifier 系统
+
+### `allowModifiers` / `ModifierDefinition` / `ModifierUse` / `OutputPolicy` 四者的角色
+
+修饰器系统里有四种对象，各司其职：
+
+| 对象 | 角色 | 出现阶段 |
+| --- | --- | --- |
+| `MachineBuilderJS.allowModifiers()` | **开关**：声明这台机器允许结构使用修饰器位 | 启动期 |
+| `ModifierDefinition` | **定义**：一组不可变的修饰规则集合（`duration` × 0.5 等） | 启动期 |
+| `ModifierUse` | **使用位**：在结构某个字符上声明"这里放哪个方块触发哪个修饰器" | 服务期（结构） |
+| `OutputPolicy` | **输出策略**：决定输出全部接受（`REQUIRE_FULL`）还是允许部分接受（`ALLOW_PARTIAL`） | 配方运行时 |
+
+四者关系：
+
+1. 启动期：`.allowModifiers()` 开启机器的修饰器支持 → `registerModifier(id, def)` 注册定义 → `registerModifierItem(stack, id)` 注册触发物品。
+2. 服务期：`.modifier(symbol, modifierUse(id, replacement))` 把定义"挂"到结构字符 `M` 上。
+3. 运行时：玩家把对应方块放到 `M` 位置，MMCR 识别为"使用了某个修饰器"，把定义里的规则叠加到正在跑的配方上。
+4. 输出：配方结束输出时按 `OutputPolicy` 决定"全部接受"还是"部分接受"。本教程配方没显式设置，沿用默认值 `REQUIRE_FULL`。
+
+### 同一字符共享多个修饰器
+
+```js
+.set('M', api.block('minecraft:blast_furnace'))
+.modifier('M', api.modifierUse('...emerald_speedup', api.block('minecraft:emerald_block')))
+.modifier('M', api.modifierUse('...lapis_doubling', api.block('minecraft:lapis_block')))
+```
+
+字符 `M` 同时支持两种修饰器使用位。玩家在 `M` 位置放绿宝石块就加速、放青金石块就加倍。如果某个配方同时需要加速 + 加倍，玩家必须摆两个 `M`（结构里中间层有四个 `M`）——一个放绿宝石、一个放青金石。
+
+### 修饰器与配方的关系
+
+修饰器效果在配方**运行时**叠加，不写入配方数据本身。这意味着：
+
+- 同一个修饰器定义可以被多个机器结构复用：`alloy_furnace_emerald_speedup` 可以挂到合金炉、蒸馏塔等多个机器的 `M` 位。
+- 同一台机器的不同配方共享修饰器效果：加速修饰器对所有配方生效，不是逐配方配置的。
+- 玩家摆什么方块决定效果：玩家可以把 `M` 留空（默认高炉、无修饰器），也可以摆绿宝石块（加速）、青金石块（加倍）、同时摆两个（两个都触发）。
+
+### 与 Java 端的对比
+
+A_Modifier_Machine 与 [ALLOY_FURNACE](../JavaAPI/ALLOY_FURNACE) 同构。命名差异：Java 端 `Modifier.builder()` 流式 → KubeJS 端 `api.modifier(...)`；`ModifierUse.builder()` → `api.modifierUse(...)`；`ModifierRegistry.register(...)` → `event.registerModifier(...)`。KubeJS 端整体把这些压成几行链式调用。
+
+## 与其他教程的对比
+
+| 维度 | A_Simple_Machine | A_Modifier_Machine |
+| --- | --- | --- |
+| 机器层独有调用 | `.allowMultithreading()` / `.allowParallelism()` | `.allowModifiers()` |
+| 结构层独有调用 | 普通 `.set(...)` | 额外的 `.modifier(symbol, use)` |
+| 配方层独有字段 | 无 | 输入 `components` + 输出 `stack.components` |
+| 启动期额外注册 | 无 | `registerModifier` × 2 + `registerModifierItem` × 2 |
+
+A_Simple_Machine 演示机器能跑配方，A_Modifier_Machine 演示机器可以通过结构上的方块动态改变配方效果。
+
+与 Java 端 [ALLOY_FURNACE](../JavaAPI/ALLOY_FURNACE) 同构：Java 端用 `Modifier.builder()` 流式 API；KubeJS 端用 `api.modifier(...)` + `api.modifierDefinition([...])` 把这些压成几行。
+
+## 延伸阅读
+
+- [API/KubeJS#machinebuilderjs](../API/KubeJS#machinebuilderjs) — `.allowModifiers()` 等机器级开关。
+- [API/KubeJS#modifierstring-target-string-io-float-value-string-operation-boolean-chance--recipemodifier](../API/KubeJS#kubejsapi) — 单条 `RecipeModifier` 的字段。
+- [API/KubeJS#modifierdefinitionlist-recipemodifier-modifiers--modifierdefinition](../API/KubeJS#kubejsapi) — 把多条规则打包成 `ModifierDefinition`。
+- [API/KubeJS#modifierusestring-modifierid-blockpredicate-replacement--modifieruse](../API/KubeJS#kubejsapi) — 结构上"使用位"的声明。
+- [API/KubeJS#registermodifierstring-id-modifierdefinition-definition--void](../API/KubeJS#mmcrstartupeventjs) — 启动期注册修饰器。
+- [API/KubeJS#registermodifieritemitemstack-stack-string-modifierid--void](../API/KubeJS#mmcrstartupeventjs) — 启动期绑定触发物品。
+- [API/KubeJS#machinestructurebuilderjs](../API/KubeJS#machinestructurebuilderjs) — 结构层 `.modifier(symbol, use)`。
+- [API/KubeJS#machinerecipeschema](../API/KubeJS#machinerecipeschema) — 数据驱动配方字段全集。
+- [JavaAPI/ALLOY_FURNACE](../JavaAPI/ALLOY_FURNACE) — 同一台合金炉的 Java 实现。
+- [A_Simple_Machine](A_Simple_Machine) — 不使用修饰器的基础机器。
+- [A_Module_Machine](A_Module_Machine) — 上一节 HOST + MODULE 教程。

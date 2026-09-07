@@ -1,0 +1,409 @@
+---
+title: A_Data_Storage_Machine
+order: 10
+---
+
+# A_Data_Storage_Machine — KubeJS 数据存储机器
+
+本文是 KubeJS 进阶示例的第一篇。我们逐段拆解 [`A_Data_Storage_Machine.js`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/main/example/startup_scripts/advance/A_Data_Storage_Machine.js) 与 [对应的结构脚本](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/main/example/server_scripts/structure/advance/A_Data_Storage_Machine.js)，看一台没有任何配方、完全靠 `DataStorage` 持久化 FE 的"能量库"在 KubeJS 端是怎么搭起来的。
+
+整台机器是 [DATA_STORAGE_MACHINE](../JavaAPI/DATA_STORAGE_MACHINE) 的脚本版实现，逻辑等价，但 KubeJS 端把 Java 类型、`MachineBuilder` 调用全部换成了 `api.dataValue(...)` / `ctx.ioPlan()` 等脚本 API。
+
+## 机器简介
+
+A_Data_Storage_Machine 是一台**没有配方**的能量存储方块，形态是一个 9×9×9 的哭泣黑曜石球壳，中心嵌一颗数据存储接口方块：
+
+1. 每 5 tick 用**二分查找**探测当前所有能量输入端口能接受的最大 FE，吸进去后写到一个 `BigInteger` 计数里；
+2. 每 5 tick 再退库：把存储的 FE 按输出端口容量推到世界；
+3. 整台机器的所有状态都持久化在自己的 `DataStorage` 上，重启游戏也不会丢；
+4. 控制器屏幕始终显示当前储量（`ReadableNumber.formatCompact` 渲染为 `1.23M` 这种紧凑格式）。
+
+它跟 [A_Simple_Machine](./A_Simple_Machine) 的最大差别是：A_Simple_Machine 走配方数据驱动，本机器完全跑在 `tickBehavior` 的 `serverTick` 里——是 [DATA_STORAGE_MACHINE](../JavaAPI/DATA_STORAGE_MACHINE) 那台 Java 机器的脚本复刻。
+
+## 本教程涉及的文件
+
+源码位置（启动期 + 结构期，没有配方期）：
+
+- [`startup_scripts/advance/A_Data_Storage_Machine.js`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/main/example/startup_scripts/advance/A_Data_Storage_Machine.js) — 机器定义、tick 行为。
+- [`server_scripts/structure/advance/A_Data_Storage_Machine.js`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/main/example/server_scripts/structure/advance/A_Data_Storage_Machine.js) — 多方块结构。
+
+Java 对照：[DATA_STORAGE_MACHINE](../JavaAPI/DATA_STORAGE_MACHINE)。
+
+## 本教程涉及的 API 跳转表
+
+| 用到的 KubeJS API | API 参考 |
+| --- | --- |
+| `MMCR.getAPI()` | [链接](../API/KubeJS#getapi--kubejsapi) |
+| `event.createMachine(...)` | [链接](../API/KubeJS#createmachinestring-id--machinebuilderjs) |
+| `MachineBuilderJS.displayNameKey(...)` | [链接](../API/KubeJS#displaynamekeystring-key--machinebuilderjs) |
+| `MachineBuilderJS.recipeFamily(...)` | [链接](../API/KubeJS#recipefamilystring-recipefamilyid--machinebuilderjs) |
+| `MachineBuilderJS.appearance(...)` | [链接](../API/KubeJS#appearancestring-machinebasicblock--machinebuilderjs) |
+| `MachineBuilderJS.tickBehavior(...)` | [链接](../API/KubeJS#tickbehaviorconsumer-machinebehaviorbuilderjs-builder--machinebuilderjs) |
+| `MachineBehaviorBuilderJS.serverTick(...)` | [链接](../API/KubeJS#servertickconsumer-tickbehaviorcontext-callback--machinebehaviorbuilderjs) |
+| `KubeJSApi.recipeIO()` | [链接](../API/KubeJS#recipeio--recipeiovalues) |
+| `KubeJSApi.outputPolicy()` | [链接](../API/KubeJS#outputpolicy--outputpolicyvalues) |
+| `KubeJSApi.energyRequirement(...)` | [链接](../API/KubeJS#energyrequirementrecipeio-io-int-feperopertick--machinerequirement) |
+| `KubeJSApi.dataValue(...)` | [链接](../API/KubeJS#datavalueobject-value--datavalue) |
+| `KubeJSApi.id(...)` | [链接](../API/KubeJS#idstring-id--identifier) |
+| `KubeJSApi.screenScope()` | [链接](../API/KubeJS#screenscope--screenscopevalues) |
+| `MMCR.getValues().INT_MAX` | [链接](../API/KubeJS#getvalues--mmcrvalues) |
+| `event.registerControllerScreenText(...)` | [链接](../API/KubeJS#registercontrollerscreentextstring-machineid-consumercontrollerscreenteventeventjs-handler--void) |
+| `ControllerScreenTextEventJS.append(...)` | [链接](../API/KubeJS#appendstring-scope-string-lineid-component-text--void) |
+| `KubeJSApi.block(...)` / `anyOf(...)` | [链接](../API/KubeJS#blockstring-blockid--blockpredicate) / [链接](../API/KubeJS#anyofblockpredicate-children--blockpredicate) |
+| `KubeJSApi.anyOfEnergyInput()` / `anyOfEnergyOutput()` | [链接](../API/KubeJS#anyofenergyinput--blockpredicate) / [链接](../API/KubeJS#anyofenergyoutput--blockpredicate) |
+| `KubeJSApi.dataStorage()` | [链接](../API/KubeJS#datastorage--blockpredicate) |
+| `MachineStructureBuilderJS.pattern(...)` / `set(...)` / `controller(...)` / `build()` | [链接](../API/KubeJS#patternstring-rows--machinestructurebuilderjs) / [链接](../API/KubeJS#setstring-symbol-object-value--machinestructurebuilderjs) / [链接](../API/KubeJS#controllerstring-symbol--machinestructurebuilderjs) / [链接](../API/KubeJS#build--void) |
+
+另外，源码里直接通过 `Java.loadClass` 拿两个 Java 公共类：
+
+| Java 类 | 用途 |
+| --- | --- |
+| `java.math.BigInteger` | 持久化能量计数 |
+| `cn.howxu.mmcr.api.publicapi.ReadableNumber` | 把 `BigInteger` 渲染为 SI 前缀紧凑字符串 |
+
+## 机器定义详解
+
+打开启动期脚本 [`A_Data_Storage_Machine.js`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/main/example/startup_scripts/advance/A_Data_Storage_Machine.js)：
+
+```javascript
+MMCREvents.startup(event => {
+    const machine = event
+        .createMachine("mmcr_kubejs:kubejs_data_storage_machine")
+        .displayNameKey("machine.mmcr_kubejs.kubejs_data_storage_machine")
+        .recipeFamily("mmcr_kubejs:kubejs_data_storage_machine")
+        .appearance("minecraft:crying_obsidian");
+    // ... 见下文
+    machine.register()
+})
+```
+
+链式调用 4 个方法拿到 [`MachineBuilderJS`](../API/KubeJS#machinebuilderjs)：
+
+- `.displayNameKey(...)`：声明本地化键，和 [A_Simple_Machine](./A_Simple_Machine) 同一种命名约定 `machine.<命名空间>.<注册名>`。
+- `.recipeFamily(...)`：把机器绑到一个配方系列 ID。本机器**没有配方**，但仍设置家族 ID——JEI 在没有任何配方时不会为它建单独的页面，但内部数据保持一致。
+- `.appearance("minecraft:crying_obsidian")`：未成型时的占位方块就是哭泣黑曜石。成型后玩家会看到真正的多方块壳。
+- `.tickBehavior(...)`：把行为切到直 tick 模式，**不**调用 `.recipeBehavior(...)`——这两者在 [`MachineBuilderJS`](../API/KubeJS#machinebuilderjs) 里互斥。
+
+紧接着源码声明了几个会反复用到的常量：
+
+```javascript
+const BigInteger = Java.loadClass("java.math.BigInteger")
+const ReadableNumber = Java.loadClass("cn.howxu.mmcr.api.publicapi.ReadableNumber")
+const api = MMCR.getAPI()
+const RecipeIO = api.recipeIO()
+const OutputPolicy = api.outputPolicy()
+const INT_MAX = MMCR.getValues().INT_MAX
+```
+
+逐个解释：
+
+- `Java.loadClass("java.math.BigInteger")`——NeoForge 的能量计数受 `int` 限制（最大约 21 亿），但 `DataStorage` 支持任意精度的 `BigInteger`。KubeJS 端只要 `Java.loadClass` 一次就能当 `class` 用，`BigInteger.ZERO`、`BigInteger.valueOf(long)` 都可以直接调用。
+- `Java.loadClass("cn.howxu.mmcr.api.publicapi.ReadableNumber")`——这是 MMCR 的公共 API 包里的字符串渲染工具，详见下文"显示储量"段。
+- `MMCR.getAPI()` 返回 [`KubeJSApi`](../API/KubeJS#kubejsapi)，下文统一用 `api` 指代。
+- `api.recipeIO()` 返回 [`RecipeIoValues`](../API/KubeJS#recipeio--recipeiovalues) 常量对象，本教程里用到 `.INPUT` / `.OUTPUT` 两个方向枚举。
+- `api.outputPolicy()` 返回 [`OutputPolicyValues`](../API/KubeJS#outputpolicy--outputpolicyvalues) 常量对象；本教程用到 `.ALLOW_PARTIAL`（允许部分接受）。
+- `MMCR.getValues()` 返回 [`MMCRValues`](../API/KubeJS#getvalues--mmcrvalues)，里面 `.INT_MAX` 是 NeoForge 能量 `int` 上限。
+
+## 结构详解
+
+打开 [`structure/advance/A_Data_Storage_Machine.js`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/main/example/server_scripts/structure/advance/A_Data_Storage_Machine.js)：
+
+```javascript
+MMCREvents.server(event => {
+    const api = event.getAPI()
+    const structure = event.createStructure("mmcr_kubejs:kubejs_data_storage_machine")
+
+    structure
+        .pattern("         ", "         ", "         ", "   AAA   ", "   ABA   ", "   AAA   ", "         ", "         ", "         ")
+        .pattern("         ", "         ", "  AAAAA  ", "  AXXXA  ", "  AXXXA  ", "  AXXXA  ", "  AAAAA  ", "         ", "         ")
+        .pattern("         ", "  AAAAA  ", " AXXXXXA ", " AXXXXXA ", " AXXXXXA ", " AXXXXXA ", " AXXXXXA ", "  AAAAA  ", "         ")
+        .pattern("   AAA   ", "  AXXXA  ", " AXXXXXA ", "AXXXXXXXA", "AXXXXXXXA", "AXXXXXXXA", " AXXXXXA ", "  AXXXA  ", "   AAA   ")
+        .pattern("   ABA   ", "  AXXXA  ", " AXXXXXA ", "AXXXXXXXA", "BXXXDXXXB", "AXXXXXXXA", " AXXXXXA ", "  AXXXA  ", "   ABA   ")
+        .pattern("   AAA   ", "  AXXXA  ", " AXXXXXA ", "AXXXXXXXA", "AXXXXXXXA", "AXXXXXXXA", " AXXXXXA ", "  AXXXA  ", "   AAA   ")
+        .pattern("         ", "  AAAAA  ", " AXXXXXA ", " AXXXXXA ", " AXXXXXA ", " AXXXXXA ", " AXXXXXA ", "  AAAAA  ", "         ")
+        .pattern("         ", "         ", "  AAAAA  ", "  AXXXA  ", "  AXXXA  ", "  AXXXA  ", "  AAAAA  ", "         ", "         ")
+        .pattern("         ", "         ", "         ", "   AAA   ", "   ACA   ", "   AAA   ", "         ", "         ", "         ")
+        .set('X', api.block('minecraft:redstone_block'))
+        .set('A', api.block('minecraft:crying_obsidian'))
+        .set('B', api.anyOf(
+            api.anyOfEnergyInput(),
+            api.anyOfEnergyOutput()
+        ))
+        .set('D', api.dataStorage())
+        .controller('C')
+        .build()
+})
+```
+
+结构是一个 9 层 × 9 行 × 9 列的扁平方块数组。和 [DATA_STORAGE_MACHINE](../JavaAPI/DATA_STORAGE_MACHINE) 的 Java 结构等价，但 KubeJS 端用扁平式 `.pattern(...)` / `.set(...)` 链式声明，无需写 `.fullStructure(s -> s...)` 包装。
+
+字符含义：
+
+- `'X'` → [`api.block('minecraft:redstone_block')`](../API/KubeJS#blockstring-blockid--blockpredicate)：球壳的内填，红石块。
+- `'A'` → [`api.block('minecraft:crying_obsidian')`](../API/KubeJS#blockstring-blockid--blockpredicate)：球壳的外皮，哭泣黑曜石。
+- `'B'` → [`api.anyOf(...)`](../API/KubeJS#anyofblockpredicate-children--blockpredicate) 包裹 [`api.anyOfEnergyInput()`](../API/KubeJS#anyofenergyinput--blockpredicate) 与 [`api.anyOfEnergyOutput()`](../API/KubeJS#anyofenergyoutput--blockpredicate)：球的 6 个面正中各放一个能量输入或输出端口，玩家可以自由选择朝哪个方向供电/取电。
+- `'D'` → [`api.dataStorage()`](../API/KubeJS#datastorage--blockpredicate)：**关键**——MMCR 会自动在 `D` 位置放一颗数据存储 block entity，`ctx.dataStorage()` 拿到的就是它的句柄。如果结构里没有这个方块，`dataStorage()` 返回 `null`，tick 直接 `return`。
+- `'C'` → 控制器。
+
+`.controller('C')` 标记控制器位置，`.build()` 提交到当前服务器 KubeJS 内容事务——结构支持 `/reload` 热加载。
+
+## 数据流详解（tick 行为）
+
+整台机器的核心逻辑都在 `.tickBehavior(behavior => behavior.serverTick(ctx => { ... }))` 的回调里。我们按源码顺序拆成 5 段。
+
+### 1. 读取当前储量
+
+```javascript
+const api = MMCR.getAPI()       // 已经在外面取过；这里仅为引用
+const RecipeIO = api.recipeIO()
+const OutputPolicy = api.outputPolicy()
+const INT_MAX = MMCR.getValues().INT_MAX
+
+machine.tickBehavior(behavior => behavior
+    .serverTick(ctx => {
+        var storage = ctx.dataStorage()
+        if (storage == null) return
+
+        // get big integer data from data storage
+        var stored = BigInteger.ZERO
+        var saved = storage.get("energy")
+
+        if (saved.isPresent()) {
+            stored = saved.get()
+                .asBigInteger()
+                .orElse(BigInteger.ZERO)
+        }
+        // ...
+    })
+)
+```
+
+`ctx.dataStorage()` 返回这台机器关联的 `DataStorage` 句柄。如果玩家没在 `D` 位置放数据存储方块（或者玩家没成型），这里就是 `null`，整个 tick 直接 `return`。
+
+`storage.get("energy")` 返回 `Optional<DataValue>`；取出后用 `.asBigInteger()` 安全转换（值类型不对时返回空 `Optional`），再退到 `ZERO`。这里用 `BigInteger` 是为了**支持任意大的能量计数**——Minecraft 的能量端口是 `int` 量级，但累加可以无限大。
+
+### 2. 二分查找最大可入库 FE
+
+```javascript
+// every 5 ticks do one input check
+if (ctx.isDue(5)) {
+    // because of the neoforge limit
+    // 2.1G is the biggest input and output value
+    var available = ctx.ioView().energyInput()
+    var maxRequest = Math.min(available, INT_MAX)
+
+    var low = 0
+    var high = maxRequest
+
+    // a binary search for every input hatch for transferLimit
+    while (low < high) {
+        var candidate = low + Math.ceil((high - low) / 2)
+
+        var probe = ctx.ioPlan()
+        probe.addInput(api.energyRequirement(RecipeIO.INPUT, candidate))
+
+        if (probe.simulate().energySatisfied()) {
+            low = candidate
+        } else {
+            high = candidate - 1
+        }
+    }
+
+    // ...
+}
+```
+
+`ctx.isDue(5)` 是 MMCR 的"每 N tick 触发一次"工具，避免每 tick 重复跑重活。这里每 5 tick 才尝试吸一次能量。
+
+逻辑：先用 `ctx.ioView().energyInput()` 拿到所有能量输入端口的总和，再用经典二分在 `[0, maxRequest]` 上找最大可接受的 `candidate`。每次循环：
+
+- 开一个**新的** plan（`ctx.ioPlan()`），加入 `candidate` FE 的输入需求 [`api.energyRequirement(RecipeIO.INPUT, candidate)`](../API/KubeJS#energyrequirementrecipeio-io-int-feperopertick--machinerequirement)；
+- `probe.simulate().energySatisfied()` 探测这个输入能不能被端口满足；
+- 能就抬高下限，不能就压上限。
+
+最后 `low` 就是"在不超出端口容量前提下，最大可以尝试吸的 FE"。
+
+注意 `INT_MAX` 这一行：`NeoForge` 单次 `int` 最大约 21 亿，所以即便 `available` 更大也要截断，避免溢出。
+
+### 3. 真正入库并持久化
+
+```javascript
+if (low > 0) {
+    var inputPlan = ctx.ioPlan()
+    inputPlan.addInput(api.energyRequirement(RecipeIO.INPUT, low))
+
+    var next = stored.add(BigInteger.valueOf(low))
+    var inputSimulation = inputPlan.simulate()
+
+    if (inputSimulation.energySatisfied() && inputPlan.commit(transaction => {
+        // update the data storage value
+        storage.set("energy", api.dataValue(next), transaction)
+    }).successful()) {
+        stored = next
+    }
+}
+```
+
+为什么不在二分循环里直接 `commit`？因为 plan 是**一次性**的，`commit()` 后就废了。所以这里**第二次**新建 plan，把二分得到的 `low` 拿来正式 commit。
+
+注意 `commit(transaction => { ... })` 的 lambda：
+
+- `transaction` 是 NeoForge 的 `TransactionContext`；
+- `storage.set("energy", api.dataValue(next), transaction)` 是 `DataStorage` 的**事务感知**版本——`DataStorage extends SnapshotJournal<Map<String, DataValue>>`。如果事务回滚，写入会自动撤销。
+- 如果 `commit(...)` 失败（端口在两次 simulate 之间被抽干），整个仓库计数**不会变**——这就是事务的意义。
+
+成功后 `stored = next`，把本地缓存的 `BigInteger` 同步上去。
+
+### 4. 按容量退库
+
+```javascript
+// every 5 tick do one output
+if (ctx.isDue(5)) {
+    // get output capability
+    var outputCapacity = ctx.ioView().energyOutputCapacity()
+
+    if (outputCapacity > 0 && stored.signum() > 0) {
+        // limit 2.1G
+        var requestedBig = stored.min(
+            BigInteger.valueOf(Math.min(outputCapacity, INT_MAX))
+        )
+        var requested = requestedBig.intValue()
+
+        if (requested > 0) {
+            var outputPlan = ctx.ioPlan()
+
+            // some output hatches have transformer limit, so OutputPolicy.ALLOW_PARTIAL
+            outputPlan.addOutput(
+                api.energyRequirement(RecipeIO.OUTPUT, requested),
+                OutputPolicy.ALLOW_PARTIAL
+            )
+
+            var simulation = outputPlan.simulate()
+            var outputs = simulation.outputs()
+
+            if (!outputs.isEmpty()) {
+                var accepted = outputs.get(0).accepted()
+
+                if (accepted > 0) {
+                    var next = stored.subtract(
+                        BigInteger.valueOf(accepted)
+                    )
+
+                    // use js promise to update storage
+                    if (outputPlan.commit(transaction => {
+                        storage.set("energy", api.dataValue(next), transaction)
+                    }).successful()) {
+                        stored = next
+                    }
+                }
+            }
+        }
+    }
+}
+```
+
+退库段的关键点：
+
+- `ctx.ioView().energyOutputCapacity()` 拿到所有能量输出端口的总余量。
+- 写入方向是 [`RecipeIO.OUTPUT`](../API/KubeJS#recipeio--recipeiovalues)，并使用 [`OutputPolicy.ALLOW_PARTIAL`](../API/KubeJS#outputpolicy--outputpolicyvalues)——**允许部分接受**。如果用 `REQUIRE_FULL`，一旦下游线缆只能吸走一半 FE，整个 commit 就会失败；用 `ALLOW_PARTIAL` 才能优雅地"有多少吐多少"。
+- `simulation.outputs()` 返回每条输出项的模拟结果，读取 `.accepted()` 拿到实际被世界接受的 FE 数（可能小于 `requested`）。
+- 接受数从 `stored` 中扣减，事务提交 `DataStorage`，失败时本地缓存 `stored` 不变。
+
+### 5. 屏幕文本与 JADE
+
+```javascript
+if (stored.signum() === 0){
+    ctx.screenText().append(
+        api.screenScope().OPERATION,
+        api.id("mmcr_kubejs:fe_storage_status"),
+        Text.literal("No FE stored.")
+    )
+    return
+}
+ctx.screenText().append(
+    api.screenScope().OPERATION,
+    api.id("mmcr_kubejs:fe_storage_status"),
+    Text.literal("FE stored: " + ReadableNumber.formatCompact(stored))
+)
+```
+
+`ctx.screenText()` 拿 [`ControllerScreenText`](../API/KubeJS#controllerscreenteventeventjs) 句柄（KubeJS 端是 [`ControllerScreenTextEventJS`](../API/KubeJS#controllerscreenteventeventjs)）。
+
+[`api.screenScope().OPERATION`](../API/KubeJS#screenscope--screenscopevalues) 是"随配方操作状态自动失效"的作用域。本机器没有配方，所以 `OPERATION` 行由 tick 直接控制——每次 `append` 都会覆盖上一帧同 ID 的内容。
+
+[`ReadableNumber.formatCompact(stored)`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/main/src/main/java/cn/howxu/mmcr/api/publicapi/ReadableNumber.java) 把 `BigInteger` 渲染成 SI 前缀的紧凑字符串（`1.23M`、`456K` 等），适合屏幕槽位显示。`formatCompact` 是 KubeJS 端 [`KubeJSApi.readableNumber(...)`](../API/KubeJS#readablenumberlong-value--string) 在 Java 端的内部实现，但接受 `BigInteger` 是 Java 端的额外能力，KubeJS 端没有暴露同等重载，所以本教程保留 `Java.loadClass`。
+
+[`api.id("mmcr_kubejs:fe_storage_status")`](../API/KubeJS#idstring-id--identifier) 把字符串解析成命名空间 ID，作为屏幕文本行的 `lineId`。同一 `lineId` 反复 `append` 会替换内容，实现"幂等覆盖"。
+
+> JADE 文本：本机器没有调用 `ctx.jadeText()`。JADE 文本与屏幕文本是两条独立通道；本机器的控制器屏幕足够用，所以 JADE 留空——这也是 KubeJS 端的常见做法。
+
+## 特殊机制
+
+### 事务感知的 `DataStorage`
+
+`DataStorage` 不是简单的 `Map`——它继承自 NeoForge 的 `SnapshotJournal<Map<String, DataValue>>`。调用方只需把事务句柄从 `plan.commit(transaction => { ... })` 透传进来：
+
+```javascript
+plan.commit(transaction => {
+    storage.set("energy", api.dataValue(next), transaction)
+}).successful()
+```
+
+如果 plan 因为能量不足等原因 rollback，`DataStorage` 写入会自动撤销。KubeJS 端通过 [`api.dataValue(...)`](../API/KubeJS#datavalueobject-value--datavalue) 把 JS 端的 `BigInteger`/`int`/`String`/`boolean` 等值包装成 `DataValue`，是这个事务链路的关键一环。
+
+### `BigInteger` 计数
+
+`BigInteger` 比 `long` 慢，但能容纳任意大小的累加值。如果你的存储机器能量单位是 FE，每 tick 几百 FE，用 `long` 即可；如果你想模拟一个"无限水库"——比如宇宙能量、模组自定义能源——`BigInteger` 永远不会溢出。源码里 `Math.min(outputCapacity, INT_MAX)` 是把 `long` 输出容量截到 `int`，方便 `BigInteger.intValue()` 安全转换。
+
+### 探测-提交分离
+
+二分查找只调用 `simulate()`，永远不 commit；真正写入走第二个独立的 plan。这是 `MachineIoPlan` 一次性原则逼出的写法——一份 plan `commit` 后就废了，**第二次**新建 plan 才是正式 commit。
+
+### KubeJS 端 `dataValue` 的用法
+
+[`api.dataValue(value)`](../API/KubeJS#datavalueobject-value--datavalue) 把任意 JS 值包装成 `DataValue`。源码里它出现两次：
+
+- `api.dataValue(next)`：把 `BigInteger` 包成 `DataValue` 写到 `DataStorage`；
+- 接受侧 `saved.get().asBigInteger().orElse(BigInteger.ZERO)`：从 `DataValue` 安全取回 `BigInteger`。
+
+KubeJS 端支持的取值方法不止 `asBigInteger`，还有 `asBoolean` / `asString` / `asInt` / `asLong` / `asFloat` / `asDouble` 等。本教程用的是网络机器不涉及的"大整数"路径，所以 `BigInteger` 配套 `asBigInteger`。其他教程会用到更简单的 `asDouble` 等。
+
+## 与其他教程的对比
+
+- vs [A_Simple_Machine](./A_Simple_Machine)：A_Simple_Machine 走配方数据驱动，本机器完全跑在 `tickBehavior` 的 `serverTick` 里。它俩共享 [`MachineBuilderJS`](../API/KubeJS#machinebuilderjs) 与 [`MachineStructureBuilderJS`](../API/KubeJS#createstructurestring-id--machinestructurebuilderjs)，但行为路径完全分离。
+- vs [A_Pure_Tick_Machine](./A_Pure_Tick_Machine)：A_Pure_Tick_Machine 是"按 tick 节流做副作用"的纯 tick 机器，本机器是"按 tick 跑 IO + 持久化"。两者都用 [`tickBehavior`](../API/KubeJS#tickbehaviorconsumer-machinebehaviorbuilderjs-builder--machinebuilderjs) + [`serverTick`](../API/KubeJS#servertickconsumer-tickbehaviorcontext-callback--machinebehaviorbuilderjs)，但本机器需要 [`dataStorage()`](../API/KubeJS#datastorage--blockpredicate) 谓词方块，而 A_Pure_Tick_Machine 不需要。
+- vs [A_Network_Machine](./A_Network_Machine)：A_Network_Machine 把 `DataStorage` 当"按 peer hash 分桶的网络聚合表"用，本机器把 `DataStorage` 当"无限 FE 计数器"用。两者都涉及 [`api.dataValue(...)`](../API/KubeJS#datavalueobject-value--datavalue) 与 [`api.sendRequest(...)`](../API/KubeJS#sendrequestnetworkinterfacereference-source-machinereference-target-string-requestid-object-body--void)（后者本机器**不**用，前者用），但角色完全不同。
+- vs Java 端 [DATA_STORAGE_MACHINE](../JavaAPI/DATA_STORAGE_MACHINE)：**逻辑等价**，实现细节差异如下：
+
+  | Java 端 | KubeJS 端 |
+  | --- | --- |
+  | `MachineBuilder.machine(...).tickBehavior(...)` | `event.createMachine(...).tickBehavior(...)` |
+  | `context.dataStorage()` | `ctx.dataStorage()` |
+  | `new EnergyRequirement(RecipeIo.INPUT, low)` | `api.energyRequirement(api.recipeIO().INPUT, low)` |
+  | `DataValue.of(next)` | `api.dataValue(next)` |
+  | `OutputPolicy.ALLOW_PARTIAL` | `api.outputPolicy().ALLOW_PARTIAL` |
+  | `controller.screenText().append(scope, id, Component.literal(...))` | `ctx.screenText().append(api.screenScope().OPERATION, api.id(...), Text.literal(...))` |
+  | `ReadableNumber.formatCompact(stored)`（同包 import） | `Java.loadClass("cn.howxu.mmcr.api.publicapi.ReadableNumber")` 后 `ReadableNumber.formatCompact(stored)` |
+  | `ControllerScreenTextScope.OPERATION` | `api.screenScope().OPERATION` |
+  | `Identifier.fromNamespaceAndPath(...)` | `api.id("mmcr_kubejs:fe_storage_status")` |
+
+  KubeJS 端没有"引入 Java 类型"那一层——全部通过 [`api.xxx()`](../API/KubeJS#kubejsapi) 拿到等价对象。例外是 [`ReadableNumber`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/main/src/main/java/cn/howxu/mmcr/api/publicapi/ReadableNumber.java) 和 `BigInteger` 这种"业务工具类"——KubeJS 没暴露 `BigInteger` 重载的 `readableNumber`，所以保留 `Java.loadClass`。
+
+## 延伸阅读
+
+- [A_Simple_Machine](./A_Simple_Machine) — KubeJS 端最简配方机器。
+- [A_Pure_Tick_Machine](./A_Pure_Tick_Machine) — 同样是直 tick 机器，但没有数据存储。
+- [A_Network_Machine](./A_Network_Machine) — 用 [`api.dataValue(...)`](../API/KubeJS#datavalueobject-value--datavalue) 把数据跨机器搬运。
+- [DATA_STORAGE_MACHINE](../JavaAPI/DATA_STORAGE_MACHINE) — 本机器的 Java 端实现。
+- [KubeJS API](../API/KubeJS) — 本教程引用 API 的集中参考。
+- [KubeJS API#dataValue](../API/KubeJS#datavalueobject-value--datavalue) — 类型化值包装器的完整文档。
+- [KubeJS API#dataStorage()](../API/KubeJS#datastorage--blockpredicate) — 数据存储方块谓词。
+- [KubeJS API#tickBehavior](../API/KubeJS#tickbehaviorconsumer-machinebehaviorbuilderjs-builder--machinebuilderjs) — 把机器切到直 tick 模式的入口。
+
+## 未在 KubeJS.md 中覆盖的 API
+
+本教程用到的 [`ReadableNumber`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/main/src/main/java/cn/howxu/mmcr/api/publicapi/ReadableNumber.java) 与 `DataStorage` / `DataValue` 的细节，[KubeJS.md](../API/KubeJS) 暂未单独列出。建议下一轮扩充时补齐：
+
+- **`cn.howxu.mmcr.api.publicapi.ReadableNumber`** — 紧凑 / 精确两种数字渲染器。`formatCompact(BigInteger)` 把任意大整数渲染为 SI 前缀字符串；`formatExact(...)` 保留原始精度。KubeJS 端 [`api.readableNumber(long)`](../API/KubeJS#readablenumberlong-value--string) 是 `formatCompact(long)` 的子集重载，不接受 `BigInteger`。
+- **`cn.howxu.mmcr.api.data.DataStorage`** — 有序、类型化、支持 NeoForge 事务的机器数据存储。继承 `SnapshotJournal<Map<String, DataValue>>`；`get(key)` 返回 `Optional<DataValue>`，事务版 `set(key, value, transaction)` 在 `plan.commit(...)` 回调里调用。
+- **`cn.howxu.mmcr.api.data.DataValue`** — 类型化值包装，支持 `Boolean` / `String` / `Byte` / `Short` / `Int` / `Long` / `Float` / `Double` / `BigInteger` / `BigDecimal` / `List` / `Map`。KubeJS 端通过 [`api.dataValue(...)`](../API/KubeJS#datavalueobject-value--datavalue) 工厂构造；取值靠 `asXxx()` 安全转换。

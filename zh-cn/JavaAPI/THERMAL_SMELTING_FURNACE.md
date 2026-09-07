@@ -1,0 +1,291 @@
+---
+title: THERMAL_SMELTING_FURNACE
+order: 4
+---
+
+# THERMAL_SMELTING_FURNACE — 热力冶炼炉
+
+本文拆解 [THERMAL_SMELTING_FURNACE.java](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/main/src/main/java/org/nibelungorum/builtin/THERMAL_SMELTING_FURNACE.java)。热力冶炼炉是 MMCR 内置示例里最复杂的一台——它在合金炉演示修饰符的基础上更进一步，把"机器升级"建模成**等级系统（Level System）**。玩家在结构里放铁块 / 金块 / 钻石块作为"线圈"，配方根据线圈等级自动调整耗时、能耗、产出、并行与线程；第三个配方还演示了带**数据组件（DataComponent / NBT）**的物品输出（含附魔）。
+
+## 概览
+
+热力冶炼炉演示三件 MMCR 的进阶能力：
+
+- **等级系统**：通过 [`LevelType`](../API/JavaAPI#leveltype) + [`MachineLevel`](../API/JavaAPI#machinelevel) + [`LevelModifier`](../API/JavaAPI#levelmodifier) 把"线圈方块"映射到配方修正系数（耗时、能耗、产出、并行、线程）。
+- **配方等级要求**：[`MachineRecipeBuilder.levelRequirement(...)`](../API/JavaAPI#machinerecipebuilder) 声明每个配方最低需要的等级；配方匹配时校验。
+- **数据组件输出**：[`DataComponentPredicateSet`](../API/JavaAPI#datacomponentpredicateset) + [`ComponentPredicate.exact(...)`](../API/JavaAPI#componentpredicate) 让输出物品携带自定义名称、附魔等 NBT 数据。
+
+涉及的全部 API：
+
+| 用到的 API | API 参考 |
+| --- | --- |
+| `MachineDefinitionProvider` | [链接](../API/JavaAPI#machinedefinitionprovider) |
+| `MMCRMachineDefinationsEvent` | [链接](../API/JavaAPI#mmcrmachinedefinationsevent) |
+| `MMCRMachineStructuresEvent` | [链接](../API/JavaAPI#mmcrmachinestructuresevent) |
+| `MMCRMachineRecipesEvent` | [链接](../API/JavaAPI#mmcrmachinerecipesevent) |
+| `MachineBuilder` | [链接](../API/JavaAPI#machinebuilder) |
+| `MachineStructureBuilder` | [链接](../API/JavaAPI#machinestructurebuilder) |
+| `StructureStage` | [链接](../API/JavaAPI#structurestage) |
+| `PatternBuilder` | [链接](../API/JavaAPI#patternbuilder) |
+| `MachineRecipeBuilder` | [链接](../API/JavaAPI#machinerecipebuilder) |
+| `BlockPredicate` | [链接](../API/JavaAPI#blockpredicate) |
+| `InterfacePredicates` | [链接](../API/JavaAPI#interfacepredicates) |
+| `AppearanceSpec` | [链接](../API/JavaAPI#appearancespec) |
+| `LevelType` | [链接](../API/JavaAPI#leveltype) |
+| `MachineLevel` | [链接](../API/JavaAPI#machinelevel) |
+| `LevelModifier` | [链接](../API/JavaAPI#levelmodifier) |
+| `LevelRequirement` | [链接](../API/JavaAPI#levelrequirement) |
+| `DisplayStack` | [链接](../API/JavaAPI#displaystack) |
+| `StructureRequirements` | [链接](../API/JavaAPI#structurerequirements) |
+| `ComponentPredicate` | [链接](../API/JavaAPI#componentpredicate) |
+| `DataComponentPredicateSet` | [链接](../API/JavaAPI#datacomponentpredicateset) |
+
+## 机器定义
+
+热力冶炼炉启用并行、多线程与外观定制——但代码注释特别强调 `allowMultithreading()` 必须配合工厂控制器才能真正起作用：
+
+```java
+public static void registerDefinitions(MMCRMachineDefinationsEvent event) {
+    if (!event.definitions().containsKey(THERMAL_SMELTING_FURNACE)) {
+        var machine = MachineBuilder
+                .machine(THERMAL_SMELTING_FURNACE)
+                .displayNameKey("machine.mmcr.thermal_smelting_furnace")
+                .appearance(a -> a.machineBasicBlock(Identifier.parse("minecraft:smooth_basalt")))
+                .parallelizable(true)
+                .maxParallelism(4)
+                .allowMultithreading()
+                // although it set allowMultithreading, it must work with factory controller
+                .build();
+        event.registerMachine(machine);
+    }
+}
+```
+
+链式调用里值得展开的三件事：
+
+- **`.parallelizable(true).maxParallelism(4)`**：允许并行，并把单次最大并行数限制为 4。即使玩家放置了 `PRO` 等级并行控制器（默认 256 并行），本机器也最多并行 4 份。并行是"同一份配方同时跑多份"。
+- **`.allowMultithreading()`**：启用多线程。多线程与并行是两件事——多线程是"多个独立配方并发处理"。注意源码明确写道 `// although it set allowMultithreading, it must work with factory controller`——多线程调度器需要一个 [`InterfacePredicates.factoryController()`](../API/JavaAPI#interfacepredicates) 方块作为调度入口；结构中没有工厂控制器方块时，多线程不会被真正调度起来。这与并行控制器的"放了就生效"不同。详见 [`FactorySpec`](../API/JavaAPI#factoryspec)。
+- **`.appearance(a -> a.machineBasicBlock(Identifier.parse("minecraft:smooth_basalt")))`**：未成型外观方块是平滑玄武岩。详见 [`AppearanceSpec`](../API/JavaAPI#appearancespec)。
+
+## 多方块结构
+
+热力冶炼炉的结构阶段是**这台机器的核心**——先注册等级类型与三个等级实例，再注册结构本身：
+
+```java
+@SubscribeEvent
+public static void registerStructures(MMCRMachineStructuresEvent event) {
+
+    // do not forget register level first
+
+    event.registerLevelType(new LevelType(THERMAL_SMELTING_COIL_TYPE, Component.translatable("level.mmcr.thermal_smelting_coil")));
+
+    event.registerLevel(new MachineLevel(
+            IRON_COIL,
+            THERMAL_SMELTING_COIL_TYPE,
+            1,
+            BlockPredicate.blockState(Blocks.IRON_BLOCK.defaultBlockState()),
+            DisplayStack.of(new ItemStack(Holder.direct(Blocks.IRON_BLOCK.asItem(), DataComponentMap.EMPTY))),
+            new LevelModifier(0.9d, 1D, 1D, 0, 0))
+    );
+
+    event.registerLevel(new MachineLevel(
+            DIAMOND_COIL,
+            THERMAL_SMELTING_COIL_TYPE,
+            3,
+            BlockPredicate.blockState(Blocks.DIAMOND_BLOCK.defaultBlockState()),
+            DisplayStack.of(new ItemStack(Holder.direct(Blocks.DIAMOND_BLOCK.asItem(), DataComponentMap.EMPTY))),
+            new LevelModifier(0.7d, 0.8D, 1D, 4, 1))
+    );
+
+    event.registerLevel(new MachineLevel(
+            GOLD_COIL,
+            THERMAL_SMELTING_COIL_TYPE,
+            2,
+            BlockPredicate.blockState(Blocks.GOLD_BLOCK.defaultBlockState()),
+            DisplayStack.of(new ItemStack(Holder.direct(Blocks.GOLD_BLOCK.asItem(), DataComponentMap.EMPTY))),
+            new LevelModifier(0.6d, 0.7D, 2D, 6, 2))
+    );
+
+    if (!event.structures().containsKey(THERMAL_SMELTING_FURNACE)) {
+        var structure = MachineStructureBuilder
+                .structure()
+                .fullStructure(s -> s
+                        .pattern(p -> p
+                                .layer("AAA", "XXX", "XXX", "AAA")
+                                .layer("AAA", "X X", "X X", "ADA")
+                                .layer("ABA", "XXX", "XXX", "AAA")
+                                .where('X', any(
+                                        block(Blocks.IRON_BLOCK),
+                                        block(Blocks.GOLD_BLOCK),
+                                        block(Blocks.DIAMOND_BLOCK)
+                                ))
+                                .where('A', any(
+                                        block(Blocks.SMOOTH_BASALT),
+                                        InterfacePredicates.ports()
+                                ))
+                                .where('D', block(Blocks.REINFORCED_DEEPSLATE))
+                                .controller('B')
+                        )
+                        .requirements(r -> r
+                                .levelSlot('X', THERMAL_SMELTING_COIL_TYPE)
+                        )
+                        .portTiers(t -> t
+                                .anyItemInput()
+                                .anyItemOutput()
+                                .anyEnergyInput()
+                        ))
+                .build(THERMAL_SMELTING_FURNACE);
+
+        event.registerStructure(structure);
+    }
+}
+```
+
+### 等级系统是什么、为什么需要它
+
+等级（Level）是 MMCR 提供的"用结构中的方块动态改变配方行为"的机制。它由三部分组成：
+
+1. **等级类型（LevelType）**：声明一个"维度"，例如"线圈等级"。一台机器可以有多个等级类型。**必须先注册等级类型，再注册等级实例**。
+2. **等级实例（MachineLevel）**：在某个等级类型下声明一个具体等级（如铁线圈 / 金线圈 / 钻石线圈），绑定一个方块状态谓词和一组修正系数 [`LevelModifier`](../API/JavaAPI#levelmodifier)。
+3. **等级槽位（LevelSlot）**：在结构阶段通过 [`StructureRequirements.Builder.levelSlot(char, typeId)`](../API/JavaAPI#structurerequirements) 把模式中的字符绑定到等级类型——这个字符允许玩家摆出该类型下任意等级的方块。
+
+热力冶炼炉注册：
+
+- 1 个等级类型：`THERMAL_SMELTING_COIL_TYPE`（`mmcr:thermal_smelting_coil`），显示名 `level.mmcr.thermal_smelting_coil`。
+- 3 个等级实例：
+
+| 等级 ID | 优先级 | 方块状态 | 持续时间乘数 | 能耗乘数 | 产出乘数 | 并行加成 | 线程加成 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `IRON_COIL` | 1 | 铁块默认状态 | 0.9 | 1.0 | 1.0 | 0 | 0 |
+| `GOLD_COIL` | 2 | 金块默认状态 | 0.6 | 0.7 | 2.0 | 6 | 2 |
+| `DIAMOND_COIL` | 3 | 钻石块默认状态 | 0.7 | 0.8 | 1.0 | 4 | 1 |
+
+注意 `MachineLevel(...)` 接受 6 个参数（ID、类型 ID、优先级、方块状态谓词、显示栈、修正系数）——详见 [`MachineLevel`](../API/JavaAPI#machinelevel)。`LevelModifier` 的乘数 `< 1` 表示加速 / 减耗 / 减产出，`> 1` 表示反向；`parallelismBonus` 加到机器 `maxParallelism`，`factoryThreadBonus` 加到工厂线程上限。详见 [`LevelModifier`](../API/JavaAPI#levelmodifier)。
+
+> 💡 优先级（`priority`）决定结构匹配时多个等级并存时的优先级——金线圈的优先级是 2、铁线圈是 1，玩家同时放了铁块和金块时 MMCR 会选优先级高的。注意本例代码中金线圈 (`priority=2`) 与钻石线圈 (`priority=3`) 的等级参数里 `durationMultiplier` 是 `0.6` 和 `0.7`——也就是金线圈反而比钻石线圈"更快"。优先级与"等级强度"是两件事。
+
+### 等级槽位与默认方块状态
+
+三个等级都用 `BlockPredicate.blockState(Blocks.IRON_BLOCK.defaultBlockState())` 而非 `BlockPredicate.block(...)`——前者校验精确的方块状态（属性值），后者只校验方块实例。如果玩家放置的方块不是默认状态（例如铁块的朝向 / 含水），`blockState(...)` 会判定不匹配。详见 [`BlockPredicate.blockState(...)`](../API/JavaAPI#blockpredicate)。
+
+```java
+.requirements(r -> r
+        .levelSlot('X', THERMAL_SMELTING_COIL_TYPE))
+```
+
+这段把字符 `X` 声明为"线圈等级槽位"——玩家摆铁块、金块或钻石块都能匹配（因为三个等级都注册到了 `THERMAL_SMELTING_COIL_TYPE`）。MMCR 在结构匹配时按优先级挑出"该等级槽位上的实际等级"，然后把对应 `LevelModifier` 应用到配方执行中。详见 [`StructureRequirements.Builder.levelSlot(...)`](../API/JavaAPI#structurerequirements)。
+
+`DisplayStack.of(new ItemStack(Holder.direct(...)))` 用来把线圈方块的"代表物品"声明出来——屏幕与 JADE 显示等级时会用这个物品图标。详见 [`DisplayStack`](../API/JavaAPI#displaystack)。
+
+### 多层结构
+
+模式是 3 层 × 4 列 × 3 行：
+
+- `layer("AAA", "XXX", "XXX", "AAA")` — 顶层。四周 `A`（平滑玄武岩或端口），中间 `X`（线圈槽位）。
+- `layer("AAA", "X X", "X X", "ADA")` — 中层。四个角 `A`，左右两个 `X`，右侧中下 `D` 是深层强化板（控制器底座），中间空格表示内部挖空。
+- `layer("ABA", "XXX", "XXX", "AAA")` — 底层。控制器 `B` 在左侧中上，其余同顶层。
+
+> ⚠️ 注意：本例的 `layer(...)` 调用是 `("AAA", "XXX", "XXX", "AAA")` 这样的 4 字符串参数——也就是 z 层的 y 行数从 3 变成 4（比之前的裂解机、合金炉、高炉都更"宽"）。`layer(...)` 接收任意数量的字符串作为 y 行，但不同层之间行数与每行字符数必须一致。
+
+- `.where('X', any(block(IRON_BLOCK), block(GOLD_BLOCK), block(DIAMOND_BLOCK)))` — X 位置接受铁块 / 金块 / 钻石块中的任意一个（也即任意等级的线圈）。
+- `.where('A', any(block(SMOOTH_BASALT), InterfacePredicates.ports()))` — A 位置接受平滑玄武岩或任意端口（[`InterfacePredicates.ports()`](../API/JavaAPI#interfacepredicates) 是所有内置端口的并集）。
+- `.where('D', block(REINFORCED_DEEPSLATE))` — D 是控制器底座。
+- `.controller('B')` — B 是控制器位置。
+
+`.portTiers(t -> t.anyItemInput().anyItemOutput().anyEnergyInput())` 声明端口等级需求——任意等级即可（`anyXxxXxx()` 是 `minXxxXxx(TINY)` 的便捷方法）。详见 [`PortTiers.Builder.anyXxxXxx()`](../API/JavaAPI#porttiers)。
+
+## 配方
+
+热力冶炼炉注册 3 个配方，分别对应铁线圈、金线圈、钻石线圈：
+
+```java
+@SubscribeEvent
+public static void register(MMCRMachineRecipesEvent event) {
+    var recipe = MachineRecipeBuilder
+            .recipe(THERMAL_SMELTING_FURNACE.withSuffix("_recipe_1"),THERMAL_SMELTING_FURNACE)
+            .inputItem(Items.RAW_IRON,8)
+            .inputItem(Items.COAL,1)
+            .outputItem(Items.IRON_INGOT,9)
+            .inputEnergy(40)
+            .parallelized(true) // allow parallelized
+            .duration(200)
+            .levelRequirement(THERMAL_SMELTING_COIL_TYPE,IRON_COIL)
+            .build();
+
+    event.registerRecipe(recipe);
+
+    recipe = MachineRecipeBuilder
+            .recipe(THERMAL_SMELTING_FURNACE.withSuffix("_recipe_2"),THERMAL_SMELTING_FURNACE)
+            .inputItem(Items.RAW_GOLD,8)
+            .inputItem(Items.COAL,1)
+            .outputItem(Items.GOLD_INGOT,9)
+            .inputEnergy(40)
+            .parallelized(true)
+            .duration(200)
+            .levelRequirement(THERMAL_SMELTING_COIL_TYPE,GOLD_COIL)
+            .build();
+
+    event.registerRecipe(recipe);
+
+    ItemStack output = new ItemStack(Items.DIAMOND,9);
+    output.set(DataComponents.CUSTOM_NAME, Component.literal("What a magic recipe")); // some simple data are usable directly
+
+    // some build register data, like enchantment, must use JSON
+    JsonObject enchantments_data = new JsonObject();
+    enchantments_data.addProperty("minecraft:sharpness", 4);
+    DataComponentPredicateSet data_extra = new DataComponentPredicateSet(Map.of(Identifier.parse("minecraft:enchantments"), ComponentPredicate.exact(enchantments_data)));
+
+    recipe = MachineRecipeBuilder
+            .recipe(THERMAL_SMELTING_FURNACE.withSuffix("_recipe_3"),THERMAL_SMELTING_FURNACE)
+            .inputItem(Items.GOLD_INGOT,8)
+            .inputItem(Items.COAL,1)
+            .outputItem(output,data_extra)
+            .inputEnergy(40)
+            .parallelized(true)
+            .duration(200)
+            .levelRequirement(THERMAL_SMELTING_COIL_TYPE,DIAMOND_COIL)
+            .build();
+
+    event.registerRecipe(recipe);
+}
+```
+
+三个配方展示了 MMCR 配方阶段的三种典型写法：
+
+### 普通配方（recipe_1, recipe_2）
+
+`recipe_1` 和 `recipe_2` 是普通物品配方，差别只在输入输出物品与 `levelRequirement`。两个值得展开的细节：
+
+- **`.parallelized(true)`**：声明该配方**允许**被并行控制器加速。注意这与机器定义阶段的 `.parallelizable(true)` 是不同层级的开关——机器必须先允许并行，配方再声明自己可并行，并行控制器才生效。详见 [`MachineRecipeBuilder.parallelized(...)`](../API/JavaAPI#machinerecipebuilder)。
+- **`.levelRequirement(THERMAL_SMELTING_COIL_TYPE, IRON_COIL)`**：配方匹配时校验玩家放置的线圈是否至少达到"铁线圈"等级。如果玩家放的是更低等级（或者没有等级槽位），该配方不匹配。详见 [`LevelRequirement`](../API/JavaAPI#levelrequirement)。
+
+### 带数据组件的配方（recipe_3）
+
+第三个配方演示带附魔与自定义名称的钻石输出。MMCR 把"输出物品附带的 NBT / 数据组件"建模成 [`DataComponentPredicateSet`](../API/JavaAPI#datacomponentpredicateset)——一个 `Map<Identifier, ComponentPredicate>`：
+
+- **简单数据组件**（如 `CUSTOM_NAME`）：可以直接通过 vanilla 的 `ItemStack.set(DataComponents.X, ...)` 设置。
+- **复杂注册数据**（如附魔）：vanilla 用 JSON 表示，必须通过 [`ComponentPredicate.exact(JsonElement)`](../API/JavaAPI#componentpredicate) 构造——源码注释 `// some build register data, like enchantment, must use JSON` 说的就是这件事。
+
+最后调用 `outputItem(output, data_extra)` 把带数据的物品栈和谓词集合一起传给配方构建器。
+
+> 💡 `ComponentPredicate` 有 5 种子类型：`Exact` / `MapValue` / `ListValue` / `Range` / `TextValue`。只有 `Exact` 允许在输出端使用——模糊谓词（`Range` / `MapValue` 等）只能出现在输入端，输出端若包含模糊谓词会抛 `IllegalArgumentException("Item output components must be exact")`。
+
+## 三个阶段的协作关系
+
+热力冶炼炉的协作关系是四段而非三段——等级必须在结构构建之前注册：
+
+1. `registerDefinitions(...)` 通过 [`BuiltInProvider`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/main/src/main/java/org/nibelungorum/provider/BuiltInProvider.java) 被启动期调用：允许并行、启用多线程、声明外观。
+2. `registerStructures(...)` 在服务期被触发，依次执行：注册等级类型 → 注册 3 个等级实例 → 构建结构（包含等级槽位引用）。
+3. `register(...)` 注册 3 个配方（每个都带等级要求）。
+
+源码注释 `// do not forget register level first` 强调等级注册必须先于结构构建——否则 [`StructureRequirements.Builder.levelSlot(...)`](../API/JavaAPI#structurerequirements) 引用的等级类型 ID 在冻结时会因未注册而抛 [`ApiRegistrationException`](../API/JavaAPI#apiregistrationexception)。
+
+## 小结
+
+热力冶炼炉是 MMCR 内置示例中最复杂的一台——它把三件进阶能力组合在一起：
+
+- **等级系统**：[`LevelType`](../API/JavaAPI#leveltype) 定义维度，[`MachineLevel`](../API/JavaAPI#machinelevel) + [`LevelModifier`](../API/JavaAPI#levelmodifier) 定义具体等级与修正系数；配方通过 [`MachineRecipeBuilder.levelRequirement(...)`](../API/JavaAPI#machinerecipebuilder) 声明最低等级要求；结构通过 [`StructureRequirements.Builder.levelSlot(...)`](../API/JavaAPI#structurerequirements) 把字符绑定到等级类型。
+- **并行与多线程**：[`MachineBuilder.parallelizable(true).maxParallelism(4).allowMultithreading()`](../API/JavaAPI#machinebuilder) 同时启用，但源码明确提醒 `allowMultithreading()` 必须配合 [`InterfacePredicates.factoryController()`](../API/JavaAPI#interfacepredicates) 才会真正调度。
+- **数据组件输出**：[`DataComponentPredicateSet`](../API/JavaAPI#datacomponentpredicateset) + [`ComponentPredicate.exact(...)`](../API/JavaAPI#componentpredicate) 让输出携带自定义名称、附魔等 NBT；模糊谓词不允许出现在输出端。
+
+接下来可以阅读 [ALLOY_FURNACE](ALLOY_FURNACE) 对照"用修饰符做配方修正"的另一种思路，或者回到 [BLAST_FURNACE](BLAST_FURNACE) 与 [CRACKER](CRACKER) 复习基础的并行与结构写法；或者去 [API 参考](../API/JavaAPI) 浏览全部 API。

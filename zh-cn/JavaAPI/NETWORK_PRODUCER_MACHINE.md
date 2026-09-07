@@ -1,0 +1,395 @@
+---
+title: NETWORK_PRODUCER_MACHINE
+order: 12
+---
+
+# NETWORK_PRODUCER_MACHINE — 网络生产者
+
+本文是 MMCR 网络通信系列的第二个示例。我们逐行拆解 [NETWORK_PRODUCER_MACHINE.java](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/main/src/main/java/org/nibelungorum/builtin/NETWORK_PRODUCER_MACHINE.java) 的源代码，看看一台带网络接口的"算力发电机"是如何把能量数据周期性推送给 [NETWORK_CENTER_MACHINE](../JavaAPI/NETWORK_CENTER_MACHINE) 的。
+
+## 机器简介
+
+NETWORK_PRODUCER_MACHINE 是一台**直 tick 机器 + 网络节点**。它站在 "producer"（生产者）一端：
+
+1. 每 tick 检查是否有 FE 输入；
+2. 每 20 tick 检查是否有水输入；
+3. 根据两种输入的状态计算"算力"（power，单位 `tfps`）；
+4. 每秒一次把当前算力通过 `NetworkApi.sendRequest(...)` 推送给同网络里的中心（NETWORK_CENTER_MACHINE）；
+5. 把算力、干燥倒计时、能量状态写到控制器屏幕与 JADE 上；
+6. 如果连续 30 秒无水，就**爆炸**——演示"机器内部的退化状态"如何与屏幕提示联动。
+
+它依赖 [`MachineBuilder.networkInterface(...)`](../API/JavaAPI#machinebuilder) 和 [`allowNetworkMachine(...)`](../API/JavaAPI#machinebuilder) 两项机器端声明才能加入网络。结构里除了控制器，还必须有 `dataStorage()` 和 `networkInterface()` 两个端口方块。
+
+## 本教程涉及的文件
+
+源代码位置：
+
+- [`NETWORK_PRODUCER_MACHINE.java`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/main/src/main/java/org/nibelungorum/builtin/NETWORK_PRODUCER_MACHINE.java)
+
+教程对应：
+
+- KubeJS 版：[A_Network_Machine](../KubeJS/A_Network_Machine)（另一位维护者编写）。
+
+## 本教程涉及的 API 跳转表
+
+| 用到的 API | API 参考 |
+| --- | --- |
+| `MachineDefinitionProvider` / `MMCRMachineDefinationsEvent` | [链接](../API/JavaAPI#machinedefinitionprovider) |
+| `MMCRMachineStructuresEvent` | [链接](../API/JavaAPI#mmcrmachinestructuresevent) |
+| `MachineBuilder` | [链接](../API/JavaAPI#machinebuilder) |
+| `MachineStructureBuilder` / `PatternBuilder` | [链接](../API/JavaAPI#machinestructurebuilder) |
+| `InterfacePredicates` | [链接](../API/JavaAPI#interfacepredicates) |
+| `AppearanceSpec` | [链接](../API/JavaAPI#appearancespec) |
+| `TickBehavior` / `TickBehaviorContext` | [链接](../API/JavaAPI#tickbehavior) |
+| `MachineBehaviorContext` | [链接](../API/JavaAPI#machinebehaviorcontext) |
+| `MachineIoPlan` / `MachineIoView` | [链接](../API/JavaAPI#machineioplan) |
+| `EnergyRequirement` / `FluidRequirement` / `RecipeIo` | [链接](../API/JavaAPI#energyrequirement) |
+| `RecipeModifier` | 通过 [`MachineRecipeDefinition`](../API/JavaAPI#machinerecipedefinition) 的 `modifiers` 字段，本机引用 |
+| `ControllerScreenTextScope` / `ControllerScreenText` | [链接](../API/JavaAPI#controllerscreentextscope) |
+| `JadeText` | [链接](../API/JavaAPI#jadetext) |
+
+下面这些 API 涉及网络通信，是本教程的核心：
+
+| 用到的 API | 备注 |
+| --- | --- |
+| `cn.howxu.mmcr.api.network.NetworkApi` | 见本文末尾"未在 JavaAPI.md 中覆盖的 API"。 |
+| `cn.howxu.mmcr.api.network.RequestBody` | 同上。 |
+| `cn.howxu.mmcr.api.network.NetworkInterfaceReference` | 同上。 |
+| `cn.howxu.mmcr.api.data.DataStorage` / `DataValue` | 同上。 |
+
+## 网络通信模型图解
+
+MMCR 的网络通信走"**请求-响应**"模型，三种角色：
+
+```
+        (主动发送)              (接收并处理)
+PRODUCER  ────sendRequest──►  CENTER
+   ▲                            │
+   │                            │
+   └────────(每 tick 反向读取)───┘
+        connections() 列表
+```
+
+更细一点，**生产者**这台机器做的事：
+
+```
+  ┌──────────────────────────────────────────────────┐
+  │                  PRODUCER                        │
+  │                                                  │
+  │  Tick:                                            │
+  │    1. 尝试吸收 100 FE                             │
+  │    2. 每 20 tick 尝试吸 100 mB 水                 │
+  │    3. 更新 power/dry_sec 状态到 DataStorage       │
+  │    4. 每 20 tick 通过 NetworkApi.sendRequest     │
+  │       → REPORT_POWER                              │
+  │       → body: { "power": <当前算力> }             │
+  │       → target: connections().get(0)              │
+  └──────────────────────────────────────────────────┘
+                       │
+                       ▼ RequestBody("power" → 20.0)
+  ┌──────────────────────────────────────────────────┐
+  │                   CENTER                         │
+  │                                                  │
+  │  requestProcess(REPORT_POWER, (body, req,        │
+  │      senderStorage, receiverStorage) -> {        │
+  │    receiverStorage.set("power_" + peer.hash(),    │
+  │      body.get("power").asDouble());              │
+  │  });                                             │
+  └──────────────────────────────────────────────────┘
+```
+
+要点：
+
+- **生产者从来不需要知道中心在哪**——它只调用 `iface.connections().get(0)` 拿到第一个连接，由 MMCR 内部根据网络接口的拓扑把请求转过去。
+- **请求体是 `RequestBody`**，本质是 `Map<String, DataValue>`，键值都是 `DataValue` 类型（不是裸 `double`/`int`/`String`），保持类型安全。
+- 中心收到后通过 `RequestProcess` 回调处理；处理逻辑完全由中心机器定义，生产者不关心。
+- **失败时不会传播异常**——`sendRequest` 找不到目标会抛 `IllegalArgumentException`（在 `endpointFor(target)` 返回 null 时），但目标存在却无法响应（比如中心还没成型）走"沉默丢失"。如果生产者机器上对同一 `requestId` 注册了 `requestFailed` 回调，失败会被回调到。
+
+## 机器定义详解
+
+```java
+public static final Identifier NETWORK_PRODUCER_MACHINE = id("network_producer_machine");
+public static final Identifier NETWORK_CENTER_MACHINE = id("network_center_machine");
+public static final Identifier REPORT_POWER = id("report_power");
+
+public static final Identifier PRODUCER_POWER = id("producer_power");
+public static final Identifier PRODUCER_WATER = id("producer_water");
+public static final Identifier PRODUCER_FE = id("producer_fe");
+
+public static void registerDefinitions(MMCRMachineDefinationsEvent event) {
+    if (!event.definitions().containsKey(NETWORK_PRODUCER_MACHINE)) {
+        var machine = MachineBuilder
+                .machine(NETWORK_PRODUCER_MACHINE)
+                .displayNameKey("machine.mmcr.network_producer_machine")
+                .appearance(a -> a.machineBasicBlock(Identifier.parse("minecraft:white_wool")))
+                .networkInterface(1, 1)
+                .allowNetworkMachine(NETWORK_CENTER_MACHINE)
+                .tickBehavior(behavior -> behavior.serverTick(context -> {
+                    // ...
+                }))
+                .build();
+        event.registerMachine(machine);
+    }
+}
+```
+
+两个**关键声明**：
+
+### `.networkInterface(1, 1)`
+
+启用网络接口能力：
+
+- 第一个 `1` 是这台机器**最多拥有的网络接口数**。生产者端只放 1 块 `networkInterface()` 方块，所以 `maxCount = 1`。
+- 第二个 `1` 是**每个接口最多连接的邻居数**。生产者端只跟一台中心通信，所以 `maxCount = 1`。
+
+如果玩家放置了超过 `maxCount` 个接口方块，多余的接口不会激活；如果尝试让一个接口连超过 `maxConnections` 个邻居，MMCR 会拒绝。
+
+详见 [`MachineBuilder.networkInterface`](../API/JavaAPI#networkinterfaceint-maxcount-maxconnections)。
+
+### `.allowNetworkMachine(NETWORK_CENTER_MACHINE)`
+
+白名单：声明这台机器只允许跟 `NETWORK_CENTER_MACHINE` 通信。其他机器的网络接口即使物理连接，也不会被纳入 `connections()` 列表。这是一项**双向校验**——双方的 `allowNetworkMachine` 都需要把对方列入白名单。
+
+注意这里直接引用了 `NETWORK_CENTER_MACHINE` 这个 ID 常量（来自 `NETWORK_CENTER_MACHINE.java`）。生产者端必须知道中心的机器 ID 才能加入白名单；中心端反过来也要把生产者的 ID 加进自己的 `allowNetworkMachine(...)`。这是 MMCR 网络的安全模型——避免任意两台机器都能互连。
+
+详见 [`MachineBuilder.allowNetworkMachine`](../API/JavaAPI#allownetworkmachineidentifier-machineid)。
+
+### `.tickBehavior(...)`
+
+跟 [DATA_STORAGE_MACHINE](../JavaAPI/DATA_STORAGE_MACHINE) 一样走直 tick 路径。详见 [`TickBehavior`](../API/JavaAPI#tickbehavior)。
+
+## 结构详解
+
+```java
+@SubscribeEvent
+public static void registerStructures(MMCRMachineStructuresEvent event) {
+    if (!event.structures().containsKey(NETWORK_PRODUCER_MACHINE)) {
+        var structure = MachineStructureBuilder
+                .structure()
+                .fullStructure(s -> s
+                        .pattern(p -> p
+                                .layer("XXXX", "XAAX", "XXXX")
+                                .layer("XXXX", "A  A", "XXXX")
+                                .layer("XXXX", "A  A", "XXXX")
+                                .layer("XXXX", "XCAX", "XXXX")
+                                .where('X', block(Blocks.WHITE_WOOL))
+                                .where('A', any(
+                                        InterfacePredicates.anyOfFluidInput(),
+                                        InterfacePredicates.anyOfEnergyInput(),
+                                        InterfacePredicates.networkInterface(),
+                                        InterfacePredicates.dataStorage(),
+                                        block(Blocks.RED_TERRACOTTA)
+                                ))
+                                .controller('C')
+                        )
+                )
+                .build(NETWORK_PRODUCER_MACHINE);
+        event.registerStructure(structure);
+    }
+}
+```
+
+结构是一个 4×4×4 的紧凑壳：白羊毛外壳（X），中层四个面上（A）允许 5 类方块：
+
+- `anyOfFluidInput()`：进水口；
+- `anyOfEnergyInput()`：进 FE；
+- `networkInterface()`：**网络接口方块**——这台机器能通信的关键；
+- `dataStorage()`：**数据存储方块**——`tickBehavior` 用它保存 `power`、`dry_sec`、`has_water` 三个键；
+- `block(Blocks.RED_TERRACOTTA)`：装饰。
+
+注意 `anyOfFluidInput()`、`anyOfEnergyInput()`、`networkInterface()`、`dataStorage()` 都用 `any(...)` 包起来，所以一个 A 位置可以放任意一种。这是 MMCR 多端口共用一个槽位的典型做法。
+
+## 网络请求详解（tick 行为）
+
+完整 tick 行为有 4 段：能量吸收 → 水吸收 + 算力计算 → 网络上报 → 屏幕文本。下面拆开看。
+
+### 1. 能量吸收（每 tick）
+
+```java
+DataStorage storage = context.dataStorage();
+if (storage == null) return;
+
+double power = storage.get("power")
+        .flatMap(DataValue::asDouble)
+        .orElse(0.0);
+double drySec = storage.get("dry_sec")
+        .flatMap(DataValue::asDouble)
+        .orElse(0.0);
+boolean feOk = true;
+
+var energyPlan = context.ioPlan();
+energyPlan.addInput(new EnergyRequirement(100));
+var energySim = energyPlan.simulate();
+if (!energySim.energySatisfied() || !energyPlan.commit().successful()) {
+    feOk = false;
+}
+```
+
+每 tick 尝试吸 100 FE。这里没用二分查找（因为输入固定 100），直接 `simulate()` + `commit()` 两步走。如果失败，`feOk = false`，下游会降级。
+
+`DataStorage.get("power").flatMap(DataValue::asDouble).orElse(0.0)` 是 MMCR 数据层最常见的读法——从 `DataValue` 取出 `double`，类型不对时退到 0。
+
+### 2. 水吸收 + 算力计算（每 20 tick）
+
+```java
+if (context.isDue(20)) {
+    var waterPlan = context.ioPlan();
+    waterPlan.addInput(new FluidRequirement(
+            RecipeModifier.IOType.INPUT,
+            FluidIngredient.of(Fluids.WATER),
+            100,
+            FluidStack.EMPTY));
+    var waterSim = waterPlan.simulate();
+    boolean hasWater = waterSim.inputsSatisfied();
+
+    if (feOk && hasWater && waterPlan.commit().successful()) {
+        power = 20;
+        drySec = 0;
+    } else {
+        power = 10;
+        if (feOk) {
+            drySec = drySec + 1;
+            hasWater = false;
+        }
+    }
+
+    storage.set("has_water", DataValue.of(hasWater));
+    storage.set("power", DataValue.of(power));
+    storage.set("dry_sec", DataValue.of(drySec));
+    // ...
+}
+```
+
+注意 [`FluidRequirement`](../API/JavaAPI#fluidrequirement) 的构造：
+
+- `RecipeModifier.IOType.INPUT`（这里用 `RecipeModifier.IOType` 是因为 `FluidRequirement` 复用了配方修饰符的 IO 枚举，不要被名字迷惑）；
+- `FluidIngredient.of(Fluids.WATER)` 流体谓词；
+- `100` mB；
+- `FluidStack.EMPTY` 输入方向时必填，但内容忽略。
+
+成功取水 → `power = 20`、干燥秒数清零；失败 → `power = 10`、干燥秒数 +1。三个状态都通过 `DataStorage.set(...)` 持久化。
+
+### 3. 干燥超限爆炸
+
+```java
+if (drySec >= 30) {
+    var level = context.level();
+    var pos = context.controllerPos();
+    level.explode(
+            null,
+            pos.getX() + 0.5,
+            pos.getY() + 0.5,
+            pos.getZ() + 0.5,
+            4.0F,
+            false,
+            Level.ExplosionInteraction.BLOCK);
+    return;
+}
+```
+
+`context.controllerPos()` 返回 [`MachineBehaviorContext`](../API/JavaAPI#machinebehaviorcontext) 给出的控制器方块位置；`context.level()` 是服务端世界。30 秒没水直接 `level.explode(...)` 半径 4、破坏方块。这一步的意图很明确——演示"机器如何根据内部状态直接操作世界"。
+
+### 4. 网络上报
+
+```java
+if (shouldReport) {
+    var interfaces = NetworkApi.interfaces(context);
+    var iface = interfaces != null && !interfaces.isEmpty() ? interfaces.get(0) : null;
+    if (iface != null) {
+        var connections = iface.connections();
+        var target = connections != null && !connections.isEmpty() ? connections.get(0) : null;
+        if (target != null) {
+            NetworkApi.sendRequest(iface, target, REPORT_POWER,
+                    RequestBody.of(Map.of("power", DataValue.of(powerPublished))));
+        }
+    }
+}
+```
+
+`NetworkApi.interfaces(context)` 是**网络通信的唯一入口**，返回当前机器所有活跃网络接口的 [`NetworkInterfaceReference`](#) 列表（按位置排序）。
+
+每一步安全检查：
+
+1. `interfaces` 不空 → 取第一个接口 `iface`；
+2. `iface.connections()` 返回**已建立的物理连接**对应的 `MachineReference` 列表——`MachineReference` 是 record `(Identifier type, long hash)`，稳定标识一台已成型机器；
+3. 取第一个连接 `target`，调用 `NetworkApi.sendRequest(iface, target, REPORT_POWER, body)`：
+   - `iface` 是源接口；
+   - `target` 是目标机器（**不是**目标接口，MMCR 内部会查 `iface.endpointFor(target)` 找到目标接口）；
+   - `REPORT_POWER` 是请求 ID，类型 `Identifier`；
+   - `body` 是 `RequestBody.of(Map.of("power", DataValue.of(powerPublished)))`——`RequestBody.of(...)` 会校验所有键非空、值非 null。
+
+`sendRequest` 内部把请求入队到当前 tick 的网络处理队列，目标机器的 `requestProcess(REPORT_POWER, ...)` 会在下一个 tick 处理。**生产者不需要阻塞等待响应**——典型的"推消息"模型。
+
+### 5. 屏幕文本与 JADE
+
+```java
+context.screenText().append(ControllerScreenTextScope.OPERATION, PRODUCER_POWER,
+        Component.literal("Computing Power: " + powerPublished + " tfps"));
+context.screenText().append(ControllerScreenTextScope.OPERATION, PRODUCER_WATER,
+        Component.literal(hasWater
+                ? "Water: OK"
+                : "Water: DRY (overflow in " + Math.max(0, 30 - dryPublished) + " sec)"));
+context.screenText().append(ControllerScreenTextScope.OPERATION, PRODUCER_FE,
+        Component.literal(feOk ? "Energy: OK" : "Energy: LOW"));
+
+context.jadeText().append(PRODUCER_POWER,
+        Component.literal(powerPublished + " tfps"));
+context.jadeText().append(PRODUCER_WATER,
+        Component.literal(hasWater ? "Water OK" : "Water DRY"));
+```
+
+`screenText()` 与 `jadeText()` 都是写"按 `lineId` 幂等覆盖"的句柄。同 `lineId` 反复 `append` 会替换上一帧内容。详见 [`ControllerScreenText`](../API/JavaAPI#controllerscreentext) 与 [`JadeText`](../API/JavaAPI#jadetext)。
+
+## 特殊机制
+
+### 白名单双向校验
+
+`networkInterface(maxCount, maxConnections)` 只描述"我能做接口"；真正决定"我能和谁通信"的是 `allowNetworkMachine(machineId)`。MMCR 在两端都校验：
+
+- 生产者端 `allowNetworkMachine(NETWORK_CENTER_MACHINE)` → 允许它主动连中心；
+- 中心端 `allowNetworkMachine(NETWORK_PRODUCER_MACHINE)` → 允许它被动接生产者。
+
+任意一方缺失，物理连接都不会建立。详见 [`MachineBuilder.allowNetworkMachine`](../API/JavaAPI#allownetworkmachineidentifier-machineid)。
+
+### DataStorage 作为网络协议的暂存
+
+`power`、`dry_sec`、`has_water` 三个键存的是"机器内部状态"，但它们同时是**网络协议的字段名**——`RequestBody` 也用 `power` 这个键携带数据。换句话说，`DataStorage` 充当了"机器状态 ↔ 网络协议"之间的桥：
+
+- tick 行为把 `power` 写到 `DataStorage`；
+- 同一 tick 再用相同的 key 把 `power` 通过 `RequestBody` 发出去；
+- 中心机器收到后写到自己的 `DataStorage`，用 `power_<peerHash>` 做命名空间避免覆盖。
+
+这种"复用键名"的写法使网络协议与机器状态一一对应，不需要单独的 schema 文件。
+
+### 接口位置稳定性
+
+`NetworkInterfaceReference.position()` 返回当前接口方块的世界坐标。MMCR 通过这个位置查"接口方块的连接表"——连接表存在网络接口方块实体的 NBT 里，跨区块跨维度都稳定。
+
+### `shouldReport = feOk` 的语义
+
+只有能量吸收成功时才上报算力——避免在"机器还没启动"时把 `power = 0` 推到中心造成误聚合。这是一种常见的"健康检查 + 业务上报合一"的模式。
+
+## 与其他教程的对比
+
+- vs [DATA_STORAGE_MACHINE](../JavaAPI/DATA_STORAGE_MACHINE)：DATA_STORAGE 完全没有网络通信，所有读写都在自己机器的 `DataStorage` 里。NETWORK_PRODUCER 把 `DataStorage` 的字段当网络协议字段用，引入了 [`NetworkApi`](#)、[`RequestBody`](#)、`MachineReference` 等新概念。
+- vs [NETWORK_CENTER_MACHINE](../JavaAPI/NETWORK_CENTER_MACHINE)：生产者主动 `sendRequest`，中心被动 `requestProcess`。两者必须**双向白名单**才能通信。
+- vs [BLAST_FURNACE](../JavaAPI/BLAST_FURNACE)：BLAST_FURNACE 演示了配方驱动的标准三阶段模型，NETWORK_PRODUCER 完全不走配方，只用 `networkInterface` + `tickBehavior`。
+- vs KubeJS 端：KubeJS 版 [A_Network_Machine](../KubeJS/A_Network_Machine) 演示同一思路在脚本端的写法——`networkInterfaces(ctx)`、`sendRequest(...)`、`dataValue(...)` 是 Java 端 `NetworkApi.interfaces`/`NetworkApi.sendRequest`/`DataValue.of(...)` 的对应物。
+
+## 延伸阅读
+
+- [NETWORK_CENTER_MACHINE](../JavaAPI/NETWORK_CENTER_MACHINE) — 同一网络的对端，处理 `REPORT_POWER` 请求。
+- [DATA_STORAGE_MACHINE](../JavaAPI/DATA_STORAGE_MACHINE) — 理解 `DataStorage` 的最简样本。
+- [JavaAPI.md](../API/JavaAPI) — Java 公共 API 集中参考。
+- [BLAST_FURNACE](../JavaAPI/BLAST_FURNACE) — MMCR 入门教程。
+
+## 未在 JavaAPI.md 中覆盖的 API
+
+本教程用到了 [JavaAPI.md](../API/JavaAPI) 暂未收录的 API，建议下一轮扩充时补齐：
+
+- **`cn.howxu.mmcr.api.network.NetworkApi`** — 网络 API 静态门面。`interfaces(MachineBehaviorContext)` 返回当前机器所有活跃网络接口的 `NetworkInterfaceReference` 列表；`sendRequest(source, target, requestId, body)` 把请求入队。
+- **`cn.howxu.mmcr.api.network.RequestBody`** — 不可变请求体，本质是 `Map<String, DataValue>`。`of(map)` 工厂校验键非空、值非 null；`get(key)` 返回 `Optional<DataValue>`。
+- **`cn.howxu.mmcr.api.network.NetworkInterfaceReference`** — 活跃网络接口的服务端引用。`position()`、`connections()`（返回 `MachineReference` 列表）、`sourceController()` 等访问器。
+- **`cn.howxu.mmcr.api.network.MachineReference`** — record `(Identifier type, long hash)`，标识一台已成型机器。`hash()` 是稳定的实例哈希。
+- **`cn.howxu.mmcr.api.network.RequestInfo`** — record `(Identifier requestId, MachineReference peer)`，处理器中的请求上下文。
+- **`cn.howxu.mmcr.api.data.DataStorage`** / **`DataValue`** — 详见 [DATA_STORAGE_MACHINE](../JavaAPI/DATA_STORAGE_MACHINE) 教程的对应章节。

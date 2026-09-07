@@ -1,0 +1,319 @@
+---
+title: DATA_STORAGE_MACHINE
+order: 11
+---
+
+# DATA_STORAGE_MACHINE — 数据存储机器
+
+本文是 MMCR 数据存储系列的第一个示例。我们逐行拆解 [DATA_STORAGE_MACHINE.java](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/main/src/main/java/org/nibelungorum/builtin/DATA_STORAGE_MACHINE.java) 的源代码，看看一台基于 `DataStorage` 的能量库是如何在没有配方的情况下，通过 tick 行为实现"按需充电、按量放电"的持久化存储的。
+
+## 机器简介
+
+DATA_STORAGE_MACHINE 是一台**没有配方的直 tick 机器**，专门演示 MMCR 的持久化数据存储机制。它的形态是一个由哭泣黑曜石和红石块堆成的球形多方块，中心嵌一颗"数据存储接口"方块（`InterfacePredicates.dataStorage()`）。机器内部不跑任何配方逻辑，而是按 tick 周期：
+
+1. 通过 [`MachineIoPlan`](../API/JavaAPI#machineioplan) 检测能量输入端口能承受的最大 FE/t；
+2. 用**二分查找**确定一个可以安全吸收入库的数值；
+3. 把实际入库的 FE 加到一个 `BigInteger` 计数的持久化 `DataStorage` 里；
+4. 再把存储的能量按当前输出端口的容量退库到世界；
+5. 最后把当前储量写到控制器屏幕与 JADE 提示上。
+
+整台机器完全靠 `TickBehavior.serverTick(...)` 驱动，不调用 `recipeBehavior(...)`，因此是理解 MMCR"无配方直 tick"模式的最佳样本。
+
+## 本教程涉及的文件
+
+源代码位置：
+
+- [`DATA_STORAGE_MACHINE.java`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/main/src/main/java/org/nibelungorum/builtin/DATA_STORAGE_MACHINE.java)
+
+教程对应：
+
+- KubeJS 版暂无对应教程（数据存储的 KubeJS 接口走 `A_Data_Storage_Machine`，由另一位维护者编写）。
+
+## 本教程涉及的 API 跳转表
+
+| 用到的 API | API 参考 |
+| --- | --- |
+| `MachineDefinitionProvider` / `MMCRMachineDefinationsEvent` | [链接](../API/JavaAPI#machinedefinitionprovider) |
+| `MMCRMachineStructuresEvent` | [链接](../API/JavaAPI#mmcrmachinestructuresevent) |
+| `MachineBuilder` | [链接](../API/JavaAPI#machinebuilder) |
+| `MachineStructureBuilder` / `PatternBuilder` | [链接](../API/JavaAPI#machinestructurebuilder) |
+| `InterfacePredicates` | [链接](../API/JavaAPI#interfacepredicates) |
+| `AppearanceSpec` | [链接](../API/JavaAPI#appearancespec) |
+| `TickBehavior` / `TickBehaviorContext` | [链接](../API/JavaAPI#tickbehavior) |
+| `MachineBehaviorContext` | [链接](../API/JavaAPI#machinebehaviorcontext) |
+| `MachineIoPlan` / `MachineIoView` | [链接](../API/JavaAPI#machineioplan) |
+| `OutputPolicy` | [链接](../API/JavaAPI#outputpolicy) |
+| `EnergyRequirement` / `RecipeIo` | [链接](../API/JavaAPI#energyrequirement) |
+| `ControllerScreenTextScope` | [链接](../API/JavaAPI#controllerscreentextscope) |
+| `ControllerScreenText` | [链接](../API/JavaAPI#controllerscreentext) |
+| `JadeText` | [链接](../API/JavaAPI#jadetext) |
+| `ReadableNumber` | [链接](../API/JavaAPI#readablenumber) |
+
+注意：教程里还会用到 `DataStorage` 与 `DataValue`，它们是 MMCR 数据层的核心 API，但目前 [JavaAPI.md](../API/JavaAPI.md) 还没有独立条目。详见本文末尾"未在 JavaAPI.md 中覆盖的 API"一节。
+
+## 机器定义详解
+
+打开 [`DATA_STORAGE_MACHINE.java`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/main/src/main/java/org/nibelungorum/builtin/DATA_STORAGE_MACHINE.java)，第一段是注册 ID 与 `registerDefinitions(...)`：
+
+```java
+private static final Identifier DATA_STORAGE_MACHINE = id("data_storage_machine");
+private static final Identifier FE_STATUS = id("fe_storage_status");
+
+public static void registerDefinitions(MMCRMachineDefinationsEvent event) {
+    if (!event.definitions().containsKey(DATA_STORAGE_MACHINE)) {
+        var machine = MachineBuilder
+                .machine(DATA_STORAGE_MACHINE)
+                .displayNameKey("machine.mmcr.data_storage_machine")
+                .appearance(a -> a.machineBasicBlock(Identifier.parse("minecraft:crying_obsidian")))
+                .tickBehavior(behavior -> behavior.serverTick(context -> {
+                    // ...见下文
+                }))
+                .build();
+        event.registerMachine(machine);
+    }
+}
+```
+
+几个关键点：
+
+- `id("data_storage_machine")` 是 MMCR 内置辅助，等价于 `Identifier.fromNamespaceAndPath("mmcr", "data_storage_machine")`。自己写 mod 时应使用自己的命名空间。
+- `.displayNameKey("machine.mmcr.data_storage_machine")` 声明本地化键，参见 [`MachineBuilder`](../API/JavaAPI#machinebuilder)。
+- `.appearance(a -> a.machineBasicBlock(...))` 把未成型时的"占位方块"设为哭泣黑曜石。成型后玩家会看到真正的多方块结构，未成型时世界里的预览是这块黑曜石。详见 [`AppearanceSpec`](../API/JavaAPI#appearancespec)。
+- `.tickBehavior(behavior -> behavior.serverTick(context -> {...}))` 是关键——声明这台机器**不走配方**而是按 tick 直驱。注意它**没有**调用 `.recipeBehavior(...)`，因为这两者在 [`MachineBuilder`](../API/JavaAPI#machinebuilder) 中是互斥的。
+
+## 结构详解
+
+DATA_STORAGE_MACHINE 的结构是一个 9×9×9 的球形壳，壳面用哭泣黑曜石，壳内填红石块，中心放一颗数据存储接口方块：
+
+```java
+@SubscribeEvent
+public static void registerStructures(MMCRMachineStructuresEvent event) {
+    if (!event.structures().containsKey(DATA_STORAGE_MACHINE)) {
+        var structure = MachineStructureBuilder
+                .structure()
+                .fullStructure(s -> s
+                        .pattern(p -> p
+                                .layer("         ", "         ", "         ", "   AAA   ", "   ABA   ", "   AAA   ", "         ", "         ", "         ")
+                                .layer("         ", "         ", "  AAAAA  ", "  AXXXA  ", "  AXXXA  ", "  AXXXA  ", "  AAAAA  ", "         ", "         ")
+                                .layer("         ", "  AAAAA  ", " AXXXXXA ", " AXXXXXA ", " AXXXXXA ", " AXXXXXA ", " AXXXXXA ", "  AAAAA  ", "         ")
+                                .layer("   AAA   ", "  AXXXA  ", " AXXXXXA ", "AXXXXXXXA", "AXXXXXXXA", "AXXXXXXXA", " AXXXXXA ", "  AXXXA  ", "   AAA   ")
+                                .layer("   ABA   ", "  AXXXA  ", " AXXXXXA ", "AXXXXXXXA", "BXXXDXXXB", "AXXXXXXXA", " AXXXXXA ", "  AXXXA  ", "   ABA   ")
+                                .layer("   AAA   ", "  AXXXA  ", " AXXXXXA ", "AXXXXXXXA", "AXXXXXXXA", "AXXXXXXXA", " AXXXXXA ", "  AXXXA  ", "   AAA   ")
+                                .layer("         ", "  AAAAA  ", " AXXXXXA ", " AXXXXXA ", " AXXXXXA ", " AXXXXXA ", " AXXXXXA ", "  AAAAA  ", "         ")
+                                .layer("         ", "         ", "  AAAAA  ", "  AXXXA  ", "  AXXXA  ", "  AXXXA  ", "  AAAAA  ", "         ", "         ")
+                                .layer("         ", "         ", "         ", "   AAA   ", "   ACA   ", "   AAA   ", "         ", "         ", "         ")
+                                .where('X', block(Blocks.REDSTONE_BLOCK))
+                                .where('A', block(Blocks.CRYING_OBSIDIAN))
+                                .where('B', any(
+                                        InterfacePredicates.anyOfEnergyInput(),
+                                        InterfacePredicates.anyOfEnergyOutput()
+                                ))
+                                .where('D', InterfacePredicates.dataStorage())
+                                .controller('C')
+                        )
+                )
+                .build(DATA_STORAGE_MACHINE);
+        event.registerStructure(structure);
+    }
+}
+```
+
+几个要点：
+
+- 模式是 9 层 × 9 行 × 9 列的扁平结构。每个字符绑定一个 [`BlockPredicate`](../API/JavaAPI#blockpredicate)。
+- `X` 是红石块（壳的内填），`A` 是哭泣黑曜石（壳的外皮），形成一颗"黑曜石包红石块"的球体。
+- `B` 是任意能量输入或输出端口，分布在球的 6 个面正中——玩家可自由选择只放输入、只放输出或两种都放。
+- **`D` 是 `InterfacePredicates.dataStorage()`**——这是数据存储接口方块的谓词。MMCR 在玩家把这台机器成型后，会自动在 `D` 的位置注册一个**专用数据存储 block entity**，`tickBehavior` 里 `context.dataStorage()` 拿到的就是它的句柄。换句话说，没有这个方块，这台机器就没有"持久化容量"。
+- `C` 是控制器，与 [BLAST_FURNACE](../JavaAPI/BLAST_FURNACE) 的布置方式一致。
+
+为什么需要 `dataStorage()` 方块？因为 MMCR 的数据存储默认**没有持久化绑定**——`context.dataStorage()` 只有在结构里显式放置了 `dataStorage()` 谓词的方块后才会返回非空指针。参见 [`InterfacePredicates`](../API/JavaAPI#interfacepredicates) 的 `dataStorage()` 条目。
+
+## 数据流详解（tick 行为）
+
+整台机器最复杂的部分是 `.serverTick(context -> { ... })`。我们按源码顺序拆成 5 段。
+
+### 1. 读取当前储量
+
+```java
+DataStorage storage = context.dataStorage();
+if (storage == null) return;
+
+BigInteger stored = BigInteger.ZERO;
+var saved = storage.get("energy");
+if (saved.isPresent()) {
+    stored = saved.get().asBigInteger().orElse(BigInteger.ZERO);
+}
+```
+
+`context.dataStorage()` 返回这台机器关联的 `DataStorage` 句柄。它是有序的 `Map<String, DataValue>`，并支持 NeoForge 事务（`SnapshotJournal<Map<String, DataValue>>`）。如果玩家没有放 `dataStorage()` 方块，这里就是 `null`，整个 tick 直接 return。
+
+`storage.get("energy")` 返回 `Optional<DataValue>`；取出后用 `asBigInteger()` 安全转换（值类型不对时返回空），再退到 `ZERO`。这里用 `BigInteger` 是为了**支持任意大的能量计数**——Minecraft 的能量槽是 64 位，但存储计数可以无限累加。
+
+### 2. 二分查找最大可入库 FE
+
+```java
+if (context.isDue(5)) {
+    int available = (int) Math.min(context.ioView().energyInput(), Integer.MAX_VALUE);
+    int low = 0;
+    int high = available;
+
+    while (low < high) {
+        int candidate = low + (int) Math.ceil((high - low) / 2.0);
+
+        var probe = context.ioPlan();
+        probe.addInput(new EnergyRequirement(RecipeIo.INPUT, candidate));
+
+        if (probe.simulate().energySatisfied()) {
+            low = candidate;
+        } else {
+            high = candidate - 1;
+        }
+    }
+    // ...
+}
+```
+
+`context.isDue(5)` 是 MMCR 的"每 N tick 触发一次"工具，避免每 tick 重复跑重活。这里每 5 tick 才尝试吸一次能量。
+
+逻辑：先用 [`MachineIoView`](../API/JavaAPI#machineioview) 拿到所有能量输入端口的总和，然后用经典二分在 `[0, available]` 上找最大可接受的 `candidate`。每次循环：
+
+- 开一个**新的** [`MachineIoPlan`](../API/JavaAPI#machineioplan)，加入 `candidate` FE 的输入需求（[`EnergyRequirement`](../API/JavaAPI#energyrequirement)）；
+- `simulate()` 看看这个输入能不能被端口满足（`energySatisfied()`）；
+- 能就抬高下限，不能就压上限。
+
+最后 `low` 就是"在不超出端口容量前提下，最大可以尝试吸的 FE"。这种"探测式二分"是 MMCR `MachineIoPlan` 的典型用法：每次 `addInput` 都新建 plan，互不影响。
+
+### 3. 真正入库并持久化
+
+```java
+if (low > 0) {
+    var inputPlan = context.ioPlan();
+    inputPlan.addInput(new EnergyRequirement(RecipeIo.INPUT, low));
+
+    BigInteger next = stored.add(BigInteger.valueOf(low));
+    var inputSimulation = inputPlan.simulate();
+
+    if (inputSimulation.energySatisfied() && inputPlan.commit(transaction -> {
+        storage.set("energy", DataValue.of(next), transaction);
+    }).successful()) {
+        stored = next;
+    }
+}
+```
+
+为什么不在二分循环里直接 `commit`？因为 [`MachineIoPlan`](../API/JavaAPI#machineioplan) 是**一次性**的，`commit()` 后就废了。所以这里**第二次**新建 plan，把二分得到的 `low` 拿来正式 commit。
+
+注意 `commit(transaction -> { ... })` 的 lambda：
+
+- `transaction` 是 NeoForge 的 `TransactionContext`；
+- `storage.set("energy", DataValue.of(next), transaction)` 是 `DataStorage` 的**事务感知**版本——`DataStorage extends SnapshotJournal<Map<String, DataValue>>`。如果事务回滚，写入会自动撤销。
+- 如果 `commit(...)` 失败（端口在两次 simulate 之间被抽干），整个仓库计数**不会变**——这就是事务的意义。
+
+成功后 `stored = next`，把本地缓存的 `BigInteger` 同步上去。
+
+### 4. 按容量退库
+
+```java
+if (context.isDue(5)) {
+    long outputCapacity = context.ioView().energyOutputCapacity();
+
+    if (outputCapacity > 0 && stored.signum() > 0) {
+        BigInteger requestedBig = stored.min(
+                BigInteger.valueOf(Math.min(outputCapacity, Integer.MAX_VALUE)));
+        int requested = requestedBig.intValue();
+
+        if (requested > 0) {
+            var outputPlan = context.ioPlan();
+            outputPlan.addOutput(
+                    new EnergyRequirement(RecipeIo.OUTPUT, requested),
+                    OutputPolicy.ALLOW_PARTIAL);
+
+            var simulation = outputPlan.simulate();
+            var outputs = simulation.outputs();
+
+            if (!outputs.isEmpty()) {
+                long accepted = outputs.get(0).accepted();
+
+                if (accepted > 0) {
+                    BigInteger finalStored = stored.subtract(BigInteger.valueOf(accepted));
+
+                    if (outputPlan.commit(transaction -> {
+                        storage.set("energy", DataValue.of(finalStored), transaction);
+                    }).successful()) {
+                        stored = finalStored;
+                    }
+                }
+            }
+        }
+    }
+}
+```
+
+退库段的关键点：
+
+- [`MachineIoView.energyOutputCapacity()`](../API/JavaAPI#machineioview) 拿到所有能量输出端口的总余量。
+- 写入方向是 `RecipeIo.OUTPUT`，并使用 [`OutputPolicy.ALLOW_PARTIAL`](../API/JavaAPI#outputpolicy)——**允许部分接受**。如果用 `REQUIRE_FULL`，一旦下游线缆只能吸走一半 FE，整个 commit 就会失败，库里就一根都退不出去；用 `ALLOW_PARTIAL` 才能优雅地"有多少吐多少"。
+- `simulation.outputs()` 返回每个输出项的 [`OutputSimulation`](../API/JavaAPI#machineioplan)，读取 `accepted()` 拿到实际被世界接受的 FE 数（可能小于 `requested`）。
+- 接受数从 `stored` 中扣减，事务提交 `DataStorage`，失败时本地缓存 `stored` 不变。
+
+### 5. 屏幕文本与 JADE
+
+```java
+if (stored.signum() == 0) {
+    context.screenText().append(
+            ControllerScreenTextScope.OPERATION,
+            FE_STATUS,
+            Component.literal("No FE stored."));
+    return;
+}
+context.screenText().append(
+        ControllerScreenTextScope.OPERATION,
+        FE_STATUS,
+        Component.literal("FE stored: " + ReadableNumber.formatCompact(stored)));
+```
+
+`screenText()` 拿到 [`ControllerScreenText`](../API/JavaAPI#controllerscreentext) 句柄。`ControllerScreenTextScope.OPERATION` 是"随配方操作状态自动失效"的作用域——但这台机器没配方，所以 OPERATION 行的内容由 tick 行为直接控制，每次 `append` 都会覆盖上次同 `lineId` 的内容。
+
+[`ReadableNumber.formatCompact(stored)`](../API/JavaAPI#readablenumber) 把 `BigInteger` 渲染成 SI 前缀的紧凑字符串（`1.23M`、`456K` 等）。它接受 4 种数值类型，自动按数量级选择前缀，本地无关（`Locale.ROOT`），适合屏幕槽位。
+
+## 特殊机制
+
+### 事务感知的 DataStorage
+
+`DataStorage` 不是简单的 `Map`——它继承自 NeoForge 的 `SnapshotJournal<Map<String, DataValue>>`，支持事务：
+
+```java
+public boolean set(String key, DataValue value, TransactionContext transaction) { ... }
+```
+
+调用方只需把事务句柄从 `MachineIoPlan.commit(transaction -> { ... })` 透传进来；如果 `MachineIoPlan` 因为能量不足等原因 rollback，DataStorage 写入会自动撤销。
+
+### BigInteger 计数
+
+`BigInteger` 比 `long` 慢，但能容纳任意大小的累加值。如果你的存储机器能量单位是 FE，每 tick 几百 FE，用 `long` 即可；如果你想模拟一个"无限水库"——比如宇宙能量、模组自定义能源——`BigInteger` 永远不会溢出。
+
+### 探测-提交分离
+
+二分查找只调用 `simulate()`，永远不 commit；真正写入走第二个独立的 `MachineIoPlan`。这是 [`MachineIoPlan`](../API/JavaAPI#machineioplan) 的一次性原则逼出的写法。
+
+## 与其他教程的对比
+
+- vs [BLAST_FURNACE](../JavaAPI/BLAST_FURNACE)：BLAST_FURNACE 是配方驱动的——它有 `recipeBehavior`，依赖 `MachineRecipeDefinition`。DATA_STORAGE_MACHINE 完全不依赖配方，只用 [`TickBehavior`](../API/JavaAPI#tickbehavior) + [`TickBehaviorContext`](../API/JavaAPI#tickbehaviorcontext)。两台机器共享 [`MachineBuilder`](../API/JavaAPI#machinebuilder) 与 [`InterfacePredicates`](../API/JavaAPI#interfacepredicates)，但行为路径完全分离。
+- vs 网络机器系列（[NETWORK_PRODUCER_MACHINE](../JavaAPI/NETWORK_PRODUCER_MACHINE) / [NETWORK_CENTER_MACHINE](../JavaAPI/NETWORK_CENTER_MACHINE)）：DATA_STORAGE 不参与网络通信，它的所有数据都存在自己机器的 `DataStorage` 里。
+- vs KubeJS 端：KubeJS 版教程名为 [A_Data_Storage_Machine](../KubeJS/A_Data_Storage_Machine)，由另一位维护者编写，演示同一思路在脚本端的写法。
+
+## 延伸阅读
+
+- [BLAST_FURNACE](../JavaAPI/BLAST_FURNACE) — MMCR 入门教程，对照理解"配方驱动 vs tick 驱动"。
+- [JavaAPI.md](../API/JavaAPI) — Java 公共 API 集中参考。
+- [JavaAPI.md#tickbehavior](../API/JavaAPI#tickbehavior) / [#machineioplan](../API/JavaAPI#machineioplan) — 本教程反复使用的两个核心 API。
+
+## 未在 JavaAPI.md 中覆盖的 API
+
+本教程用到了 [JavaAPI.md](../API/JavaAPI) 暂未收录的 API，建议下一轮扩充时补齐：
+
+- **`cn.howxu.mmcr.api.data.DataStorage`** — 有序、类型化、支持 NeoForge 事务的机器数据存储。继承 `SnapshotJournal<Map<String, DataValue>>`。
+- **`cn.howxu.mmcr.api.data.DataValue`** — 类型化值包装，支持 `Boolean`、`String`、`Byte`、`Short`、`Int`、`Long`、`Float`、`Double`、`BigInteger`、`BigDecimal`、`List`、`Map`。提供 `of(...)` 工厂与 `asXxx()` 安全转换。
+- **`cn.howxu.mmcr.api.data.DataValueType`** — `DataValue` 的内部枚举（若公开的话）。
+
+[NETWORK_PRODUCER_MACHINE](../JavaAPI/NETWORK_PRODUCER_MACHINE) 与 [NETWORK_CENTER_MACHINE](../JavaAPI/NETWORK_CENTER_MACHINE) 还涉及网络层 API，列表见那两篇教程的对应章节。

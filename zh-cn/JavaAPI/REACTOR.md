@@ -1,0 +1,300 @@
+---
+title: REACTOR
+order: 10
+---
+
+# REACTOR — 反应堆
+
+本文拆解 [REACTOR.java](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/main/src/main/java/org/nibelungorum/builtin/REACTOR.java)，看一台使用**状态敏感结构**的机器如何用 28 个字符拼出一座带楼梯倒角的圆顶反应堆，以及一条配方里**物品 / 流体 / 能量三种 IO 同时出现**是什么写法。
+
+## 概览
+
+反应堆（REACTOR）是一台"输入苹果和水，输出钻石、水和电"的示例机器——配方内容纯属占位，重点在两件事：
+
+- 演示 [`MachineStructureBuilder.stateSensitive()`](../API/JavaAPI#machinestructurebuilder) 的**状态敏感匹配**，配合 [`BlockPredicate.state(...)`](../API/JavaAPI#blockpredicate) 精确校验 19 种楼梯朝向；
+- 演示**同时含三类 IO 的配方**：物品输入输出、流体输入输出、能量输入输出，六种 IO 在两条配方里全部出现。
+
+它同时演示了一个实用技巧：结构里同一个字符 `X` 用 [`any(...)`](../API/JavaAPI#blockpredicate) 把"五种端口 + 一种装饰方块"打包，让玩家在整个内壁上自由摆端口。
+
+## 本教程涉及的文件
+
+| 文件 | 作用 |
+| --- | --- |
+| [`builtin/REACTOR.java`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/main/src/main/java/org/nibelungorum/builtin/REACTOR.java) | 机器定义 + 结构 + 配方，全部内容 |
+| [`provider/BuiltInProvider.java`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/main/src/main/java/org/nibelungorum/provider/BuiltInProvider.java) | 通过 `ServiceLoader` 调用 `registerDefinitions(...)` |
+
+没有渲染器，没有 KubeJS 侧文件。
+
+## 本教程涉及的 API
+
+| 用到的 API | API 参考 |
+| --- | --- |
+| `MachineDefinitionProvider` | [链接](../API/JavaAPI#machinedefinitionprovider) |
+| `MMCRMachineDefinationsEvent` | [链接](../API/JavaAPI#mmcrmachinedefinationsevent) |
+| `MMCRMachineStructuresEvent` | [链接](../API/JavaAPI#mmcrmachinestructuresevent) |
+| `MMCRMachineRecipesEvent` | [链接](../API/JavaAPI#mmcrmachinerecipesevent) |
+| `MachineBuilder` | [链接](../API/JavaAPI#machinebuilder) |
+| `AppearanceSpec` | [链接](../API/JavaAPI#appearancespec) |
+| `MachineStructureBuilder` | [链接](../API/JavaAPI#machinestructurebuilder) |
+| `StructureStage` | [链接](../API/JavaAPI#structurestage) |
+| `PatternBuilder` | [链接](../API/JavaAPI#patternbuilder) |
+| `BlockPredicate` | [链接](../API/JavaAPI#blockpredicate) |
+| `InterfacePredicates` | [链接](../API/JavaAPI#interfacepredicates) |
+| `MachineRecipeBuilder` | [链接](../API/JavaAPI#machinerecipebuilder) |
+| `FluidRequirement` | [链接](../API/JavaAPI#fluidrequirement) |
+| `EnergyRequirement` | [链接](../API/JavaAPI#energyrequirement) |
+
+## 机器定义详解
+
+```java
+private static final Identifier REACTOR = id("reactor");
+
+public static void registerDefinitions(MMCRMachineDefinationsEvent event) {
+    if (!event.definitions().containsKey(REACTOR)) {
+        var machine = MachineBuilder
+                .machine(REACTOR)
+                .displayNameKey("machine.mmcr.reactor")
+                .appearance(a -> a.machineBasicBlock(Identifier.parse("minecraft:blue_ice")))
+                .build();
+        event.registerMachine(machine);
+    }
+}
+```
+
+三行链式调用，第三行是唯一的实质配置。
+
+### `appearance(...)`：外观规格
+
+`appearance(UnaryOperator<AppearanceSpec.Builder>)` 声明机器的外观资源。这里只设了一项：
+
+**`machineBasicBlock(Identifier.parse("minecraft:blue_ice"))`**
+
+机器"基础方块"的 ID。这个方块是 MMCR 提供给玩家的通用外壳方块在**本机器上的外观代理**：结构里那个 `block(Blocks.BLUE_ICE)` 与这里的 `machineBasicBlock` 呼应，让基础方块在这台机器上长得像浅蓝冰。
+
+`Identifier.parse("minecraft:blue_ice")` 与 `Identifier.fromNamespaceAndPath("minecraft", "blue_ice")` 等价，非法字符串会抛 `IllegalArgumentException`。
+
+`AppearanceSpec` 另有两项没用到：`controllerBaseTexture`（控制器底面纹理）与 `formedPortBaseTexture`（成型后端口底面纹理）。三项都是可选的，未设置时走 MMCR 内置回退值。完整说明见 [`AppearanceSpec`](../API/JavaAPI#appearancespec)。
+
+注意这台机器**没有** `controller(...)` 调用——控制器方块 ID 与纹理全部走默认。对照 [MONSTER_FARM](MONSTER_FARM)，那台机器显式配置了控制器朝向。
+
+## 结构详解
+
+结构是这份源码里最长的部分：9 个 z 层 × 8 行 × 9 列，28 个字符绑定（另有控制器字符 `C` 走自动绑定）。
+
+```java
+@SubscribeEvent
+public static void registerStructures(MMCRMachineStructuresEvent event) {
+    if (!event.structures().containsKey(REACTOR)) {
+        var structure = MachineStructureBuilder
+                .structure()
+                .stateSensitive()
+                .fullStructure(s -> s
+                        .pattern(p -> p
+                                .layer("  ABBBD  ", "         ", ...)
+                                // ... 共 9 层
+                                .controller('C')
+                        )
+                )
+                .build(REACTOR);
+        event.registerStructure(structure);
+    }
+}
+```
+
+### `stateSensitive()`：状态敏感匹配
+
+**这是什么**：默认情况下（`stateInsensitive`）MMCR 只比对方块类型，忽略方块状态属性。调用 `stateSensitive()` 后，用 `state(...)` 绑定的字符会连同属性一起校验。
+
+**为什么用**：这台机器的外壳大量使用深板岩砖楼梯和磨制深板岩楼梯做倒角。楼梯有 `facing`、`half`、`shape`、`waterlogged` 四个属性——不校验状态，玩家把楼梯朝反了结构照样成型，圆顶会变成一堆乱七八糟的斜面。状态敏感把"外形正确"变成成型的硬条件。
+
+代价是玩家搭建难度陡增：19 个楼梯字符各有唯一的合法状态。这是"视觉精确"与"搭建友好"之间的取舍，做自己的机器时值得先想清楚要哪一边。
+
+### 形状：9×8×9 的圆顶
+
+九个 `layer(...)` 铺出一个近似球形的壳体。把每层第一行（y=0）并排看，能看出圆形轮廓：
+
+```text
+z=0  "  ABBBD  "     ← 顶部小平面
+z=1  " AEXXXFD "     ← 逐层扩宽
+z=2  "AEXXXXXFD"
+z=3  "LXXXXXXXM"     ← 最宽处
+z=4  "LXXXXXXXM"
+z=5  "LXXXXXXXM"
+z=6  "UVXXXXXWY"     ← 逐层收窄
+z=7  " UVXXXWY "
+z=8  "  UcccY  "     ← 底部小平面
+```
+
+`A` / `D` / `E` / `F` / `L` / `M` / `U` / `V` / `W` / `Y` 这些字符都是特定朝向的深板岩砖楼梯，负责把方形轮廓削成八边形；`X` 是内壁；空格是不校验的区域。
+
+中间几层还嵌了一个"内胆"：
+
+```text
+z=3 的 y=1..4 行:
+" XHNONHX "     ← H 黑色染色玻璃，N 绿宝石块，O 青金石块
+"  HNONH  "
+"  HNONH  "
+"  PXXXQ  "
+```
+
+`N`（绿宝石块）与 `O`（青金石块）构成反应堆的"堆芯"，`H`（黑色染色玻璃）是观察窗。z=4 层的堆芯中心是 `X`（内壁 / 端口），z=3 与 z=5 是 `N`——上下夹着中层，视觉上像一个分层的燃料棒堆。
+
+顶部还有一根避雷针：
+
+```text
+z=4  "   RSR   ", "    S    ", "    T    "   ← R 深板岩砖台阶，S 深板岩瓦，T 避雷针
+```
+
+层高（8 行）与行宽（9 列）在所有 `layer(...)` 之间严格一致——不一致 `PatternBuilder` 直接抛 `IllegalArgumentException`。详见 [`PatternBuilder`](../API/JavaAPI#patternbuilder)。
+
+### 端口打包：`any(...)` 的典型用法
+
+```java
+.where('X', any(
+        InterfacePredicates.anyOfItemInput(),
+        InterfacePredicates.anyOfItemOutput(),
+        InterfacePredicates.anyOfFluidOutput(),
+        InterfacePredicates.anyOfFluidInput(),
+        InterfacePredicates.anyOfEnergyOutput(),
+        block(Blocks.BLUE_ICE)
+))
+```
+
+`X` 在结构里出现了几十次——整个内壁与堆芯中心都是它。这一个谓词让每个 `X` 位置**六选一**：五种端口族任意一个，或者浅蓝冰（也就是 `machineBasicBlock` 声明的基础方块外观）。
+
+**这是什么**：`any(...)` 是并集谓词，匹配时依次尝试每个子谓词直到命中。
+
+**为什么用**：玩家想在哪个位置摆哪种端口完全自由，只要总数够用。不想摆端口的位置就填浅蓝冰。这是大型机器最常见的内壁写法——比给每种端口位置单独分配字符省事得多。
+
+注意这里少了 `anyOfEnergyInput()`：内壁允许能量**输出**端口但不允许能量输入端口。可是第二条配方声明了 `inputEnergy(10)`……这是源码里的一处不一致，见文末"需要注意的地方"。
+
+`anyOfItemInput()` 与 `anyItemInput()` 完全等价，命名差异只为兼容旧 API。完整列表见 [`InterfacePredicates`](../API/JavaAPI#interfacepredicates)。
+
+### 三种绑定方式对照
+
+这份结构把 `BlockPredicate` 的三种主要构造方法都用上了：
+
+```java
+.where('G', block(Blocks.POLISHED_DEEPSLATE))                    // 方块实例，任意状态
+.where('a', block(Blocks.POLISHED_DEEPSLATE_STAIRS))             // 楼梯，但不校验朝向
+.where('J', state("minecraft:polished_deepslate_stairs[facing=south,half=bottom,shape=straight,waterlogged=false]"))
+```
+
+- `block(Block)` 匹配方块的**任意状态**。`G`（磨制深板岩）没有朝向属性，用它最合适。
+- `a` 值得注意：它是楼梯，但用了 `block(...)` 而不是 `state(...)`——即使结构开了 `stateSensitive()`，`block(...)` 绑定的字符仍然接受任意朝向。状态敏感只影响 `state(...)` / `blockState(...)` 这类带状态的谓词，不会把 `block(...)` 变严。
+- `state(String)` 是"方块 ID[属性=值,...]"格式的精确匹配。属性名与值都区分大小写，写错抛 `IllegalArgumentException`。这里的 19 个楼梯字符全用这种方式（12 个深板岩砖楼梯 + 7 个磨制深板岩楼梯）。
+
+`state(...)` 字符串必须写全所有属性吗？不必——只写关心的属性即可，未列出的属性不参与比对。这份源码把四个属性全写出来是为了明确无歧义。
+
+### `.controller('C')`
+
+控制器在 z=7 层的 `"   XCX   "` 行——底部收窄处的中央。源码没有 `where('C', ...)`，构建器会自动绑定到 `BlockPredicate.automaticController()`，即 `mmcr:reactor_controller`。
+
+控制器字符在整个结构中必须出现且仅出现一次，`build()` 阶段校验。
+
+`.build(REACTOR)` 把结构绑到机器 ID，`event.registerStructure(...)` 提交。
+
+## 配方详解
+
+两条配方，同一个 `var recipe` 变量复用：
+
+```java
+@SubscribeEvent
+public static void register(MMCRMachineRecipesEvent event) {
+    var recipe = MachineRecipeBuilder
+            .recipe(REACTOR.withSuffix("_recipe_1"), REACTOR)
+            .inputItem(Items.APPLE, 3)
+            .inputFluid(Fluids.WATER, 1)
+            .outputItem(Items.DIAMOND, 10)
+            .outputFluid(Fluids.WATER, 250)
+            .outputEnergy(200)
+            .duration(300)
+            .build();
+    event.registerRecipe(recipe);
+
+    recipe = MachineRecipeBuilder
+            .recipe(REACTOR.withSuffix("_recipe_2"), REACTOR)
+            .inputItem(Items.GOLDEN_APPLE, 2)
+            .inputFluid(Fluids.WATER, 800)
+            .outputItem(Items.GOLD_INGOT, 2)
+            .outputFluid(Fluids.WATER, 450)
+            .inputEnergy(10)
+            .outputEnergy(200)
+            .duration(200)
+            .build();
+    event.registerRecipe(recipe);
+}
+```
+
+配方 ID 用 `REACTOR.withSuffix("_recipe_1")`，展开为 `mmcr:reactor_recipe_1`。以机器 ID 作前缀是好习惯，方便阅读与排查重复。
+
+### 配方 1：mmcr:reactor_recipe_1
+
+| 项 | 值 | 说明 |
+| --- | --- | --- |
+| `inputItem(Items.APPLE, 3)` | 3 个苹果 | 物品实例重载，内部包成 `Ingredient` |
+| `inputFluid(Fluids.WATER, 1)` | 1 mB 水 | 数量单位是毫桶，1 桶 = 1000 |
+| `outputItem(Items.DIAMOND, 10)` | 10 个钻石 | |
+| `outputFluid(Fluids.WATER, 250)` | 250 mB 水 | 同时输入又输出水，形成部分循环 |
+| `outputEnergy(200)` | 200 FE/t | 反应堆发电 |
+| `duration(300)` | 15 秒 | `< 1` 抛 `IllegalArgumentException` |
+
+### 配方 2：mmcr:reactor_recipe_2
+
+| 项 | 值 | 说明 |
+| --- | --- | --- |
+| `inputItem(Items.GOLDEN_APPLE, 2)` | 2 个金苹果 | |
+| `inputFluid(Fluids.WATER, 800)` | 800 mB 水 | |
+| `outputItem(Items.GOLD_INGOT, 2)` | 2 个金锭 | |
+| `outputFluid(Fluids.WATER, 450)` | 450 mB 水 | |
+| `inputEnergy(10)` | 10 FE/t | **同时** 输入与输出能量 |
+| `outputEnergy(200)` | 200 FE/t | 净产出 190 FE/t |
+| `duration(200)` | 10 秒 | |
+
+### 特殊机制：能量与流体的双向 IO
+
+**这是什么**：MMCR 的配方 IO 是按方向分开记录的。`inputEnergy` 与 `outputEnergy` 落到 [`EnergyRequirement`](../API/JavaAPI#energyrequirement) 的两条独立条目上，`inputFluid` 与 `outputFluid` 落到 [`FluidRequirement`](../API/JavaAPI#fluidrequirement) 的两条上。同一种资源同时出现在输入与输出侧是完全合法的。
+
+**为什么用**：配方 2 的"输入 10 FE/t、输出 200 FE/t"表达的是"反应堆需要维持磁场（耗电），同时对外发电"。两条配方的"输入水、输出更少的水"表达的是"冷却回路有损耗"。真实工业流程经常长这样，一进一出的建模比"净值"更直观——玩家能从界面上直接看到耗电与发电两个数字。
+
+单位与范围要留意：`inputEnergy(long fePerTick)` 与 `outputEnergy(long fePerTick)` 的值必须落在 `[1, Integer.MAX_VALUE]`，超出抛 `IllegalArgumentException`。流体数量是 `int` 毫桶，输入侧 `< 1` 同样抛异常。
+
+`event.registerRecipe(...)` 可以调用多次。`MMCRMachineRecipesEvent` 只检查"配方 ID 是否重复"，不检查"这台机器是否已有配方"，所以这里不需要幂等判断。重复注册同一 ID 抛 `IllegalStateException`。
+
+## 没用到的机制
+
+任务描述里提到的并行与修饰符，这台机器都没用：
+
+- **并行**：`MachineBuilder` 上没有 `parallelizable(true)` / `maxParallelism(...)` / `allowMultithreading()`，配方上也没有 `parallelized(true)`。结构里也没放 `InterfacePredicates.parallelControllers()`。想加并行，看 [BLAST_FURNACE](BLAST_FURNACE)——那台机器把并行控制器、多线程工厂、并行上限三件套全开了。
+- **修饰符**：没有 `allowModifiers()`，结构上也没有 `modifier(char, ModifierUse)`。修饰符是"结构中替换某个方块以改变配方参数"的机制，签名见 [`ModifierUse`](../API/JavaAPI#modifieruse) 与 [`ModifierDefinition`](../API/JavaAPI#modifierdefinition)。
+- **端口等级**：没有 `portTiers(...)`，所以任意等级的端口都能用。BLAST_FURNACE 声明了 NORMAL 起步，见 [`PortTiers`](../API/JavaAPI#porttiers)。
+
+## 与 BLAST_FURNACE 的对比
+
+| 维度 | BLAST_FURNACE | REACTOR |
+| --- | --- | --- |
+| 结构大小 | 3×3×3 | 9×8×9 |
+| 字符绑定数 | 4 | 28 |
+| 状态敏感 | 否（默认） | `stateSensitive()` |
+| `state(...)` 精确匹配 | 无 | 19 处楼梯 |
+| 外观 | 未配置 | `machineBasicBlock` = 浅蓝冰 |
+| 端口打包 | `I` 三选一 | `X` 六选一（含基础方块） |
+| 并行 / 多线程 | 都开 | 都不开 |
+| 配方数 | 1 | 2 |
+| 配方 IO 类型 | 物品输入 + 物品输出 + 能量输入 | 物品 / 流体 / 能量六向全占 |
+
+BLAST_FURNACE 关心"跑得快"，REACTOR 关心"长得对、IO 全"。两者放一起，`MachineStructureBuilder` 与 `MachineRecipeBuilder` 的常用面基本覆盖完了。
+
+## 需要注意的地方
+
+**内壁不允许能量输入端口，但配方 2 需要输入能量。** 结构里 `X` 的 `any(...)` 包含 `anyOfEnergyOutput()` 而没有 `anyOfEnergyInput()`，配方 2 却声明了 `inputEnergy(10)`。玩家按这份结构搭出的反应堆无法放置能量输入端口，配方 2 大概跑不起来。作为示例代码这不影响演示 API 用法，但拿它做模板时记得把 `anyOfEnergyInput()` 补上。
+
+## 延伸阅读
+
+- [BLAST_FURNACE](BLAST_FURNACE) — 并行、多线程与端口等级的对照。
+- [MONSTER_FARM](MONSTER_FARM) — 状态不敏感结构与 `tag(...)` 标签匹配的对照。
+- [PURPUR_FURNACE](PURPUR_FURNACE) — 另一台大型状态敏感结构，加上智能接口动态调参。
+- [DISTILLATION_TOWER](DISTILLATION_TOWER) — 多阶段结构与概率输出。
+- [`BlockPredicate`](../API/JavaAPI#blockpredicate) — `state(...)` 字符串格式与 `block(...)` 的语义差异。
+- [`MachineRecipeBuilder`](../API/JavaAPI#machinerecipebuilder) — 全部 IO 方法与行为控制方法。
+- [`FluidRequirement`](../API/JavaAPI#fluidrequirement) / [`EnergyRequirement`](../API/JavaAPI#energyrequirement) — 配方 IO 在定义里的最终形态。

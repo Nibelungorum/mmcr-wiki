@@ -1,0 +1,430 @@
+---
+title: NETWORK_CENTER_MACHINE
+order: 13
+---
+
+# NETWORK_CENTER_MACHINE — 网络中心
+
+本文是 MMCR 网络通信系列的第三个示例。我们逐行拆解 [NETWORK_CENTER_MACHINE.java](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/main/src/main/java/org/nibelungorum/builtin/NETWORK_CENTER_MACHINE.java) 的源代码，看看一台作为 "center"（中心/HUB）的多方块机器是如何接收来自 [NETWORK_PRODUCER_MACHINE](../JavaAPI/NETWORK_PRODUCER_MACHINE) 的算力上报、维护一份"按节点哈希分桶"的算力表、并把总功率渲染到屏幕与 JADE 上的。
+
+## 机器简介
+
+NETWORK_CENTER_MACHINE 是网络通信中的**中心节点**，对应 `producer ↔ center ↔ consumer` 三段式的中间一环。它做三件事：
+
+1. 注册 `requestProcess(REPORT_POWER, ...)` 回调——当任何被许可的 PRODUCER 上报算力时，把上报值写到自己的 `DataStorage`，键名是 `power_<peerHash>`（按节点哈希分桶）。
+2. 每 tick 跑 `serverTick(...)`，把 `DataStorage` 里所有 `power_*` 键求和，得到总功率；同时清理"连接断开后遗留的旧键"。
+3. 把总功率、连接数、能量状态写到控制器屏幕与 JADE 上。
+
+中心**不主动**发出网络请求——所有通信都从 PRODUCER 推过来。它只持有"接收方"与"统计方"两个角色。
+
+## 本教程涉及的文件
+
+源代码位置：
+
+- [`NETWORK_CENTER_MACHINE.java`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/main/src/main/java/org/nibelungorum/builtin/NETWORK_CENTER_MACHINE.java)
+
+注意：中心与生产者的 ID 常量是**互相引用**的——`NETWORK_CENTER_MACHINE.NETWORK_CENTER_MACHINE` 来自生产者文件：
+
+```java
+// NETWORK_PRODUCER_MACHINE.java
+public static final Identifier NETWORK_CENTER_MACHINE = id("network_center_machine");
+```
+
+```java
+// NETWORK_CENTER_MACHINE.java
+import static org.nibelungorum.builtin.NETWORK_PRODUCER_MACHINE.NETWORK_CENTER_MACHINE;
+import static org.nibelungorum.builtin.NETWORK_PRODUCER_MACHINE.REPORT_POWER;
+```
+
+教程对应：
+
+- KubeJS 版：[A_Network_Machine](../KubeJS/A_Network_Machine)（另一位维护者编写）。
+
+## 本教程涉及的 API 跳转表
+
+| 用到的 API | API 参考 |
+| --- | --- |
+| `MachineDefinitionProvider` / `MMCRMachineDefinationsEvent` | [链接](../API/JavaAPI#machinedefinitionprovider) |
+| `MMCRMachineStructuresEvent` | [链接](../API/JavaAPI#mmcrmachinestructuresevent) |
+| `MachineBuilder` | [链接](../API/JavaAPI#machinebuilder) |
+| `MachineStructureBuilder` / `PatternBuilder` | [链接](../API/JavaAPI#machinestructurebuilder) |
+| `InterfacePredicates` | [链接](../API/JavaAPI#interfacepredicates) |
+| `AppearanceSpec` | [链接](../API/JavaAPI#appearancespec) |
+| `TickBehavior` / `TickBehaviorContext` | [链接](../API/JavaAPI#tickbehavior) |
+| `MachineBehaviorContext` | [链接](../API/JavaAPI#machinebehaviorcontext) |
+| `MachineIoPlan` / `MachineIoView` | [链接](../API/JavaAPI#machineioplan) |
+| `EnergyRequirement` / `RecipeIo` | [链接](../API/JavaAPI#energyrequirement) |
+| `ControllerScreenTextScope` / `ControllerScreenText` | [链接](../API/JavaAPI#controllerscreentextscope) |
+| `JadeText` | [链接](../API/JavaAPI#jadetext) |
+
+下面这些 API 涉及网络通信，是本教程的核心：
+
+| 用到的 API | 备注 |
+| --- | --- |
+| `cn.howxu.mmcr.api.network.NetworkApi` | 见本文末尾"未在 JavaAPI.md 中覆盖的 API"。 |
+| `cn.howxu.mmcr.api.network.NetworkInterfaceReference` / `MachineReference` | 同上。 |
+| `cn.howxu.mmcr.api.data.DataStorage` / `DataValue` | 同上。 |
+
+## 网络通信模型图解
+
+MMCR 的网络通信走"**请求-响应**"模型。三种角色：
+
+```
+        (主动发送)              (接收并处理)
+PRODUCER  ────sendRequest──►  CENTER
+   ▲                            │
+   │                            │
+   └────────(每 tick 反向读取)───┘
+        connections() 列表
+```
+
+CENTER 这一端的视角：
+
+```
+  ┌──────────────────────────────────────────────────┐
+  │                  PRODUCER                        │
+  │  NetworkApi.sendRequest(                         │
+  │      source, target,                             │
+  │      "mmcr:report_power",                        │
+  │      RequestBody.of(Map.of(                      │
+  │          "power", DataValue.of(20.0)             │
+  │      )));                                        │
+  └──────────────────────────────────────────────────┘
+                       │
+                       ▼ RequestBody("power" → 20.0)
+  ┌──────────────────────────────────────────────────┐
+  │                   CENTER                         │
+  │                                                  │
+  │  MachineBuilder                                  │
+  │    .requestProcess(REPORT_POWER, (body, req,     │
+  │        senderStorage, receiverStorage) -> {      │
+  │      long hash = req.peer().hash();              │
+  │      double reported = body.get("power")        │
+  │          .flatMap(DataValue::asDouble)           │
+  │          .orElse(0.0);                           │
+  │      receiverStorage.set(                        │
+  │          "power_" + hash,                        │
+  │          DataValue.of(reported));                │
+  │    });                                           │
+  │                                                  │
+  │  serverTick:                                      │
+  │    1. 吸收 200 FE                                 │
+  │    2. 统计 liveCount = connections.size()        │
+  │    3. 收集 connectedHashes                       │
+  │    4. 删除 DataStorage 中已断连的 power_* 键      │
+  │    5. 求和剩余的 power_*                          │
+  │    6. 写屏幕 + JADE                               │
+  └──────────────────────────────────────────────────┘
+```
+
+几个关键点：
+
+- **`req.peer()` 返回 `MachineReference`**——record `(Identifier type, long hash)`。`type` 是机器 ID（这里是 `NETWORK_PRODUCER_MACHINE`），`hash` 是该机器实例的稳定哈希（成型后生成，跨重启保持）。
+- 用 `power_<hash>` 做键名保证**多生产者不互相覆盖**。每个 PRODUCER 实例的 `hash` 不同。
+- 中心不需要 `sendRequest`——所有数据都是 PRODUCER 推过来的。
+
+## 机器定义详解
+
+```java
+public static void registerDefinitions(MMCRMachineDefinationsEvent event) {
+    if (!event.definitions().containsKey(NETWORK_CENTER_MACHINE)) {
+        var machine = MachineBuilder
+                .machine(NETWORK_CENTER_MACHINE)
+                .displayNameKey("machine.mmcr.network_center_machine")
+                .appearance(a -> a.machineBasicBlock(Identifier.parse("minecraft:black_wool")))
+                .networkInterface(1, 16)
+                .allowNetworkMachine(NETWORK_PRODUCER_MACHINE.NETWORK_PRODUCER_MACHINE)
+                .requestProcess(REPORT_POWER, (body, request, senderStorage, receiverStorage) -> {
+                    if (receiverStorage == null) return;
+                    double reported = body.get("power").flatMap(DataValue::asDouble).orElse(0.0);
+                    long hash = request.peer().hash();
+                    receiverStorage.set("power_" + hash, DataValue.of(reported));
+                })
+                .tickBehavior(behavior -> behavior.serverTick(context -> {
+                    // ...见下文
+                }))
+                .build();
+        event.registerMachine(machine);
+    }
+}
+```
+
+与生产者端对比：
+
+| 字段 | 生产者 | 中心 |
+| --- | --- | --- |
+| `networkInterface(maxCount, maxConnections)` | `(1, 1)` | `(1, 16)` |
+| `allowNetworkMachine(...)` | 中心 | 生产者 |
+| `requestProcess(...)` | 无 | `REPORT_POWER` |
+
+中心端的 `networkInterface(1, 16)` 表示一台机器最多挂 1 个接口、每个接口最多连 16 个邻居——可以聚合 16 个 PRODUCER。
+
+`allowNetworkMachine(NETWORK_PRODUCER_MACHINE.NETWORK_PRODUCER_MACHINE)`——这里 `NETWORK_PRODUCER_MACHINE.NETWORK_PRODUCER_MACHINE` 指的是**机器 ID 常量**（生产者文件中 `public static final Identifier NETWORK_PRODUCER_MACHINE = ...`）。MMCR 用静态导入引入：
+
+```java
+import static org.nibelungorum.builtin.NETWORK_PRODUCER_MACHINE.NETWORK_CENTER_MACHINE;
+```
+
+让两台机器在编译期就互相绑定 ID。
+
+### `.requestProcess(REPORT_POWER, (body, request, senderStorage, receiverStorage) -> {...})`
+
+[`MachineBuilder.requestProcess`](../API/JavaAPI#requestprocessidentifier-requestid-requestprocess) 注册一个**请求处理器**：
+
+- 第一个参数 `REPORT_POWER` 是 `Identifier` 类型的请求 ID，对应 [NETWORK_PRODUCER_MACHINE](../JavaAPI/NETWORK_PRODUCER_MACHINE) 中的 `REPORT_POWER` 常量。
+- 第二个参数是 `RequestProcess` 函数式接口（`@FunctionalInterface`），签名：
+
+```java
+void process(RequestBody body, RequestInfo request,
+             @Nullable DataStorage senderStorage,
+             @Nullable DataStorage receiverStorage);
+```
+
+参数语义：
+
+| 参数 | 含义 |
+| --- | --- |
+| `body` | PRODUCER 发来的 `RequestBody`。 |
+| `request` | `RequestInfo(Identifier requestId, MachineReference peer)`，含请求 ID 与**发送方机器引用**。 |
+| `senderStorage` | 发送方（PRODUCER）的 `DataStorage`，可能为 `null`——如果 PRODUCER 没放 `dataStorage()` 方块，就是 null。 |
+| `receiverStorage` | 接收方（本机）的 `DataStorage`，可能为 `null`——如果本机也没放 `dataStorage()` 方块，就是 null。 |
+
+本教程里：
+
+```java
+if (receiverStorage == null) return;
+double reported = body.get("power").flatMap(DataValue::asDouble).orElse(0.0);
+long hash = request.peer().hash();
+receiverStorage.set("power_" + hash, DataValue.of(reported));
+```
+
+- `receiverStorage == null` 直接 return——MMCR 调用处理器时如果本机没数据存储，我们什么都不做（中心还是会继续运转，但不会有统计）。
+- `body.get("power")` 返回 `Optional<DataValue>`，`.flatMap(DataValue::asDouble)` 安全转换成 `Optional<Double>`，`.orElse(0.0)` 退到 0。
+- `request.peer()` 是 PRODUCER 的 `MachineReference`；`hash()` 是该实例的稳定哈希。
+- `receiverStorage.set(...)` 把"该生产者上报的算力"写到本机的 `DataStorage`，键名 `power_<hash>`——分桶存储。
+
+注意 `receiverStorage.set(...)` 在处理器中是**事务上下文外**调用（`RequestProcess` 不接收 `TransactionContext`），所以这里走的是普通 `set`，不会参与事务回滚。这是 `RequestProcess` 的一个隐含约束：**写入即生效**，不接受原子回滚。
+
+### `.tickBehavior(...)`
+
+中心端的 tick 行为有 4 段：能量吸收 → 收集连接信息 → 清理过期键 → 求和与渲染。
+
+## 结构详解
+
+```java
+@SubscribeEvent
+public static void registerStructures(MMCRMachineStructuresEvent event) {
+    if (!event.structures().containsKey(NETWORK_CENTER_MACHINE)) {
+        var structure = MachineStructureBuilder
+                .structure()
+                .fullStructure(s -> s
+                        .pattern(p -> p
+                                .layer("XXXX", "XAAX", "XXXX")
+                                .layer("XXXX", "A  A", "XXXX")
+                                .layer("XXXX", "A  A", "XXXX")
+                                .layer("XXXX", "XCAX", "XXXX")
+                                .where('X', block(Blocks.BLACK_WOOL))
+                                .where('A', any(
+                                        InterfacePredicates.anyOfEnergyInput(),
+                                        InterfacePredicates.networkInterface(),
+                                        InterfacePredicates.dataStorage(),
+                                        block(Blocks.RED_TERRACOTTA)
+                                ))
+                                .controller('C')
+                        )
+                )
+                .build(NETWORK_CENTER_MACHINE);
+        event.registerStructure(structure);
+    }
+}
+```
+
+结构和 PRODUCER 几乎一样，只是外壳换成**黑羊毛**，且 A 槽位不包含 `anyOfFluidInput()`——中心不需要水。
+
+## 请求处理详解
+
+完整 tick 行为：
+
+```java
+.tickBehavior(behavior -> behavior.serverTick(context -> {
+    DataStorage storage = context.dataStorage();
+    if (storage == null) return;
+
+    var energyPlan = context.ioPlan();
+    energyPlan.addInput(new EnergyRequirement(200));
+    var energySim = energyPlan.simulate();
+    boolean energyOk = energySim.energySatisfied() && energyPlan.commit().successful();
+
+    int liveCount = 0;
+    Set<String> connectedHashes = new HashSet<>();
+    var interfaces = NetworkApi.interfaces(context);
+    var iface = interfaces != null && !interfaces.isEmpty() ? interfaces.get(0) : null;
+    if (iface != null) {
+        for (var target : iface.connections()) {
+            liveCount = liveCount + 1;
+            connectedHashes.add(String.valueOf(target.hash()));
+        }
+    }
+
+    var staleKeys = new java.util.ArrayList<String>();
+    if (iface != null) {
+        for (var entry : storage.values().entrySet()) {
+            String keyString = entry.getKey();
+            if (keyString.startsWith("power_")
+                    && !connectedHashes.contains(keyString.substring("power_".length()))) {
+                staleKeys.add(keyString);
+            }
+        }
+    }
+    for (var key : staleKeys) storage.remove(key);
+
+    double total = 0;
+    for (var entry : storage.values().entrySet()) {
+        if (entry.getKey().startsWith("power_")) {
+            total = total + entry.getValue().asDouble().orElse(0.0);
+        }
+    }
+
+    int count = liveCount;
+
+    context.screenText().append(ControllerScreenTextScope.OPERATION, CENTER_POWER,
+            Component.literal("Total Power: " + total + " tfps"));
+    context.screenText().append(ControllerScreenTextScope.OPERATION, CENTER_COUNT,
+            Component.literal("Connected Devices: " + count));
+    context.screenText().append(ControllerScreenTextScope.OPERATION, CENTER_FE,
+            Component.literal(energyOk ? "Energy: OK" : "Energy: LOW"));
+
+    context.jadeText().append(CENTER_POWER,
+            Component.literal("Total Power: " + total + " tfps"));
+    context.jadeText().append(CENTER_COUNT,
+            Component.literal("Connected Devices: " + count + " producers"));
+}))
+```
+
+### 1. 能量吸收
+
+```java
+var energyPlan = context.ioPlan();
+energyPlan.addInput(new EnergyRequirement(200));
+var energySim = energyPlan.simulate();
+boolean energyOk = energySim.energySatisfied() && energyPlan.commit().successful();
+```
+
+每 tick 吸 200 FE。注意中心要远高于生产者（生产者吸 100），因为它承担聚合职责。
+
+### 2. 收集连接信息
+
+```java
+int liveCount = 0;
+Set<String> connectedHashes = new HashSet<>();
+var interfaces = NetworkApi.interfaces(context);
+var iface = interfaces != null && !interfaces.isEmpty() ? interfaces.get(0) : null;
+if (iface != null) {
+    for (var target : iface.connections()) {
+        liveCount = liveCount + 1;
+        connectedHashes.add(String.valueOf(target.hash()));
+    }
+}
+```
+
+- `liveCount` 是当前在线的 PRODUCER 数；
+- `connectedHashes` 是它们 `hash()` 字符串的集合，用于下一步清理过期键。
+
+`iface.connections()` 返回的是 `MachineReference` 列表——每台连接的 PRODUCER 一条。
+
+### 3. 清理过期键
+
+```java
+var staleKeys = new java.util.ArrayList<String>();
+if (iface != null) {
+    for (var entry : storage.values().entrySet()) {
+        String keyString = entry.getKey();
+        if (keyString.startsWith("power_")
+                && !connectedHashes.contains(keyString.substring("power_".length()))) {
+            staleKeys.add(keyString);
+        }
+    }
+}
+for (var key : staleKeys) storage.remove(key);
+```
+
+这是本教程最关键的一段逻辑。`DataStorage` 里 `power_*` 键由各个 PRODUCER 的上报维持——一旦 PRODUCER 被拆除或断连，对应的 `power_<hash>` 键就成了**孤儿**。如果不清掉，总功率永远包含幽灵值。
+
+清理策略：
+
+1. 遍历 `DataStorage` 所有键；
+2. 找出以 `power_` 开头的；
+3. 切掉 `power_` 前缀得到 `<hash>` 字符串；
+4. 看 `<hash>` 字符串是否在 `connectedHashes` 中；
+5. 不在 → 标记为过期；
+6. 第二遍循环统一 `remove`。
+
+为什么分两遍？Java 的 `Map.entrySet()` 不允许在迭代中调用 `remove`。先收集到 `staleKeys` 再统一删，是标准的"延迟删除"模式。
+
+如果 `iface == null`（本机接口暂时不存在，比如刚刚成型尚未建立连接），跳过清理——避免误删一个还没连上的 PRODUCER 的数据。
+
+### 4. 求和与渲染
+
+```java
+double total = 0;
+for (var entry : storage.values().entrySet()) {
+    if (entry.getKey().startsWith("power_")) {
+        total = total + entry.getValue().asDouble().orElse(0.0);
+    }
+}
+```
+
+`storage.values()` 是 `Map<String, DataValue>`，按键名筛 `power_` 前缀后求和。注意每条都是独立 `DataValue`，类型可能是 DOUBLE、INT 等；统一用 `asDouble()` 安全转换。
+
+最后 `total` 是所有 PRODUCER 上报的算力之和；`count` 是当前连接数；`energyOk` 是本机健康状态。三者写到屏幕与 JADE。
+
+## 特殊机制
+
+### 按哈希分桶
+
+为什么用 `power_<peerHash>` 而不是 `power_0`、`power_1` 这种自增 ID？因为机器实例的 `hash()` 是 MMCR 内部稳定的——成型时生成，跨重启不变，跨维度不变。这样**断电/重启/拆装不会改变 PRODUCER 的 hash**，本机的统计键名也不会变。
+
+如果用自增 ID，每次 PRODUCER 上线就要分配新 ID；旧的 ID 既无法回收（不知道谁拥有），也不能复用（同名会误覆盖）。`hash()` 天然解决了"标识 vs 复用"的两难。
+
+### `RequestProcess` 的事务边界
+
+`RequestProcess.process(...)` 不接收 `TransactionContext`。这意味着：
+
+- 调用 `receiverStorage.set(...)` 是**立即生效**的普通 `set`（不走事务）。
+- 如果你同时还在做 IO（比如 `MachineIoPlan.commit(transaction -> { storage.set(...); })`），那么 IO 失败回滚不会撤销 `RequestProcess` 里直接写的 `DataStorage`。
+
+本教程的 `RequestProcess` 只写 `DataStorage` 不做 IO，规避了这个问题。如果你想让"接收 + IO"原子化，应该让 `RequestProcess` 只写 `DataStorage`，把 IO 留给 `serverTick`。
+
+### 延迟删除 vs 立即删除
+
+`storage.remove(key)` 是 `DataStorage` 的非事务版本，立即生效，**不可回滚**。这是因为 `RequestProcess` 与 `tickBehavior` 不在事务上下文内。如果在 `MachineIoPlan.commit(transaction -> ...)` 内调用，应该用事务版本（如果将来添加了的话）。
+
+### 不写 `requestFailed`
+
+中心端没有 `requestFailed(REPORT_POWER, ...)`。但**生产者**那边可以注册——当 `NetworkApi.sendRequest(...)` 内部因目标不可达抛 `IllegalArgumentException` 时，**不会**走到 `requestFailed`。它直接抛。所以 `requestFailed` 仅在"已经入队但处理失败"时触发（这种场景目前较少）。
+
+## 与其他教程的对比
+
+- vs [NETWORK_PRODUCER_MACHINE](../JavaAPI/NETWORK_PRODUCER_MACHINE)：生产者用 `sendRequest` 主动推，中心用 `requestProcess` 被动接。两者必须**双向白名单**。
+- vs [DATA_STORAGE_MACHINE](../JavaAPI/DATA_STORAGE_MACHINE)：DATA_STORAGE 把 `DataStorage` 当本地计数器；NETWORK_CENTER 把 `DataStorage` 当**网络聚合表**——键名按 peer hash 分桶。
+- vs [BLAST_FURNACE](../JavaAPI/BLAST_FURNACE)：完全不同的范式——配方 vs 直 tick、单机 vs 网络。
+- vs KubeJS 端：[A_Network_Machine](../KubeJS/A_Network_Machine) 用 `networkInterfaces(ctx)` 代替 `NetworkApi.interfaces(context)`，用 `(body, request, senderStorage, receiverStorage) => {...}` 代替 Java lambda，逻辑等价。
+
+## 延伸阅读
+
+- [NETWORK_PRODUCER_MACHINE](../JavaAPI/NETWORK_PRODUCER_MACHINE) — 同一网络的对端，主动发送请求。
+- [DATA_STORAGE_MACHINE](../JavaAPI/DATA_STORAGE_MACHINE) — `DataStorage` 的最简样本。
+- [JavaAPI.md](../API/JavaAPI) — Java 公共 API 集中参考。
+- [BLAST_FURNACE](../JavaAPI/BLAST_FURNACE) — MMCR 入门教程。
+
+## 未在 JavaAPI.md 中覆盖的 API
+
+本教程用到了 [JavaAPI.md](../API/JavaAPI) 暂未收录的 API，建议下一轮扩充时补齐：
+
+- **`cn.howxu.mmcr.api.network.NetworkApi`** — 网络 API 静态门面。`interfaces(MachineBehaviorContext)` 返回当前机器所有活跃网络接口的 `NetworkInterfaceReference` 列表。
+- **`cn.howxu.mmcr.api.network.NetworkInterfaceReference`** — 活跃网络接口的服务端引用。`connections()` 返回 `MachineReference` 列表。
+- **`cn.howxu.mmcr.api.network.MachineReference`** — record `(Identifier type, long hash)`，标识一台已成型机器。`hash()` 是稳定的实例哈希，用于本机的 `power_<hash>` 分桶。
+- **`cn.howxu.mmcr.api.network.RequestProcess`** — `@FunctionalInterface`，签名 `void process(RequestBody body, RequestInfo request, @Nullable DataStorage senderStorage, @Nullable DataStorage receiverStorage)`。通过 [`MachineBuilder.requestProcess`](../API/JavaAPI#requestprocessidentifier-requestid-requestprocess) 注册。
+- **`cn.howxu.mmcr.api.network.RequestInfo`** — record `(Identifier requestId, MachineReference peer)`。`peer()` 用于标识发送方。
+- **`cn.howxu.mmcr.api.network.RequestBody`** — 不可变请求体；处理器侧通过 `body.get(key).flatMap(DataValue::asXxx).orElse(...)` 读字段。
+- **`cn.howxu.mmcr.api.data.DataStorage`** / **`DataValue`** — 详见 [DATA_STORAGE_MACHINE](../JavaAPI/DATA_STORAGE_MACHINE) 教程的对应章节。

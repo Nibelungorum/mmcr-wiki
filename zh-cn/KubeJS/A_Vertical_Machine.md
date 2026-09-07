@@ -1,0 +1,297 @@
+---
+title: A_Vertical_Machine
+order: 5
+---
+
+# A_Vertical_Machine — 裂解器（控制器朝向与旋转对称）
+
+本文演示一台支持**竖直朝向**与**完全旋转对称**的裂解器。代码直接对应 `example/startup_scripts/A_Vertical_Machine.js`、`example/server_scripts/structure/A_Vertical_Machine.js` 与 `example/server_scripts/recipe/A_Vertical_Machine.js` 三个文件；这是 KubeJS 示例里**第一次**出现 `allowVerticalFacing()` 与 `fullyRotationallySymmetric()`，也是第一次用 `portRequirements(...)` 与 `portTierRequirements(...)` 显式约束端口数量与等级。
+
+## 概览
+
+A_Vertical_Machine 与 [A_Simple_Machine](A_Simple_Machine) 的关键差异在于**机器的物理摆放**与**端口的数量/等级约束**：
+
+- A_Simple_Machine 的控制器只能水平朝向，玩家摆错朝向结构就成型失败。
+- A_Vertical_Machine 通过 `.allowVerticalFacing()` + `.fullyRotationallySymmetric()` 让控制器可以竖直放置（向上或向下），并且**所有方向**使用同一纹理，玩家无论旋转哪个方向都看不到"接缝"。
+
+结构脚本里又出现了一个新工具——`portRequirements(...)` 与 `portTierRequirements(...)`：它们不再要求玩家"摆某种方块在特定位置"，而是**约束端口的数量和等级下限**。
+
+## 本教程涉及的文件
+
+| 文件 | 阶段 | 注册对象 |
+| --- | --- | --- |
+| `example/startup_scripts/A_Vertical_Machine.js` | `MMCREvents.startup` | 机器定义 |
+| `example/server_scripts/structure/A_Vertical_Machine.js` | `MMCREvents.server` | 多方块结构（端口数量/等级约束） |
+| `example/server_scripts/recipe/A_Vertical_Machine.js` | `ServerEvents.recipes` | 数据驱动配方 |
+
+## 本教程涉及的 API 跳转表
+
+- 启动期：[MMCRStartupEventJS](../API/KubeJS#mmcrstartupeventjs) · [MachineBuilderJS](../API/KubeJS#machinebuilderjs) · [MachineBuilderJS.allowVerticalFacing](../API/KubeJS#machinebuilderjs) · [MachineBuilderJS.fullyRotationallySymmetric](../API/KubeJS#machinebuilderjs) · [MachineBuilderJS.requireVerticalFacing](../API/KubeJS#machinebuilderjs)
+- 结构期：[MMCRServerEventJS](../API/KubeJS#mmcrservereventjs) · [MachineStructureBuilderJS](../API/KubeJS#machinestructurebuilderjs) · [MachineStructureBuilderJS.portRequirements](../API/KubeJS#machinestructurebuilderjs) · [MachineStructureBuilderJS.portTierRequirements](../API/KubeJS#machinestructurebuilderjs)
+- 结构谓词：[KubeJSApi.portRequirements](../API/KubeJS#kubejsapi) · [KubeJSApi.portTierRequirements](../API/KubeJS#kubejsapi) · [KubeJSApi.anyOfItemInput](../API/KubeJS#kubejsapi) · [KubeJSApi.anyOfItemOutput](../API/KubeJS#kubejsapi) · [KubeJSApi.anyOfFluidOutput](../API/KubeJS#kubejsapi) · [KubeJSApi.anyOfEnergyInput](../API/KubeJS#kubejsapi)
+- 配方：[MachineRecipeSchema](../API/KubeJS#machinerecipeschema)
+
+## 机器定义
+
+打开 [A_Vertical_Machine.js（启动期）](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/main/example/startup_scripts/A_Vertical_Machine.js)：
+
+```js
+// Configure machine facing and rotational symmetry.
+
+MMCREvents.startup(event => {
+
+    const builder = event
+        .createMachine("mmcr_kubejs:kubejs_cracker") // Create the machine definition.
+        .displayNameKey("machine.mmcr_kubejs.kubejs_cracker") // Translation key for the display name.
+        .recipeFamily("mmcr_kubejs:kubejs_cracker") // Bind the recipe family.
+        .allowVerticalFacing() // Allow the controller to be placed vertically.
+        .fullyRotationallySymmetric() // Allow full rotation when the structure is placed vertically.
+
+    builder.register()
+
+    // See server_scripts/structure/A_Vertical_Machine.js for the rotatable structure.
+})
+```
+
+`event.createMachine(...)` 返回 [MachineBuilderJS](../API/KubeJS#machinebuilderjs)。链式调用的关键三件事：
+
+- `.allowVerticalFacing()`：声明控制器**可以竖直放置**（即面朝上 / 面朝下）。详见 [MachineBuilderJS.allowVerticalFacing](../API/KubeJS#machinebuilderjs)。默认 `false`——即只允许水平朝向。开启后玩家右键放置时可以选朝上、朝下、朝南北东西六种朝向中的任意一种。
+- `.fullyRotationallySymmetric()`：声明**完全旋转对称**——所有面使用同一纹理。详见 [MachineBuilderJS.fullyRotationallySymmetric](../API/KubeJS#machinebuilderjs)。默认 `false`。当玩家把控制器面朝下放置时，正面纹理仍然显示在"面对玩家"的方向——玩家从下往上看也会看到正确纹理。
+- `.recipeFamily("mmcr_kubejs:kubejs_cracker")`：配方族 ID。
+
+`builder.register()` 终结，把机器提交到启动期注册窗口。
+
+> 备注：与 [A_Group_Machine](A_Group_Machine) 不同的是，这台机器**没有调用 `.expandableStructure(true)`**——裂解器只有一个固定形态，不需要分组。结构脚本用扁平式 API 即可。
+
+启动期窗口不可热加载，修改 `.js` 后必须重启游戏。
+
+## 多方块结构
+
+打开 [A_Vertical_Machine.js（结构阶段）](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/main/example/server_scripts/structure/A_Vertical_Machine.js)：
+
+```js
+MMCREvents.server(event => {
+    const api = event.getAPI()
+    const structure = event.createStructure("mmcr_kubejs:kubejs_cracker")
+
+    structure
+        .pattern(['AAA', 'AAA', 'AAA'])
+        .pattern(['XBX', 'B B', 'XBX'])
+        .pattern(['XDX', 'D D', 'XDX'])
+        .pattern(['XEX', 'ECE', 'XEX'])
+        .set('X', api.block('minecraft:polished_diorite'))
+        .set('A', api.block('minecraft:polished_andesite'))
+        .set('D', api.block('minecraft:blue_ice'))
+        .set('E', api.block('minecraft:mossy_cobblestone'))
+        // Previous examples used fixed ports. A const structure also provides convenient port predicates.
+        .set('B', api.anyOf(
+            api.anyOfItemInput(),
+            api.anyOfItemOutput(),
+            api.anyOfFluidOutput(),
+            api.anyOfEnergyInput()
+        ))
+        .controller('C')
+        // Set the required port counts. The structure will not form when these requirements are not met.
+        // A number is an exact count; an array specifies the minimum and maximum.
+        .portRequirements(api.portRequirements({
+            item_input_bus: 1,
+            item_output_bus: 1,
+            fluid_output_hatch: 1,
+            energy_input_hatch: [1,3] // Allow one to three energy input hatches.
+        }))
+        // Set port tier requirements using a readable string format.
+        .portTierRequirements(api.portTierRequirements([
+            'item_input_bus>=normal',
+            'item_output_bus>=normal',
+            'energy_input_hatch>=normal'
+        ]))
+
+        .build()
+})
+```
+
+`MMCREvents.server(event => {...})` 回调里的 `event` 是 [MMCRServerEventJS](../API/KubeJS#mmcrservereventjs)；`event.getAPI()` 返回 [KubeJSApi](../API/KubeJS#kubejsapi)。
+
+与 [A_Simple_Machine](A_Simple_Machine) 相比，本机器的结构新增了两个工具：
+
+1. **`.portRequirements(...)`**：端口数量需求。详见 [MachineStructureBuilderJS.portRequirements](../API/KubeJS#machinestructurebuilderjs) 与 [KubeJSApi.portRequirements](../API/KubeJS#kubejsapi)。
+2. **`.portTierRequirements(...)`**：端口等级下限。详见 [MachineStructureBuilderJS.portTierRequirements](../API/KubeJS#machinestructurebuilderjs) 与 [KubeJSApi.portTierRequirements](../API/KubeJS#kubejsapi)。
+
+原文注释写道："The structure will not form when these requirements are not met." —— **如果端口数量或等级不满足需求，结构直接判定为成型失败**。这是与 [A_Simple_Machine](A_Simple_Machine) 的关键差异——A_Simple_Machine 只检查字符匹配，端口数量随意；A_Vertical_Machine 显式约束。
+
+### `portRequirements` 的写法
+
+参见 [KubeJSApi.portRequirements](../API/KubeJS#kubejsapi)：
+
+```javascript
+api.portRequirements({
+    item_input_bus: 1,           // 精确 1 个物品输入总线
+    item_output_bus: 1,          // 精确 1 个物品输出总线
+    fluid_output_hatch: 1,       // 精确 1 个流体输出仓
+    energy_input_hatch: [1,3]    // 至少 1、最多 3 个能量输入仓
+})
+```
+
+- 单个数字 → 精确数量。
+- 二元数组 `[min, max]` → 闭区间 `[min, max]`。
+
+注意这些是**端口 ID**，不是字符——`item_input_bus` 是注册表中物品输入总线的注册名，与 `'B'` 字符无关。玩家在 `'B'` 字符的位置可以放任何物品输入总线；放的数量必须符合上面的约束。
+
+### `portTierRequirements` 的写法
+
+参见 [KubeJSApi.portTierRequirements](../API/KubeJS#kubejsapi)：
+
+```javascript
+api.portTierRequirements([
+    'item_input_bus>=normal',
+    'item_output_bus>=normal',
+    'energy_input_hatch>=normal'
+])
+```
+
+每项是 `<port_id>=><tier>` 格式的字符串。tier 名称按端口类别不同：
+
+- 物品：`tiny`、`small`、`normal`、`reinforced`、`big`、`huge`、`ludicrous`。
+- 流体：上述 + `vacuum`。
+- 能量：上述 + `ultimate`。
+
+原文中物品输入/输出要求至少 `normal`、能量输入至少 `normal`——意味着玩家不能放 `tiny` 物品输入总线，否则结构失配。
+
+## 配方
+
+打开 [A_Vertical_Machine.js（配方阶段）](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/main/example/server_scripts/recipe/A_Vertical_Machine.js)：
+
+```js
+ServerEvents.recipes( event => {
+
+    // This example focuses on fluid output rather than recipe complexity.
+    event.custom({
+        type: 'mmcr:machine_recipe',
+        machine: 'mmcr_kubejs:kubejs_cracker',
+        tick_time: 300,
+        requirements: [
+            { type: 'minecraft:item', io: 'input', item: 'minecraft:apple', count: 3 },
+            { type: 'minecraft:item', io: 'output', stack: { id: 'minecraft:iron_ingot', count: 10 } },
+            {
+                type: 'minecraft:fluid', // Set the requirement type to fluid.
+                io: 'output',
+                stack: {
+                    id: 'minecraft:water', // Fluid identifier.
+                    amount: 1000 // Amount in mB.
+                }
+            },
+            { type: 'neoforge:energy', io: 'input', fe_per_tick: 20 }
+        ]
+    })
+    // Recipe IDs are optional in KubeJS.
+})
+```
+
+配方展示了三件值得注意的事：
+
+1. **流体输出使用 `type: 'minecraft:fluid'`** + `stack: { id, amount }` 形式，amount 单位是 mB。
+2. **能量输入 `fe_per_tick: 20`**——结构约束已经要求 `energy_input_hatch: [1,3]` 与 `>=normal`，所以这条配方与结构约束一致。
+3. **没有调用 `.id(...)`**——KubeJS 会自动生成 ID。注释："Recipe IDs are optional in KubeJS."
+
+字段含义详见 [MachineRecipeSchema](../API/KubeJS#machinerecipeschema)。
+
+数据驱动的配方支持热加载，修改后 `/reload` 即可。
+
+## 特殊机制：朝向 / 旋转 / 端口数量约束
+
+这是 A_Vertical_Machine 与前面所有示例最大的不同点。
+
+### `allowVerticalFacing` / `fullyRotationallySymmetric` / `requireVerticalFacing`
+
+三个方法都在 [MachineBuilderJS](../API/KubeJS#machinebuilderjs) 中：
+
+| 方法 | 默认值 | 行为 |
+| --- | --- | --- |
+| [`allowVerticalFacing()`](../API/KubeJS#machinebuilderjs) | `false` | 允许控制器竖直朝向（面朝上 / 面朝下）。开启后玩家可以摆出"塔式"或"井式"形态。 |
+| [`fullyRotationallySymmetric()`](../API/KubeJS#machinebuilderjs) | `false` | 完全旋转对称——所有面使用同一纹理。当配合 `allowVerticalFacing()` 时，玩家旋转控制器到任意方向都看不到"接缝"。 |
+| [`requireVerticalFacing()`](../API/KubeJS#machinebuilderjs) | `false` | 强制竖直朝向；开启时自动启用 `allowVerticalFacing`。玩家无法放置水平朝向的控制器。 |
+
+#### 它们的差异
+
+- **`allowVerticalFacing` 是放行开关**：开启后玩家既可以水平也可以竖直放置。
+- **`requireVerticalFacing` 是强制开关**：开启后玩家**只能**竖直放置。它会自动启用 `allowVerticalFacing`，所以不需要两个都调。
+- **`fullyRotationallySymmetric` 是纹理开关**：与朝向无关；只影响控制器方块在世界中渲染时所有面是否使用同一纹理。
+
+#### 实战组合
+
+A_Vertical_Machine 的组合是 `.allowVerticalFacing() + .fullyRotationallySymmetric()`：
+
+- 玩家**可以**水平或竖直放置。
+- 不管玩家怎么旋转，控制器**所有面都用同一纹理**，玩家从任意角度观察都看不到"这是面朝东的控制器"。
+
+如果你的机器是**只能竖直放置**的反应堆（例如重力驱动的离心机），改用 `.requireVerticalFacing()`：玩家无法放错方向。
+
+如果你的机器不需要纹理细节——例如只用 `minecraft:furnace` 之类本身就旋转对称的方块——可以**省略** `.fullyRotationallySymmetric()`：MMCR 会让控制器自动派生出前/侧/顶/底四面纹理。
+
+### `portRequirements` 与 `portTierRequirements`
+
+这是 A_Vertical_Machine 演示的第二个新工具。
+
+参见 [KubeJSApi.portRequirements](../API/KubeJS#kubejsapi)：
+
+```javascript
+api.portRequirements({
+    item_input_bus: 1,           // 精确数量
+    item_output_bus: 1,
+    fluid_output_hatch: 1,
+    energy_input_hatch: [1,3]    // 区间 [min, max]
+})
+```
+
+参见 [KubeJSApi.portTierRequirements](../API/KubeJS#kubejsapi)：
+
+```javascript
+api.portTierRequirements([
+    'item_input_bus>=normal',
+    'item_output_bus>=normal',
+    'energy_input_hatch>=normal'
+])
+```
+
+这两个工具让 KubeJS 端也能写 Java 版 [PortTiers](../API/JavaAPI#porttiers) 的等价物——既约束端口的**数量**，又约束端口的**最低等级**。
+
+#### 与"自由端口"的对比
+
+[A_Simple_Machine](A_Simple_Machine) 的 `'I'` 字符只匹配端口方块，不约束数量和等级——玩家可以摆 0 个端口，结构照样成型。A_Vertical_Machine 通过这两个工具**强制约束**——玩家必须摆至少 1 个 `>=normal` 的物品输入总线，否则结构失败。
+
+这种约束适合"机器必须有这些端口才能工作"的场景：裂解器必须接收原料、必须输出产物、必须通电——少一个都不行。
+
+#### 端口 ID 与字符的区别
+
+注意 `item_input_bus` 是**端口注册 ID**，与 `'B'` 字符无关。MMCR 把"模式中的字符"与"端口 ID"解耦：玩家在 `'B'` 位置可以放任何物品输入总线；端口 ID 只是用来告诉结构系统"统计某种类型端口的数量与等级"。
+
+## 与其他教程的对比
+
+### 对比 A_Simple_Machine
+
+| 维度 | A_Simple_Machine | A_Vertical_Machine |
+| --- | --- | --- |
+| 控制器朝向 | 仅水平 | 水平 + 竖直（`allowVerticalFacing`） |
+| 控制器纹理 | 派生（前/侧/顶/底四张） | 完全旋转对称（`fullyRotationallySymmetric`） |
+| 端口数量约束 | 无 | `portRequirements(...)` 显式约束 |
+| 端口等级约束 | 无 | `portTierRequirements(...)` 显式约束 |
+| 配方输出 | 物品 + 能量 | 物品 + 流体 + 能量 |
+| 玩家可调形态 | 否 | 否（未启用 `expandableStructure`） |
+
+### 对比 A_Group_Machine
+
+[A_Group_Machine](A_Group_Machine) 用 `expandableStructure(true)` + `expandStructure(...)` 让玩家可以摆 1/2/3 段。A_Vertical_Machine 不分组——它演示的是**形态可旋转**而不是**形态可叠加**。两者可以叠加：分组结构 + 控制器竖直朝向都是合法的。
+
+### 对比 Java 端 BLAST_FURNACE
+
+Java 版的 [BLAST_FURNACE](../JavaAPI/BLAST_FURNACE) 控制器只能水平朝向，也没有端口数量约束。MMCR 的 Java API 通过 [ControllerSpec](../API/JavaAPI#controllerspec) 与 [PortTiers](../API/JavaAPI#porttiers) 提供相同的能力；A_Vertical_Machine 把它们平移到 KubeJS 端。
+
+## 小结
+
+A_Vertical_Machine 演示了三件事：
+
+1. **`allowVerticalFacing()` + `fullyRotationallySymmetric()` + `requireVerticalFacing()`**——控制器的朝向与纹理开关。详见 [MachineBuilderJS](../API/KubeJS#machinebuilderjs)。
+2. **`portRequirements(...)` + `portTierRequirements(...)`**——结构对端口数量与最低等级的硬约束。详见 [MachineStructureBuilderJS](../API/KubeJS#machinestructurebuilderjs) 与 [KubeJSApi](../API/KubeJS#kubejsapi)。
+3. **配方可以同时输出物品与流体**——`type: 'minecraft:fluid'` + `stack: { id, amount }`。
+
+接下来可以浏览 [API 参考](../API/KubeJS) 看完整 API 列表，或回到 [A_Simple_Machine](A_Simple_Machine) 复习基础结构写法。

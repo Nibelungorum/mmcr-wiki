@@ -1,0 +1,220 @@
+---
+title: MONSTER_FARM
+order: 8
+---
+
+# MONSTER_FARM — 怪物农场
+
+本文拆解 [MONSTER_FARM.java](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/main/src/main/java/org/nibelungorum/builtin/MONSTER_FARM.java)，看一台**只有机器定义 + 结构、完全没有配方**的机器长什么样，以及 `controller(...)` 里的朝向开关如何改变玩家放置控制器的方式。
+
+## 概览
+
+怪物农场（MONSTER_FARM）是内置示例里最"轻"的一台：66 行 Java，两个方法，没有配方、没有并行、没有智能接口。它的价值在两点：
+
+- 演示 [`ControllerSpec`](../API/JavaAPI#controllerspec) 的**朝向三开关**：`allowVerticalFacing` / `fullyRotationallySymmetric` / `requireVerticalFacing`。这是内置示例中唯一显式配置控制器朝向的机器。
+- 演示 [`BlockPredicate.tag(...)`](../API/JavaAPI#blockpredicate) 的**标签匹配**：结构外壳允许"任意原木"，而不是某个具体方块。
+
+它也顺手演示了一件容易被忽略的事：**机器不注册任何配方也是合法的**。这样的机器在游戏里能成型、能显示控制器界面，只是永远不会开始加工。想给它加行为，走 [`tickBehavior`](../API/JavaAPI#tickbehavior) 或 [`preServerTick`](../API/JavaAPI#machinebuilder) 这条路，而不是配方。
+
+## 本教程涉及的文件
+
+| 文件 | 作用 |
+| --- | --- |
+| [`builtin/MONSTER_FARM.java`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/main/src/main/java/org/nibelungorum/builtin/MONSTER_FARM.java) | 机器定义 + 结构，全部内容 |
+| [`provider/BuiltInProvider.java`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/main/src/main/java/org/nibelungorum/provider/BuiltInProvider.java) | 通过 `ServiceLoader` 调用 `registerDefinitions(...)` |
+
+没有渲染器，没有 KubeJS 侧文件。
+
+## 本教程涉及的 API
+
+| 用到的 API | API 参考 |
+| --- | --- |
+| `MachineDefinitionProvider` | [链接](../API/JavaAPI#machinedefinitionprovider) |
+| `MMCRMachineDefinationsEvent` | [链接](../API/JavaAPI#mmcrmachinedefinationsevent) |
+| `MMCRMachineStructuresEvent` | [链接](../API/JavaAPI#mmcrmachinestructuresevent) |
+| `MachineBuilder` | [链接](../API/JavaAPI#machinebuilder) |
+| `ControllerSpec` | [链接](../API/JavaAPI#controllerspec) |
+| `MachineStructureBuilder` | [链接](../API/JavaAPI#machinestructurebuilder) |
+| `StructureStage` | [链接](../API/JavaAPI#structurestage) |
+| `PatternBuilder` | [链接](../API/JavaAPI#patternbuilder) |
+| `BlockPredicate` | [链接](../API/JavaAPI#blockpredicate) |
+
+## 机器定义详解
+
+```java
+private static final Identifier MONSTER_FARM = id("monster_farm");
+
+public static void registerDefinitions(MMCRMachineDefinationsEvent event) {
+    if (!event.definitions().containsKey(MONSTER_FARM)) {
+        var machine = MachineBuilder
+                .machine(MONSTER_FARM)
+                .displayNameKey("machine.mmcr.monster_farm")
+                .controller(builder -> builder
+                        .id(MONSTER_FARM.withSuffix("_controller"))
+                        .allowVerticalFacing(true)
+                        .fullyRotationallySymmetric(false)
+                        .requireVerticalFacing(true)
+                )
+                .build();
+        event.registerMachine(machine);
+    }
+}
+```
+
+`id("monster_farm")` 展开为 `mmcr:monster_farm`。自己的 mod 里应该写 `Identifier.fromNamespaceAndPath("my_mod", "monster_farm")`——`id(...)` 是 MMCR 内部的命名空间快捷方法。
+
+`definitions().containsKey(...)` 是幂等检查。同一 ID 重复提交会抛 `IllegalStateException`，加上这层判断后方法被重复调用也不会炸。
+
+### `controller(...)`：控制器规格
+
+这台机器唯一"特殊"的地方就是这一段。`controller(UnaryOperator<ControllerSpec.Builder>)` 接受一个构建器回调，声明控制器方块的注册 ID、纹理和朝向策略。这里只配了 ID 和朝向，纹理留空——MMCR 启动期会填内置回退纹理。
+
+**`id(MONSTER_FARM.withSuffix("_controller"))`**
+
+控制器方块的注册 ID，展开为 `mmcr:monster_farm_controller`。用机器 ID 加后缀是内置示例的统一习惯：机器 ID 与控制器方块 ID 一眼能对上，方便查 lang 文件里的 `block.mmcr.monster_farm_controller`。
+
+**三个朝向开关**
+
+这三个开关容易搞混，逐个说清：
+
+| 开关 | 这是什么 | 为什么用 |
+| --- | --- | --- |
+| `allowVerticalFacing(true)` | 允许控制器朝上或朝下（默认只能水平四向） | 打开竖直朝向这个可能性 |
+| `fullyRotationallySymmetric(false)` | 关闭"完全旋转对称"（所有面共用一张纹理） | 保留正面纹理，让玩家看得出控制器朝哪 |
+| `requireVerticalFacing(true)` | **要求**竖直朝向——玩家无法把它放成水平朝向 | 农场是"从上往下俯视"的塔状结构，控制器只在顶盖中央有意义 |
+
+`requireVerticalFacing(true)` 会自动启用 `allowVerticalFacing`，所以这里的 `allowVerticalFacing(true)` 是冗余的显式声明——留着更易读，但删掉行为不变。
+
+`fullyRotationallySymmetric(false)` 是默认值，写出来也是为了可读性：作者在提示"我考虑过这个开关，并决定不开"。全部方法与默认值见 [`ControllerSpec`](../API/JavaAPI#controllerspec)。
+
+## 结构详解
+
+```java
+@SubscribeEvent
+public static void registerStructures(MMCRMachineStructuresEvent event) {
+    if (!event.structures().containsKey(MONSTER_FARM)) {
+        var structure = MachineStructureBuilder
+                .structure()
+                .fullStructure(s -> s
+                        .pattern(p -> p
+                                .layer("XXXXX", "XXXXX", "XXXXX", "XXXXX", "XXXXX")
+                                .layer("ABBBA", "B   B", "B   B", "B   B", "ABBBA")
+                                .layer("ABBBA", "B   B", "B   B", "B   B", "ABBBA")
+                                .layer("ABBBA", "B   B", "B   B", "B   B", "ABBBA")
+                                .layer("ABBBA", "B   B", "B   B", "B   B", "ABBBA")
+                                .layer("XXXXX", "XXXXX", "XXDXX", "XXXXX", "XXXXX")
+                                .where('X', any(
+                                        tag(BlockTags.LOGS)
+                                    )
+                                )
+                                .where('A', block(Blocks.OAK_LOG))
+                                .where('B', block(Blocks.IRON_BARS))
+                                .controller('D'))
+                )
+                .build(MONSTER_FARM);
+        event.registerStructure(structure);
+    }
+}
+```
+
+`@SubscribeEvent` + 类上的 `@EventBusSubscriber` 让这个方法自动订阅 `MMCRMachineStructuresEvent`，不需要手写 `bus.register(...)`。
+
+### 形状
+
+六个 `layer(...)` 调用 = 六个 z 层，每层 5 行 × 5 列。整体是 5×5×6 的笼子：
+
+```text
+z=0            z=1..4          z=5
+XXXXX          ABBBA           XXXXX
+XXXXX          B   B           XXXXX
+XXXXX          B   B           XXDXX   ← D = 控制器
+XXXXX          B   B           XXXXX
+XXXXX          ABBBA           XXXXX
+```
+
+- z=0 与 z=5 是两块实心 5×5 盖板（`X`）。
+- z=1..4 是四层完全相同的中空外圈：四个角是 `A`，边是 `B`，中间 3×3 是空格。
+- 空格表示**不校验任何方块**——笼子内部随便放什么（或什么都不放）都能成型。这正是"怪物农场"的语义：中空区域是刷怪空间。
+
+层高与行宽在所有 `layer(...)` 调用之间必须一致，否则 `PatternBuilder` 抛 `IllegalArgumentException`。详见 [`PatternBuilder`](../API/JavaAPI#patternbuilder)。
+
+### 三个谓词
+
+**`where('X', any(tag(BlockTags.LOGS)))`**
+
+`tag(...)` 匹配整个方块标签。`minecraft:logs` 包含所有木头与去皮变体，所以上下两块盖板允许玩家用任意原木铺——桦木、云杉、下界菌柄都行。
+
+`any(...)` 在这里只包了一个子谓词，等价于直接写 `tag(BlockTags.LOGS)`。这是"预留扩展位"的写法：后面想加 `block(Blocks.HAY_BLOCK)` 之类的备选项，直接往 `any(...)` 里塞一行就够了，不用改函数调用结构。
+
+**`where('A', block(Blocks.OAK_LOG))`**
+
+四个立柱角必须是橡木原木。注意这里用的是 `block(...)` 而不是 `blockState(...)`：`block(...)` 匹配该方块的**任意状态**，所以橡木原木的三种朝向（`axis=x/y/z`）都通过。
+
+如果想让立柱必须竖直摆放，改成 `state("minecraft:oak_log[axis=y]")` 并在结构上调 `stateSensitive()`——REACTOR 就是这么做的，见 [REACTOR](REACTOR)。
+
+**`where('B', block(Blocks.IRON_BARS))`**
+
+笼壁是铁栏杆。同理，`block(...)` 不校验栏杆的连接状态，玩家怎么摆都行。
+
+**`.controller('D')`**
+
+顶盖中央的 `D` 是控制器位置。`controller(...)` 声明的字符如果没有对应的 `where(...)` 绑定，构建器会自动绑到 `BlockPredicate.automaticController()`——也就是这台机器自己的控制器方块（`mmcr:monster_farm_controller`）。这里正是这种情况：源码里没有 `where('D', ...)`。
+
+控制器字符在整个结构中必须出现且仅出现一次，`build()` 阶段会校验。
+
+### 为什么没有端口
+
+结构里没有 `InterfacePredicates` 的任何调用，也没有 `portTiers(...)`。这台机器不接收物品也不产出物品，自然不需要端口。对比 [BLAST_FURNACE](BLAST_FURNACE)，那台机器的 `I` 字符位置允许物品输入 / 输出与能量输入端口。
+
+`.build(MONSTER_FARM)` 把结构绑定到机器 ID，返回 `MachineStructureDefinition`，`event.registerStructure(...)` 提交。
+
+## 配方详解
+
+没有配方。
+
+这不是遗漏——源码里确实没有 `MMCRMachineRecipesEvent` 的订阅方法。这台机器成型后控制器界面会显示"无可用配方"，永远不进入加工循环。
+
+想让它真的产出怪物掉落物，有两条路：
+
+1. **注册配方**：加一个 `@SubscribeEvent` 订阅 [`MMCRMachineRecipesEvent`](../API/JavaAPI#mmcrmachinerecipesevent)，用 [`MachineRecipeBuilder`](../API/JavaAPI#machinerecipebuilder) 声明输入输出。想要"随机掉落"的手感，用 `outputChance(ItemStack, float)`——概率输出，副产物不一定给。DISTILLATION_TOWER 演示了这个方法，见 [DISTILLATION_TOWER](DISTILLATION_TOWER)。
+2. **走行为钩子**：在机器定义里加 [`tickBehavior(...)`](../API/JavaAPI#tickbehavior) 或 `preServerTick(...)`，每 tick 自己扫描笼内实体并处理。适合"和实体交互"这类配方系统表达不出来的逻辑——怪物农场大概更需要这条路。
+
+MONSTER_FARM 两条都没走，它就是一个纯粹的"结构 + 控制器朝向"示例。
+
+## 特殊机制：控制器朝向的实际影响
+
+`requireVerticalFacing(true)` 在游戏里的表现值得单独说一下，因为它牵动结构匹配。
+
+控制器的朝向决定了 MMCR 如何把结构模式**旋转**到世界坐标上。模式里写的层与行是"模式本地坐标"，成型判定时会按控制器朝向做整体旋转。所以：
+
+- 控制器只能竖直放（朝上或朝下）→ 结构只有两种可能的世界朝向。
+- 玩家不能把笼子横过来搭。
+
+这跟 `fullyRotationallySymmetric` 是不同层面的东西：后者只影响**纹理**（开启后所有面共用一张贴图，视觉上分不出正面），不影响朝向判定。这台机器关掉它，是为了让玩家从贴图上看出控制器朝上还是朝下。
+
+对照 [`ControllerRenderContext.facing()`](../API/JavaAPI#controllerrendercontext)：如果给这台机器写渲染器，`facing()` 只会返回 `UP` 或 `DOWN`（未成型时可能是 `null`）。ARTIFICIAL_STAR 的渲染器就是按 `facing()` 分支调整模型位置的，见 [ARTIFICIAL_STAR](ARTIFICIAL_STAR)。
+
+## 与 BLAST_FURNACE 的对比
+
+| 维度 | BLAST_FURNACE | MONSTER_FARM |
+| --- | --- | --- |
+| 注册阶段数 | 3（定义 + 结构 + 配方） | 2（定义 + 结构） |
+| 控制器规格 | 未配置（用回退默认值） | 显式配置朝向三开关 |
+| 结构大小 | 3×3×3 | 5×5×6 |
+| 空格单元 | 中层中间 1 格 | 中间 3×3×4 共 36 格 |
+| 端口 | 物品输入 / 输出 + 能量输入 | 无 |
+| 端口等级 | `portTiers(...)` 声明 NORMAL 起 | 无 |
+| 标签匹配 | 无（全部具体方块） | `tag(BlockTags.LOGS)` |
+| 并行 / 多线程 | 都开 | 都不开 |
+| 配方 | 1 条 | 0 条 |
+
+BLAST_FURNACE 是"功能齐全的最小样板"，MONSTER_FARM 是"结构与控制器的最小样板"。两台机器加起来把 `MachineBuilder` 的两个方向都覆盖了：一个往性能 / 配方走，一个往控制器规格 / 结构表达走。
+
+## 延伸阅读
+
+- [BLAST_FURNACE](BLAST_FURNACE) — 三阶段注册模型的完整样板。
+- [REACTOR](REACTOR) — 状态敏感结构与 `state(...)` 精确匹配的对照。
+- [ARTIFICIAL_STAR](ARTIFICIAL_STAR) — 用 `facing()` 驱动渲染的例子。
+- [`ControllerSpec`](../API/JavaAPI#controllerspec) — 朝向与纹理开关的完整签名和默认值。
+- [`BlockPredicate`](../API/JavaAPI#blockpredicate) — `tag(...)` / `block(...)` / `state(...)` 的语义差异。
+- [`PatternBuilder`](../API/JavaAPI#patternbuilder) — 层 / 行 / 列的坐标约定与空格语义。

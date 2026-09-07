@@ -17,7 +17,7 @@ const sectionOrders: Record<string, number> = {
   '快速开始': 1,
   'KubeJS': 2,
   'JavaAPI': 3,
-  'API': 3,
+  'API': 4,
 }
 
 export const zh = defineConfig({

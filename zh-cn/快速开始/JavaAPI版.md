@@ -3,6 +3,10 @@ title: JavaAPI版
 order: 4
 ---
 
+<div align=center style="background: #fff; padding: 24px; border-radius: 8px;">
+    <h1 style="color: black;">Oh My IDEA</h1>
+</div>
+
 ## 一些准备
 
 本节面向具备 NeoForge Mod 开发经验的读者，属于**有门槛**的内容。
@@ -29,7 +33,7 @@ MMCR 的发布仓库托管于 [HowXu's Maven](https://maven.howxu.cn/)，使用�
 ```groovy
 repositories {
     maven {
-        name = 'HowXu Maven'
+        name = 'HowXu'
         url = 'https://maven.howxu.cn/' 
     }
 }

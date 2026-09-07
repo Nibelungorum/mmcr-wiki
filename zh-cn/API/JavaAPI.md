@@ -3139,7 +3139,7 @@ public record ModifierDefinition(List<RecipeModifier> modifiers) {
 
 | 参数 | 类型 | 含义 |
 | --- | --- | --- |
-| `target` | `String` | 修饰目标（"duration" / "energy" / "input.<id>" / "output.<id>"）。 |
+| `target` | `String` | 修饰目标（"duration" / "energy" / "input.&lt;id&gt;" / "output.&lt;id&gt;"）。 |
 | `ioTarget` | `String` | IO 方向："input" / "output"。会通过 `RecipeModifier.IOType.valueOf(ioTarget.toUpperCase(Locale.ROOT))` 解析。 |
 | `modifier` | `float` | 修饰系数（具体含义取决于 `operation`）。 |
 | `operation` | `String` | 操作类型（"multiply" / "add" / "set" / 等）。 |
@@ -3345,7 +3345,7 @@ public record SmartInterfaceModifier(
 | 字段 | 类型 | 含义 |
 | --- | --- | --- |
 | `interfaceType` | `String` | 对应的 `SmartInterfaceType.type`。 |
-| `target` | `String` | 修饰目标（"duration" / "energy" / "input.<id>" / "output.<id>"）。 |
+| `target` | `String` | 修饰目标（"duration" / "energy" / "input.&lt;id&gt;" / "output.&lt;id&gt;"）。 |
 | `io` | `RecipeModifier.IOType` | IO 方向，默认为 `INPUT`。 |
 | `affectsChance` | `boolean` | 是否影响概率字段。 |
 | `minValue` / `maxValue` | `float` | 智能接口值范围。 |

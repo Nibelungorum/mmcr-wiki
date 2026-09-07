@@ -7,14 +7,16 @@ const locale = 'zh-cn'
 const docsDir = resolve(dirname(fileURLToPath(import.meta.url)), '..', locale)
 const sectionTitles: Record<string, string> = {
   '快速开始': '快速开始',
-  '示例': '全部示例',
+  'KubeJS': 'KubeJS示例',
+  'JavaAPI': 'JavaAPI示例',
   'API': 'API 参考',
 }
 
 /** Sidebar section order: lower number comes first. Sections not listed here fall back to pinyin sort. */
 const sectionOrders: Record<string, number> = {
   '快速开始': 1,
-  '示例': 2,
+  'KubeJS': 2,
+  'JavaAPI': 3,
   'API': 3,
 }
 
@@ -46,7 +48,7 @@ function nav(): DefaultTheme.NavItem[] {
   return [
     { text: '首页', link: '/zh-cn/' },
     { text: '快速开始', link: '/zh-cn/快速开始/开始' },
-    { text: '全部示例', link: '/zh-cn/示例/开始' },
+    { text: '全部示例', link: '/zh-cn/KubeJS/开始' },
     { text: 'API 参考', link: '/zh-cn/API/开始' },
   ]
 }

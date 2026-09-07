@@ -1,5 +1,5 @@
 ---
-title: A_Recipe_Tick_Machine
+title: 配方Tick示例
 order: 13
 ---
 

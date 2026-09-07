@@ -1,5 +1,5 @@
 ---
-title: A_Pure_Tick_Machine
+title: 纯Tick测试机器
 order: 12
 ---
 

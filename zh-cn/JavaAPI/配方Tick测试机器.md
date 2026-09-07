@@ -1,5 +1,5 @@
 ---
-title: RECIPE_TICKER
+title: 配方Tick测试
 order: 15
 ---
 

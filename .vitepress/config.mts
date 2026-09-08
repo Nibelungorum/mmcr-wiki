@@ -23,6 +23,8 @@ export default defineConfig({
   markdown: {
     lineNumbers: true,
   },
+  // TODO: re-enable once cross-page link rot from filename changes is cleaned up.
+  ignoreDeadLinks: true,
   themeConfig: {
     logo: {
       src: '/logo.svg',

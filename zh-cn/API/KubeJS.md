@@ -1090,8 +1090,8 @@ const requirement = api.smartInterfaceOutput("mode", 2)
 ##### `networkInterfaces(MachineBehaviorContext context) → List<NetworkInterfaceReference>`
 
 - **参数表**：`context`（`MachineBehaviorContext`）— 当前机器行为回调上下文。
-- **返回**：当前成型机器可见的网络接口引用列表。
-- **抛出**：`NullPointerException` 或网络 API 运行时异常：上下文为空或上下文不再对应有效机器。
+- **返回**：当前成型机器可见的网络接口引用列表，按方块位置 `(x, y, z)` 升序排序；未成型、`context` 不在 `ServerLevel` 上或没有网络接口时返回空列表。
+- **抛出**：`NullPointerException("context")`：上下文为空；其他错误由 MMCR 主线程同步获取。
 - **默认值**：没有接口时返回空列表。
 - **示例**：
 
@@ -1104,8 +1104,8 @@ machine.tickBehavior(behavior => behavior.serverTick(ctx => {
 ##### `sendRequest(NetworkInterfaceReference source, MachineReference target, String requestId, Object body) → void`
 
 - **参数表**：`source`（`NetworkInterfaceReference`）— 发起请求的接口；`target`（`MachineReference`）— 目标机器引用；`requestId`（`String`）— 请求处理器 ID；`body`（`Object`）— 可转换为字符串键映射的脚本对象。
-- **返回**：无；请求交给 MMCR 网络系统异步传递。
-- **抛出**：`IllegalArgumentException`：body 不是映射、键为空/不是字符串、值含不支持类型或请求 ID 非法；目标不可达时由失败处理器处理，而不是由该方法保证成功。
+- **返回**：无；请求交给 MMCR 网络系统异步传递，由目标机器在下一个 tick 触发 `requestProcess(requestId, ...)`。
+- **抛出**：`NullPointerException("source"/"target"/"body")` 或 `IllegalArgumentException("requestId must not be blank")`：任一入参为空；目标不在 `source` 的连接表中时抛 `IllegalArgumentException("Target is not connected to the source interface")`；`body` 必须能转为字符串键映射，键不可为空或非字符串。
 - **默认值**：空映射可以作为请求体；推荐至少提供一个业务字段。
 - **示例**：
 
@@ -1787,22 +1787,23 @@ machine.allowNetworkMachine("example:network_center")
 
 ##### `requestProcess(String requestId, RequestProcess process) → MachineBuilderJS`
 
-- **参数表**：`requestId`（`String`）— 请求 ID；`process`（`RequestProcess`）— 四参数回调 `(body, request, senderStorage, receiverStorage)`。
+- **参数表**：`requestId`（`String`）— 请求 ID；`process`（`RequestProcess`）— 四参数回调 `(body, request, senderStorage, receiverStorage)`。`body` 是公共 [`RequestBody`](./JavaAPI#requestbody)，可通过 `body.get("power").flatMap(v => v.asDouble())` 取值；`request` 是公共 [`RequestInfo`](./JavaAPI#requestinfo)，可读取 `request.peer().hash()` 等字段；`senderStorage` / `receiverStorage` 为公共 [`DataStorage`](./JavaAPI#datastorage) 视图，对端未启用数据存储时为 `null`，需自行判空。
 - **返回**：当前构建器。
-- **抛出**：`IllegalArgumentException`：ID 非法或同一 ID 重复注册；`NullPointerException`：处理器为空。
+- **抛出**：`IllegalArgumentException`：ID 无法解析、ID 为空，或同一 ID 重复注册；`NullPointerException`：处理器为空。
 - **默认值**：没有处理器。
 - **示例**：
 
 ```javascript
 machine.requestProcess("example:report", (body, request, senderStorage, receiverStorage) => {
     if (receiverStorage == null) return
-    receiverStorage.set("power", body.get("power").orElse(null))
+    const reported = body.get("power").flatMap(v => v.asDouble()).orElse(0)
+    receiverStorage.set("power_" + request.peer().hash(), api.dataValue(reported))
 })
 ```
 
 ##### `requestFailed(String requestId, RequestFailed failure) → MachineBuilderJS`
 
-- **参数表**：`requestId`（`String`）— 请求 ID；`failure`（`RequestFailed`）— 四参数失败回调 `(body, request, senderStorage, reason)`。
+- **参数表**：`requestId`（`String`）— 请求 ID；`failure`（`RequestFailed`）— 四参数失败回调 `(body, request, senderStorage, reason)`。`body`、`request`、`senderStorage` 同 `requestProcess`；`reason` 是 [`RequestFailureReason`](./JavaAPI#requestfailurereason) 枚举值。
 - **返回**：当前构建器。
 - **抛出**：`IllegalArgumentException`：ID 非法或重复；`NullPointerException`：失败处理器为空。
 - **默认值**：没有失败处理器。
@@ -1810,7 +1811,7 @@ machine.requestProcess("example:report", (body, request, senderStorage, receiver
 
 ```javascript
 machine.requestFailed("example:report", (body, request, senderStorage, reason) => {
-    console.warn(String(reason))
+    console.warn("request failed:", String(reason), "peer", String(request.peer().hash()))
 })
 ```
 
@@ -3819,7 +3820,7 @@ MMCREvents.startup(event => {
 - **生命周期**：MMCR 启动窗口由 `Plugin.beforeScriptsLoaded` 打开、`afterScriptsLoaded` 关闭；机器定义、等级、修饰符与控制器屏幕文本必须在 `MMCREvents.startup` 回调中完成注册。`MMCREvents.server` 回调在服务端 KubeJS 内容事务内运行，调用 `build()` 时若事务已结束会抛 `IllegalStateException`。
 - **块谓词类型**：`KubeJSApi` 返回的方块谓词类型是 `cn.howxu.mmcr.api.machine.BlockPredicate`，与 Java 公共 API 包 `cn.howxu.mmcr.api.publicapi.machine.BlockPredicate` 不同。`modifierUse(...)` 会自动从前者转换为后者；结构字符绑定只能使用前者或脚本能识别的 `BlockState`/`Block`/`LevelSlot`。
 - **配方多通道**：MMCR 配方有四条注册路径——`event.custom({ type: 'mmcr:machine_recipe' })` 数据驱动配方、`MachineRecipeBuilderJS` 编程式配方、`RecipeRegistry.registerStatic(...)` 静态注册（`Plugin.completeServerReload` 之外）、`MachineRecipeConverter` 转换的自定义 codec。同一 ID 在任意路径下只允许存在一次。
-- **网络请求**：`sendRequest` 在目标不可达时不会抛异常，失败由源机器上同 ID 的 `requestFailed` 处理器处理。请求体必须是字符串键映射，且每个值都是 `dataValue` 支持的类型。
+- **网络请求**：`sendRequest` 找不到目标接口或目标不在 `source` 的连接表时会抛 `IllegalArgumentException`；送达后由目标机器在下一 tick 调用同 ID 的 `requestProcess`。若目标机器未注册对应 `requestId` 的处理器或任意中间检查失败，MMCR 会回调源机器通过 `requestFailed(...)` 注册的处理器，并传入 `RequestFailureReason` 枚举（`TARGET_HANDLER_MISSING`、`ALLOWLIST_REJECTED`、`HASH_MISMATCH` 等）。请求体根对象必须是字符串键映射，键不可为空或非字符串，值最终会被 [`api.dataValue(...)`](#datavalueobject-value--datavalue) 包装成 `DataValue`。
 - **智能接口**：智能接口类型在 `MachineBuilderJS.smartInterface(type, ...)` 注册时是机器级声明，结构可以同时通过 `set(symbol, smartInterfaceBlock())` 决定哪些位置允许放置接口；接口值由智能接口方块保存并供绑定的控制器读取。
 - **可热加载范围**：机器定义、等级类型、等级、修饰符和控制器屏幕文本注册在启动脚本中，修改后必须重启游戏；结构、配方、控制器屏幕文本内容可随 `/reload` 重载（屏幕文本行的静态/动态重写都遵循 `ControllerScreenText` 的替换语义）。
 - **语言约定**：本文档中的 Java 类型在脚本里以相同名称使用；KubeJS 会把字符串、数组、对象和回调转换为对应参数；标记为 `@HideFromJS` 的重载（见 `MachineStructureBuilderJS` 多个 `extension`/`fullStructure` 与 `MachineBuilderJS` 的 `controllerSpec`/`runningSound(Identifier)` 等）保留给 Java 互操作或内部桥接，不应作为脚本入口。

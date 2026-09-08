@@ -205,10 +205,10 @@ public final class MachineBuilder {
 
     public MachineBuilder runningSound(Identifier soundId);
     public MachineBuilder finishSound(Identifier soundId);
-
     public MachineBuilder failureAction(RecipeFailureActions failureAction);
-    public MachineBuilder requestProcess(Identifier requestId, RequestProcess process);
-    public MachineBuilder requestFailed(Identifier requestId, RequestFailed failure);
+
+    public MachineBuilder requestProcess(Identifier requestId, cn.howxu.mmcr.api.publicapi.network.RequestProcess process);
+    public MachineBuilder requestFailed(Identifier requestId, cn.howxu.mmcr.api.publicapi.network.RequestFailed failure);
 
     public MachineDefinition build();
 }
@@ -306,13 +306,13 @@ public final class MachineBuilder {
 
 设置配方失败处理策略。详见 `RecipeFailureActions`。
 
-#### `requestProcess(Identifier requestId, RequestProcess process)`
+#### `requestProcess(Identifier requestId, cn.howxu.mmcr.api.publicapi.network.RequestProcess process)`
 
-注册请求处理器。`requestId` 重复抛 `IllegalArgumentException`。
+注册公共请求处理器；回调签名见 [`RequestProcess`](#requestprocess)。`requestId` 重复抛 `IllegalArgumentException("Duplicate request processor: <id>")`。
 
-#### `requestFailed(Identifier requestId, RequestFailed failure)`
+#### `requestFailed(Identifier requestId, cn.howxu.mmcr.api.publicapi.network.RequestFailed failure)`
 
-注册请求失败处理器。`requestId` 重复抛 `IllegalArgumentException`。
+注册公共请求失败处理器；回调签名见 [`RequestFailed`](#requestfailed)。`requestId` 重复抛 `IllegalArgumentException("Duplicate request failure handler: <id>")`。
 
 #### `build()`
 
@@ -5119,12 +5119,17 @@ double power = body.get("power").flatMap(DataValue::asDouble).orElse(0.0);
 
 完整类名：`cn.howxu.mmcr.api.publicapi.network.RequestInfo`
 
-`RequestProcess.process(...)` 回调收到的请求上下文——标识一次到达的请求与对端机器。
+`RequestProcess.process(...)` / `RequestFailed.fail(...)` 回调收到的请求上下文——标识一次到达的请求与对端机器。
 
 #### 记录签名
 
 ```java
-public record RequestInfo(Identifier requestId, MachineReference peer);
+public record RequestInfo(Identifier requestId, MachineReference peer) {
+    public RequestInfo {
+        Objects.requireNonNull(requestId, "requestId");
+        Objects.requireNonNull(peer, "peer");
+    }
+}
 ```
 
 #### 字段
@@ -5132,7 +5137,7 @@ public record RequestInfo(Identifier requestId, MachineReference peer);
 | 字段 | 类型 | 含义 |
 | --- | --- | --- |
 | `requestId` | `Identifier` | 请求 ID（命名空间 + 路径均非空）。`null` → `NullPointerException("requestId")`。 |
-| `peer` | `MachineReference` | 发送方机器引用。`null` → `NullPointerException("peer")`。 |
+| `peer` | `MachineReference` | 发送方机器引用（公共版本）。`null` → `NullPointerException("peer")`。 |
 
 #### 示例
 
@@ -5156,7 +5161,7 @@ ctx.requestProcess(REPORT_POWER, (body, request, senderStorage, receiverStorage)
 
 完整类名：`cn.howxu.mmcr.api.publicapi.network.RequestProcess`
 
-`@FunctionalInterface`：处理一次到达的网络请求的回调。
+`@FunctionalInterface`：处理一次到达的网络请求的回调。完整文件路径 `cn.howxu/mmcr/api/publicapi/network/RequestProcess.java`。
 
 #### 接口签名
 
@@ -5173,10 +5178,10 @@ public interface RequestProcess {
 
 | 参数 | 类型 | 含义 |
 | --- | --- | --- |
-| `body` | `RequestBody` | 来自发送方的请求体。 |
-| `request` | `RequestInfo` | 请求 ID 与发送方机器引用。 |
-| `senderStorage` | `DataStorage` | 发送方机器的公共数据存储视图；发送方未启用数据存储或当前不在主线程时为 `null`（需在闭包内自行判空）。 |
-| `receiverStorage` | `DataStorage` | 接收方（当前机器）的公共数据存储视图；当前机器未启用数据存储或当前不在主线程时为 `null`（需在闭包内自行判空）。 |
+| `body` | `RequestBody` | 来自发送方的请求体；公共版本可直接 `body.get(key).flatMap(DataValue::asXxx)` 取值。 |
+| `request` | `RequestInfo` | 请求 ID 与发送方机器引用（公共 `MachineReference`）。 |
+| `senderStorage` | `DataStorage` 或 `null` | 发送方机器的公共数据存储视图；发送方未启用数据存储或当前不在主线程时为 `null`（闭包内必须判空）。 |
+| `receiverStorage` | `DataStorage` 或 `null` | 接收方（当前机器）的公共数据存储视图；当前机器未启用数据存储或当前不在主线程时为 `null`（闭包内必须判空）。 |
 
 ##### 示例
 
@@ -5203,7 +5208,7 @@ ctx.requestProcess(REPORT_POWER,
 
 完整类名：`cn.howxu.mmcr.api.publicapi.network.RequestFailed`
 
-`@FunctionalInterface`：当网络请求无法送达时触发的回调。
+`@FunctionalInterface`：当网络请求无法送达时触发的回调。完整文件路径 `cn.howxu/mmcr/api/publicapi/network/RequestFailed.java`。
 
 #### 接口签名
 
@@ -5220,7 +5225,7 @@ public interface RequestFailed {
 
 | 参数 | 类型 | 含义 |
 | --- | --- | --- |
-| `body` | `RequestBody` | 未能送达的请求体。 |
+| `body` | `RequestBody` | 未能送达的请求体（公共类型）；与 `RequestProcess.process(...)` 收到的 `body` 是同一份不可变对象。 |
 | `request` | `RequestInfo` | 原始请求的 ID 与对端机器引用。 |
 | `senderStorage` | `DataStorage` 或 `null` | 发送方 `DataStorage`；发送方未启用数据存储时为 `null`。参数带 `@Nullable`，可直接判空。 |
 | `reason` | `RequestFailureReason` | 失败原因枚举。 |
@@ -5236,7 +5241,7 @@ public interface RequestFailed {
 
 完整类名：`cn.howxu.mmcr.api.publicapi.network.RequestFailureReason`
 
-`RequestFailed.fail(...)` 的失败原因枚举。
+`RequestFailed.fail(...)` 的失败原因枚举。完整文件路径 `cn.howxu/mmcr/api/publicapi/network/RequestFailureReason.java`。
 
 #### 枚举值
 
@@ -5255,7 +5260,8 @@ public interface RequestFailed {
 
 :::warning 注意事项
 
-- 多个常量可同时触发；MMCR 内部选择最先匹配的常量。回调方应只依据具体常量做对应处理，不要假设互斥。
+- 多个失败条件可同时成立；MMCR 选择最先匹配的常量，回调方应只依据具体值做对应处理。
+- `RequestFailureReason` 与 Java 内部 `cn.howxu.mmcr.api.network.RequestFailureReason` 是同一枚举的两种视图，常量集合一致；脚本端只看到公共版本。
 
 ---
 :::
@@ -5286,7 +5292,8 @@ public final class NetworkApi {
 - 行为细节：
   - 接口方块所在 chunk 必须已加载，否则被过滤；
   - 通过 `executeBlocking(...)` 在主线程同步获取；
-  - 返回值是**不可变**副本。
+  - 返回值是**不可变**副本；
+  - 该方法不会主动抛出网络层异常——目标机器的失败回调始终通过 `MachineBuilder.requestFailed(...)` 注册的处理器派发。
 
 ##### `sendRequest(source, target, requestId, body)`
 
@@ -5301,9 +5308,11 @@ public final class NetworkApi {
 
 行为细节：
 
-- 通过 `source.bridgeValue()` 取出内部 `cn.howxu.mmcr.api.network.NetworkInterfaceReference`，由 MMCR 在主线程入队；
-- 目标不在 `source` 的连接表中时抛 `IllegalArgumentException("Target is not connected to the source interface")`；
-- 若目标方未注册对应 `requestId` 的 `RequestProcess`，请求在送达时按 `TARGET_HANDLER_MISSING` 失败，调用源机器通过 `MachineBuilder.requestFailed(...)` 注册的失败回调。
+- 通过 `source.bridgeValue()` 取出内部 `cn.howxu.mmcr.api.network.NetworkInterfaceReference`，由 MMCR 在主线程序列化后入队；
+- 目标不在 `source` 的连接表中时抛 `IllegalArgumentException("Target is not connected to the source interface")`，**不会**调用 `RequestFailed` 回调；
+- `requestId` 解析失败或网络层入队失败时抛 `IllegalArgumentException`；
+- 若目标方未注册对应 `requestId` 的 `RequestProcess`，请求在送达时按 `TARGET_HANDLER_MISSING` 失败，调用源机器通过 `MachineBuilder.requestFailed(...)` 注册的失败回调；
+- 白名单未配置、结构快照失效、控制器哈希不匹配等更多失败原因见 [`RequestFailureReason`](#requestfailurereason)；任何中间异常不会回调 `RequestFailed`——只会在服务器日志中记录。
 
 ##### 示例
 
@@ -5330,6 +5339,8 @@ public final class ProducerBehavior implements MachineBehavior {
 - 该类是网络通信的**唯一** Java 入口——不要直接访问 MMCR 内部的 `NetworkServerState` / `PendingRequest`。
 - `interfaces(...)` 仅在控制器已成型时返回非空；调用方应忽略空结果。
 - `sendRequest(...)` 是异步入队；目标方实际处理发生在服务端下一 tick。
+- `RequestFailed` 回调中 `senderStorage` 可能为 `null`；需要源头数据时应自行通过 `request.peer()` 重新查询。
+- 网络白名单由 `MachineBuilder.networkInterface(maxCount, maxConnections)` + `MachineBuilder.allowNetworkMachine(machineId)` 双向校验；缺一会触发 `ALLOWLIST_REJECTED`。
 
 ---
 :::

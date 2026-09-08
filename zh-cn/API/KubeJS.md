@@ -50,12 +50,12 @@ const maxInt = MMCR.getValues().INT_MAX
 const minInt = MMCR.getValues().INT_MIN
 ```
 
-**注意事项**
+:::warning 注意事项
 
 - `MMCR.getAPI()` 与事件对象的 `event.getAPI()` 返回相同类型，但不要求每次脚本都重新创建。
 - 启动脚本通常可以直接使用全局 `MMCR.getAPI()`；结构脚本使用 `event.getAPI()` 可让代码明确处于 `mmcr.server` 回调内。
 - `MMCR` 不是机器注册器本身，机器仍需通过 `MMCREvents.startup` 创建并 `register()`。
-
+:::
 #### `MMCRKubeJS` 实现类
 
 `MMCRKubeJS` 的完整类名为 `cn.howxu.mmcr.compat.kubejs.MMCRKubeJS`。它只有两个公开方法 `getAPI()` 和 `getValues()`；类的两个门面字段为私有字段，不应通过字段名直接依赖。
@@ -82,11 +82,11 @@ const upper = MMCR.getValues().INT_MAX
 const lower = MMCR.getValues().INT_MIN
 ```
 
-**注意事项**
+:::warning 注意事项
 
 - 这些值是 Java `int` 边界，不是 `long` 或任意精度整数边界。
 - 大于 `int` 的数值应在脚本中使用 Java `BigInteger` 或其他适合的数值类型，并通过 `dataValue` 时确认目标 API 是否支持该类型。
-
+:::
 ### `MMCREvents`
 
 > `cn.howxu.mmcr.compat.kubejs.MMCREvents` 是 MMCR 声明脚本事件组，包含启动期和服务期两个事件。
@@ -165,13 +165,13 @@ MMCREvents.server(event => {
 const ids = MMCREvents.events()
 ```
 
-**注意事项**
+:::warning 注意事项
 
 - `MMCREvents.startup` 的回调运行在 `ScriptType.STARTUP`，机器定义、等级类型、等级、修饰符和控制器屏幕文本注册应放在这里。
 - `MMCREvents.server` 的回调运行在 `ScriptType.SERVER` 的 KubeJS 内容事务内，结构的 `build()` 必须在这个窗口中执行。
 - `postStartup()`、`postServer()` 和 `group()` 是 Java 侧事件组生命周期方法；普通脚本只应使用事件组的监听入口。
 - 事件组同时以插件注册的 `mmcr` 名称存在；为了兼容和可读性，机器定义脚本优先使用 `MMCREvents` 别名。
-
+:::
 ## 2. 启动期回调
 
 ### `MMCRStartupEventJS`
@@ -306,13 +306,13 @@ MMCREvents.startup(event => {
 })
 ```
 
-**注意事项**
+:::warning 注意事项
 
 - 启动窗口由插件在 `beforeScriptsLoaded` 中打开，在 `afterScriptsLoaded` 中发布事件并完成提交；脚本结束后不能通过 `/reload` 重新打开机器注册窗口。
 - 等级类型应先于具体等级注册；结构脚本只能引用已经存在的等级类型。
 - `registerControllerScreenText` 只能在启动事件上调用，服务期事件没有该方法。
 - `registerModifier` 和 `registerModifierItem` 虽然位于启动回调 API 中，最终由机器结构注册快照统一校验。
-
+:::
 ## 3. 服务期回调
 
 ### `MMCRServerEventJS`
@@ -360,12 +360,12 @@ MMCREvents.server(event => {
 })
 ```
 
-**注意事项**
+:::warning 注意事项
 
 - `build()` 必须在 `MMCREvents.server` 脚本加载期间调用；离开该回调后调用会抛 `IllegalStateException`。
 - 服务端重载事务会同时收集结构和编程式配方；脚本出现错误时，插件不会提交这一轮事务。
 - 机器定义、等级类型和修饰器不应在此事件重复注册。
-
+:::
 ## 4. KubeJSApi 完整方法
 
 ### `KubeJSApi`
@@ -1113,7 +1113,7 @@ const value = api.dataValue({ power: 20, labels: ["active", "safe"] })
 ctx.dataStorage().set("state", value)
 ```
 
-**注意事项**
+:::warning 注意事项
 
 - 方块谓词工厂会即时检查 `block` 的注册表项，但标签谓词允许标签在之后的资源绑定阶段解析。
 - `state` 的属性名和值必须与对应方块的状态定义完全一致。
@@ -1121,7 +1121,7 @@ ctx.dataStorage().set("state", value)
 - `customRecipeIo` 只接受已经注册 codec 的类型，任意 JSON 并不会自动成为自定义 IO。
 - `dataValue` 的映射值也会递归转换；网络请求根对象必须是映射，不能直接发送单个数字或字符串。
 - `smartInterfaceInput` 的 API 门面只有范围签名；固定值需求应使用相同的 `min` 和 `max`，或使用编程式配方构建器的固定值重载。
-
+:::
 ## 5. 机器定义构建器
 
 ### `MachineBuilderJS`
@@ -2089,12 +2089,12 @@ machine.smartInterface("mode", 1, 3).valueType("integer").end()
 machine.smartInterface("mode", 1, 3).priority(1).valueType("integer").end()
 ```
 
-**注意事项**
+:::warning 注意事项
 
 - 智能接口的最小值必须小于等于最大值；`INTEGER` 类型还要求最值和默认值是整数。
 - `end()` 之前的 `priority`/`valueType` 顺序任意；多次调用同一方法以最后一次为准。
 - 同一 `MachineBuilderJS` 上 `smartInterface(type, ...)` 可以调用多次，类型名重复时由机器注册阶段拒绝。
-
+:::
 ## 6. 结构构建器
 
 ### `MachineStructureBuilderJS`
@@ -2425,14 +2425,14 @@ const entry = new (Java.loadClass("cn.howxu.mmcr.compat.kubejs.MachineStructureB
 structure.set("X", entry)
 ```
 
-**注意事项**
+:::warning 注意事项
 
 - 模式字符必须是非空格单个字符；空格表示该位置不校验。
 - 不同 `pattern(...)` 调用必须保持相同宽度与高度，否则抛 `IllegalArgumentException`。
 - 阶段式 API 与扁平式 API 不能混用；一旦调用 `mainStructure` / `expandStructure` / `extension(Consumer)`，再调用 `pattern`/`set`/`controller`/`modifier` 也会抛 `IllegalStateException`。
 - `fullStructure(BlockArray)`/`extension(BlockArray)` 系列只暴露 `BlockArray` / 公共 API 类型；纯 `BlockArray.Builder` 调用需要 Java 互操作。
 - `PatternEntry` 不会修改需求（修饰器、等级槽位）；如果需要把同一字符绑定为多种替换，请多次调用 `modifier(symbol, use)`。
-
+:::
 ### `MachineStructureStageBuilderJS`
 
 > `cn.howxu.mmcr.compat.kubejs.MachineStructureStageBuilderJS` 是 `mainStructure` / `expandStructure` / `extension` 回调收到的临时构建器，只作用于当前阶段。
@@ -2564,12 +2564,12 @@ mainStructure(stage => stage.dynamicPattern(myDynamicPattern))
 stage.pattern("X").set("X", "minecraft:iron_block").controller("X")
 ```
 
-**注意事项**
+:::warning 注意事项
 
 - 阶段构建器在 `mainStructure` / `expandStructure` / `extension` 回调执行完后即失效。
 - 同一个阶段内的字符必须通过 `pattern(...)` 声明，缺失字符不能 `set`。
 - 等级槽位通过 `set(symbol, levelSlot)` 自动登记在当前阶段的 `requirements` 中。
-
+:::
 ## 7. 配方
 
 ### `MachineRecipeSchema`
@@ -2617,12 +2617,12 @@ stage.pattern("X").set("X", "minecraft:iron_block").controller("X")
 | `requiredHost(hostId)` | `(String)` | 把宿主机器 ID 追加到 `required_host_ids`。 |
 | `requiresLevel(typeId, levelId)` | `(String, String)` | 校验等级与类型匹配，并把 `{type, level}` 追加到 `level_requirements`。 |
 
-**注意事项**
+:::warning 注意事项
 
 - `allowPartialOutputs` 函数无参，作用与设置字段 `allow_partial_outputs: true` 等价；字段默认 `false`。
 - `custom` 函数对 `input` 方向或未注册的输出类型使用 `MachineRecipeConverter.toRequirement`，对已注册的输出类型使用 `MachineRecipeConverter.toOutput`。
 - `requiresLevel` 在等级类型不匹配时抛 `IllegalArgumentException`，由 KubeJS 捕获并写入配方控制台。
-
+:::
 #### 数据驱动配方最小示例
 
 ```javascript
@@ -3178,12 +3178,12 @@ const recipe = builder.createObject()
 builder.build()
 ```
 
-**注意事项**
+:::warning 注意事项
 
 - 数据驱动配方（`event.custom({...})`）与 `MachineRecipeBuilderJS` 都通过同一份 `MachineRecipe`；脚本通常优先使用前者。
 - 编程式构建器只在 `MMCREvents.server` 回调内 `build()`，事务外调用会走静态注册路径。
 - 同一 ID 在数据驱动配方、编程式配方、Java 公共 API 三条路径之间全局唯一。
-
+:::
 ## 8. 行为构建器
 
 ### `MachineBehaviorBuilderJS`
@@ -3296,12 +3296,12 @@ machine.tickBehavior(behavior => behavior.serverTick(ctx => {
 const behavior = behaviorBuilder.build()
 ```
 
-**注意事项**
+:::warning 注意事项
 
 - `RecipeStartContext`、`RecipeTickContext`、`RecipeFinishContext`、`TickBehaviorContext` 等参数类型需要通过 `Java.loadClass` 或 KubeJS 自动解析传入。
 - `RecipeTickContext` 不提供 `ioPlan`；只有 `TickBehaviorContext` 暴露 IO 计划。
 - 配方回调中的 `ctx.machineContext()` 返回 `MachineBehaviorContext`，可访问 `dataStorage`、`screenText`、`jadeText`、`level`、`controllerPos()` 等运行时状态。
-
+:::
 ## 9. 等级与等级类型
 
 ### `LevelTypeBuilderJS`
@@ -3479,12 +3479,12 @@ event.createLevel("example:coil_iron")
     .register()
 ```
 
-**注意事项**
+:::warning 注意事项
 
 - 等级类型应先于具体等级注册；先注册具体等级会因为找不到类型而被拒绝。
 - 等级的 `priority` 不影响结构匹配合法性，只决定玩家放置多个等级时的优先级与连接方向。
 - `modifier` 字段中的乘数必须严格大于 `0`；`parallelismBonus` 与 `factoryThreadBonus` 缺省按 `IDENTITY` 取值。
-
+:::
 ## 10. 控制器屏幕文本
 
 ### `ControllerScreenTextEventJS`
@@ -3631,12 +3631,12 @@ MMCREvents.startup(event => {
 })
 ```
 
-**注意事项**
+:::warning 注意事项
 
 - `lineId` 必须是带命名空间的合法 ID；推荐使用 `your_mod:line_name`。
 - 静态文本行（`controller` 作用域）每次客户端 tick 都会重新执行；`replace` 是最后一次写入生效的语义。
 - 翻译键占位参数支持 `Component` 与基础数值；不要传入无法序列化为 JSON 的对象。
-
+:::
 ## 11. 智能接口事件
 
 ### `SmartInterfaceEvents`
@@ -3792,12 +3792,12 @@ event.controllerPositions().forEach(p => {
 })
 ```
 
-**注意事项**
+:::warning 注意事项
 
 - 事件仅在 `mmcr.smart_interface.updated` 上发送；目前 `MMCRStartupEventJS.registerControllerScreenText` 与 `SmartInterfaceUpdateEventJS` 是独立的两套 API。
 - `oldValue`/`newValue` 在创建/删除绑定时其中之一为 `null`。
 - 控制器位置以不可变 `BlockPos` 形式给出；直接共享给其他方块实体即可。
-
+:::
 ## 12. 内部辅助
 
 > 本节列出的是 KubeJS 集成层内部使用的辅助类，**不暴露给脚本**。它们的作用是支撑上面的 API，不要在用户脚本里直接引用。

@@ -90,14 +90,14 @@ public final class MyMachinesProvider implements MachineDefinitionProvider {
 com.example.mymachines.MyMachinesProvider
 ```
 
-#### 注意事项
+:::warning 注意事项
 
 - 一个 Mod 可以注册多个 Provider，每个 Provider 仅负责自己声明的机器，MMCR 会按 `ServiceLoader.load(...)` 返回顺序依次调用。
 - 不要在 Provider 实现内持有任何 `MachineDefinition` 实例的强引用；定义应在 `register(...)` 内即时构建并提交。
 - Provider 的生命周期与启动期绑定。结构与配方事件通过 NeoForge 事件总线发布，必须通过 `@SubscribeEvent` 订阅，与 Provider 是两条独立路径。
 
 ---
-
+:::
 ### `MMCRMachineDefinationsEvent`
 
 完整类名：`cn.howxu.mmcr.api.publicapi.event.MMCRMachineDefinationsEvent`
@@ -155,14 +155,14 @@ event.registerMachine(MY_MACHINE, ...);
 
 MMCR 启动期在加载所有 Provider 之前初始化一个空的 `MMCRMachineDefinationsEvent`，逐个调用 `Provider.register(event)`，最后调用 `freeze()`。启动窗口结束后不可再次注册。
 
-#### 注意事项
+:::warning 注意事项
 
 - 机器定义事件不可热加载。修改 Provider 后必须重启游戏。
 - 不要在同一 Mod 内用多个 Provider 声明同一机器 ID。
 - 机器定义只包含机器本身的属性（外观、控制器、并行、工厂等）。多方块结构应在 `MMCRMachineStructuresEvent` 中提交，配方应在 `MMCRMachineRecipesEvent` 中提交。
 
 ---
-
+:::
 ### `MachineBuilder`
 
 完整类名：`cn.howxu.mmcr.api.publicapi.machine.MachineBuilder`
@@ -336,14 +336,14 @@ public final class MachineBuilder {
 - `maxParallelAmount` → `1`
 - `behavior` → `RecipeBehavior.defaults()`（配方数据驱动）
 
-#### 注意事项
+:::warning 注意事项
 
 - 构建器内部持有可变状态，所有 `xxx(...)` 调用返回 `this` 以支持链式调用。
 - 多次调用同一字段方法会覆盖之前的值。例如两次 `displayNameKey(...)`，以最后一次为准。
 - 不要在多个线程上共享一个构建器实例。构建器不是线程安全的。
 
 ---
-
+:::
 ### `MachineDefinition`
 
 完整类名：`cn.howxu.mmcr.api.publicapi.machine.MachineDefinition`
@@ -418,14 +418,14 @@ public record MachineDefinition(
 - `role != HOST` 但 `acceptedModuleIds` 非空 → `IllegalStateException`。
 - `role == HOST` 但 `acceptedModuleIds` 为空 → `IllegalStateException`。
 
-#### 注意事项
+:::warning 注意事项
 
 - `MachineDefinition` 是不可变值对象。一旦构建完成，所有属性都不可修改。
 - `pattern` 字段为旧式兼容字段，新代码应使用 `MachineStructureDefinition` 替代。
 - `behavior` 字段必须是 `RecipeBehavior` 或 `TickBehavior` 的实例。
 
 ---
-
+:::
 ### `AppearanceSpec`
 
 完整类名：`cn.howxu.mmcr.api.publicapi.machine.AppearanceSpec`
@@ -469,14 +469,14 @@ public static final class Builder {
 | `formedPortBaseTexture(...)` | 设置成型后端口方块的底面纹理 ID。 |
 | `build()` | 终结构建，返回不可变的 `AppearanceSpec`。 |
 
-#### 注意事项
+:::warning 注意事项
 
 - 三个字段都是可选的，未设置时为 `null`。MMCR 在内部使用各自的回退值。
 - 字符串 ID 通过 `Identifier.parse(...)` 解析；非法字符串会抛 `IllegalArgumentException`。
 - 外观纹理与基础方块的 ID 必须指向已注册的资源；未注册的 ID 不会立即报错，而是在首次渲染时表现为默认纹理。
 
 ---
-
+:::
 ### `FactorySpec`
 
 完整类名：`cn.howxu.mmcr.api.publicapi.machine.FactorySpec`
@@ -528,14 +528,14 @@ public static final class Builder {
 
 - `IllegalArgumentException`：`name` 为空字符串，`threadLimit < 1`。
 
-#### 注意事项
+:::warning 注意事项
 
 - 工厂并行是"在机器内部独立线程上同时处理多个配方"的能力，与"并行控制器"（一台机器的同一配方运行多份）不同。
 - 启用工厂并行后，必须同时通过 `MachineBuilder.allowMultithreading()` 启用，否则多线程不会被调度。
 - 线程规格的 `recipeIds` 只是一种优先级声明——MMCR 调度器仍可在多个线程间重新分配配方。
 
 ---
-
+:::
 ## 2 结构阶段
 
 ### `MMCRMachineStructuresEvent`
@@ -629,7 +629,7 @@ public final class MyStructureRegistrar {
 
 MMCR 在结构加载阶段创建并发布该事件。所有 Mod 的订阅者依次执行后冻结事件。当前生产构建中结构定义不可热加载——修改后必须重启游戏。
 
-#### 注意事项
+:::warning 注意事项
 
 - 结构事件是 NeoForge 事件总线事件，必须通过 `@SubscribeEvent` 订阅。
 - 一个机器 ID 只能注册一个结构。重复注册抛 `ApiRegistrationException`。
@@ -638,7 +638,7 @@ MMCR 在结构加载阶段创建并发布该事件。所有 Mod 的订阅者依�
 - 同一机器 ID 在 KubeJS 与 Java 端如果都想注册结构，只允许一次——重复注册会被覆盖检测拦截。
 
 ---
-
+:::
 ### `MachineStructureBuilder`
 
 完整类名：`cn.howxu.mmcr.api.publicapi.machine.MachineStructureBuilder`
@@ -678,14 +678,14 @@ public final class MachineStructureBuilder {
 - `IllegalArgumentException`：阶段列表为空、缺少 `FULL` 阶段、存在多个 `FULL` 阶段。
 - `IllegalStateException`：`expandStructure` 之前未声明 `FULL` 阶段；模式未声明或控制器符号缺失。
 
-#### 注意事项
+:::warning 注意事项
 
 - 一台机器必须且只能有一个 `FULL` 阶段。
 - `expandStructure(...)` 必须在 `fullStructure(...)` 之后调用。
 - 与 KubeJS API 的对照：KubeJS 的 `.pattern(...)` / `.set(...)` / `.controller(...)` / `.build()` 在底层会自动包裹一个 `fullStructure(...)`，Java API 因此多了一层包装。
 
 ---
-
+:::
 ### `StructureStage`
 
 完整类名：`cn.howxu.mmcr.api.publicapi.machine.StructureStage`
@@ -743,14 +743,14 @@ public static final class Builder {
 | `modifier(char, ModifierUse)` | 为模式中已有的字符绑定一个修饰符替换规则。 |
 | `build()` | 终结构建，返回不可变的 `StructureStage`。 |
 
-#### 注意事项
+:::warning 注意事项
 
 - 大多数机器只需要一个 `FULL` 阶段。
 - 一台机器必须且只能有一个 `FULL` 阶段，由 `MachineStructureBuilder.build(...)` 校验。
 - `pattern(...)` 必须被调用，否则构建器内部会因 `pattern` 为 `null` 在 `build()` 阶段抛 `NullPointerException`。
 
 ---
-
+:::
 ### `PatternBuilder`
 
 完整类名：`cn.howxu.mmcr.api.publicapi.machine.PatternBuilder`
@@ -831,7 +831,7 @@ XXX      ← y = 2（最上层 y 行）
 
 `layer(...)` 的参数按 `rowIndex` 顺序对应同一 z 层内从下到上的 y 行；同一字符串内的每个字符按 `columnIndex` 顺序对应同一行中的不同 x 位置。不同 `layer(...)` 调用对应不同 z 层。
 
-#### 注意事项
+:::warning 注意事项
 
 - 不同 `layer(...)` 调用必须保持相同的行数（高度）和每行的字符数（宽度）。
 - `where(...)` 与 `controller(...)` 的调用顺序不影响最终结果。
@@ -839,7 +839,7 @@ XXX      ← y = 2（最上层 y 行）
 - 一个模式中每个字符绑定一个谓词；同一字符不可重复绑定到不同谓词。
 
 ---
-
+:::
 ### `BlockPredicate`
 
 完整类名：`cn.howxu.mmcr.api.publicapi.machine.BlockPredicate`
@@ -895,7 +895,7 @@ public final class BlockPredicate {
 | `tag()` | `Optional<TagKey<Block>>` | 返回构造时绑定的标签。 |
 | `alternatives()` | `List<BlockPredicate>` | 返回并集谓词的子谓词列表；非并集谓词返回空列表。 |
 
-#### 注意事项
+:::warning 注意事项
 
 - `BlockPredicate` 是不可变值对象，可以安全共享。
 - 通过字符串 ID 构造的方块谓词在调用时才会解析方块引用；如果注册表中不存在该 ID，匹配会失败（不会立即报错）。
@@ -904,7 +904,7 @@ public final class BlockPredicate {
 - `state(...)` 字符串中的属性名必须严格匹配方块状态定义中的属性名；属性值也必须合法（区分大小写）。
 
 ---
-
+:::
 ### `InterfacePredicates`
 
 完整类名：`cn.howxu.mmcr.api.publicapi.machine.InterfacePredicates`
@@ -977,7 +977,7 @@ public final class InterfacePredicates {
 | `dataStorage()` | 内置数据存储方块 |
 | `networkInterface()` | 内置网络接口方块 |
 
-#### 注意事项
+:::warning 注意事项
 
 - 端口"族"快捷方法通过遍历所有已注册端口的实现，匹配绑定到指定族与流向的端口方块。新增自定义端口后这些快捷方法会自动包含。
 - 不要在结构中使用 `ports()` 作为某个字符的绑定，除非该字符位置允许任意端口。
@@ -985,7 +985,7 @@ public final class InterfacePredicates {
 - `anyOfPort()` 的所有变体都要求至少一个端口参数。
 
 ---
-
+:::
 ### `PortTiers`
 
 完整类名：`cn.howxu.mmcr.api.publicapi.machine.PortTiers`
@@ -1060,14 +1060,14 @@ public static final class Builder {
 
 - `IllegalArgumentException`：`minTier` 与 `minTierId` 不匹配。
 
-#### 注意事项
+:::warning 注意事项
 
 - 端口等级要求只是声明，不参与结构匹配的合法性判定。MMCR 启动期会校验玩家放置的端口方块是否满足这些要求；不满足的端口方块仍可放置，但机器无法正常运转。
 - 不同端口族的等级枚举互不兼容。
 - `PortTiers.combine(...)` 用于合并多个端口等级声明，结果按声明顺序追加。
 
 ---
-
+:::
 ### `MachineStructureDefinition`
 
 完整类名：`cn.howxu.mmcr.api.publicapi.machine.MachineStructureDefinition`
@@ -1095,14 +1095,14 @@ public record MachineStructureDefinition(
 - `stages` 不能为空，且第一个阶段必须是 `FULL`。
 - 只能存在一个 `FULL` 阶段。
 
-#### 注意事项
+:::warning 注意事项
 
 - `MachineStructureDefinition` 是不可变值对象。一旦构建完成，全部阶段都不可修改。
 - 多阶段结构适用于需要多形态或附属结构的机器。大多数机器只包含一个 `FULL` 阶段。
 - 结构与机器定义是两条独立路径——机器定义在启动期冻结，结构在结构加载阶段冻结。一台机器可以只声明定义而不声明结构，但反过来不行。
 
 ---
-
+:::
 ## 3 配方阶段
 
 ### `MMCRMachineRecipesEvent`
@@ -1168,7 +1168,7 @@ event.registerRecipe(MY_RECIPE, ...);
 
 MMCR 在配方加载阶段创建并发布该事件。生产构建中配方不可热加载——修改后必须重启游戏。
 
-#### 注意事项
+:::warning 注意事项
 
 - 配方事件是 NeoForge 事件总线事件，必须通过 `@SubscribeEvent` 订阅。
 - 配方 ID 必须全局唯一，跨机器不可重复。
@@ -1176,7 +1176,7 @@ MMCR 在配方加载阶段创建并发布该事件。生产构建中配方不可
 - 配方与机器的耦合只通过机器 ID：配方 ID 不必包含机器 ID，但建议使用 `<machine_id>_<recipe_index>` 命名以便阅读。
 
 ---
-
+:::
 ### `MachineRecipeBuilder`
 
 完整类名：`cn.howxu.mmcr.api.publicapi.recipe.MachineRecipeBuilder`
@@ -1289,14 +1289,14 @@ public final class MachineRecipeBuilder {
 
 终结构建，返回不可变的 `MachineRecipeDefinition`。约束由构建器在 `build()` 阶段进行最终检查。
 
-#### 注意事项
+:::warning 注意事项
 
 - 多次调用同一字段方法会覆盖之前的值。
 - 数据驱动的配方走另外一条通道，不通过此事件。
 - `custom(...)` 与 `smartInterface(...)` 适用于需要与 MMCR 之外的子系统对接的高级场景。
 
 ---
-
+:::
 ### `MachineRecipeDefinition`
 
 完整类名：`cn.howxu.mmcr.api.publicapi.recipe.MachineRecipeDefinition`
@@ -1365,14 +1365,14 @@ public record MachineRecipeDefinition(
 - `priority < 0` 抛 `IllegalArgumentException`。
 - `maxThreads < 1` 抛 `IllegalArgumentException`。
 
-#### 注意事项
+:::warning 注意事项
 
 - `MachineRecipeDefinition` 是不可变值对象，构建后全部字段都不可修改。
 - 能量输出字段复用 `EnergyInput` 类型，由 `ioType` 区分输入 / 输出。
 - 配方 ID 必须全局唯一，跨机器不可重复。
 
 ---
-
+:::
 ## 4 顶层入口
 
 本节覆盖公共 API 模块的顶层入口类。这些类不参与机器 / 结构 / 配方构建流程，但提供 MMCR 启动期状态的查询入口、自定义 IO 校验、注册异常类型与数字格式化工具。
@@ -1402,13 +1402,13 @@ if (MachineApi.isRegistrationOpen()) {
 }
 ```
 
-#### 注意事项
+:::warning 注意事项
 
 - 该方法读取的是 MMCR 内部 `Hook` 状态，仅在 Mod 启动期或服务端线程内调用。
 - 在游戏主菜单或世界中调用将始终返回 `false`。
 
 ---
-
+:::
 ### `RecipeApi`
 
 完整类名：`cn.howxu.mmcr.api.publicapi.RecipeApi`
@@ -1445,13 +1445,13 @@ CustomRecipeIo io = RecipeApi.custom(
         RecipeIo.INPUT, payload);
 ```
 
-#### 注意事项
+:::warning 注意事项
 
 - 该方法在调用时会解析 codec，因此依赖于目标类型已被注册；启动期之前调用会因类型未注册而抛 `IllegalArgumentException`。
 - 与 `CustomRecipeIo` 的直接构造器不同，`RecipeApi.custom(...)` 会主动执行 codec 校验；KubeJS 端走 `KubeJSApi.custom(...)`。
 
 ---
-
+:::
 ### `ApiRegistrationException`
 
 完整类名：`cn.howxu.mmcr.api.publicapi.ApiRegistrationException`
@@ -1481,13 +1481,13 @@ try {
 }
 ```
 
-#### 注意事项
+:::warning 注意事项
 
 - 该异常专门用于 API 注册路径。配方数据驱动的 `IllegalArgumentException`（配方参数非法）与 `IllegalStateException`（配方 ID 重复）仍按原类型抛出。
 - 启动窗口之外的注册操作通常抛 `IllegalStateException` 而非 `ApiRegistrationException`，例如 `ApiRuntime` 在 hook 缺失时直接抛 `IllegalStateException`。
 
 ---
-
+:::
 ### `ApiRuntime`
 
 完整类名：`cn.howxu.mmcr.api.publicapi.ApiRuntime`
@@ -1557,13 +1557,13 @@ public interface Hook {
 
 MMCR 内部实现的桥接接口。Mod 通常不直接实现它，而是依赖 MMCR 启动时自动安装的实现。
 
-#### 注意事项
+:::warning 注意事项
 
 - `ApiRuntime` 是公共 API 模块与 MMCR 主模块之间的边界类；它对外可见是为了让主模块能够在不同的运行环境（开发、单元测试、模组）中替换实现。
 - 启动期之外的注册路径应使用 `MachineDefinitionProvider`、`@SubscribeEvent` 订阅结构 / 配方事件等正常方式，不要绕过 `ApiRuntime` 直接操作。
 
 ---
-
+:::
 ### `ReadableNumber`
 
 完整类名：`cn.howxu.mmcr.api.publicapi.ReadableNumber`
@@ -1627,14 +1627,14 @@ ReadableNumber.formatExact(1_234_567L);        // "1,234,567"
 ReadableNumber.formatForSlot(2_500_000, 0, "FE"); // "2.50MFE"
 ```
 
-#### 注意事项
+:::warning 注意事项
 
 - 所有数字格式化都按 `Locale.ROOT` 渲染，避免本地化导致 UI 数值错位。
 - `format` / `formatCompact` 使用截断（`RoundingMode.DOWN`），不是四舍五入——`999.999` 会被格式化为 `999`。
 - `formatForSlot` 与 `formatCompact` 的 SI 前缀选择策略不同：`formatCompact` 从 1000 起跳；`formatForSlot` 还会把 `value / 10^scale` 重新对齐到 5 字符宽度。
 
 ---
-
+:::
 ## 5 渲染事件
 
 本节覆盖渲染器注册阶段的事件。渲染器在 MMCRMachineRendersEvent 阶段提交，绑定到机器 ID，并在控制器方块渲染时被回调。
@@ -1711,14 +1711,14 @@ public final class MyRendererRegistrar {
 
 MMCR 在启动期与结构加载之后、配方加载之后发布渲染器事件。生产构建中渲染器不可热加载。
 
-#### 注意事项
+:::warning 注意事项
 
 - 同一机器 ID 只能注册一个渲染器；重复注册会被 `ApiRegistrationException` 拦截。
 - 渲染器回调只在客户端运行，不要在其中调用任何服务端 API。
 - `machineIds` 在构造时确定——构造事件时传入的 ID 集合决定了允许注册哪些机器的渲染器。
 
 ---
-
+:::
 ## 6 行为与上下文（机器端）
 
 本节覆盖机器端的行为策略与运行时上下文。机器在构建时声明一个 `MachineBehavior`（配方驱动或 tick 驱动），运行时 MMCR 会向策略注入 `MachineBehaviorContext` 或其子类，使回调能够读写 IO、屏幕文本与 JADE 文本。
@@ -1776,13 +1776,13 @@ MachineBehavior.MachineCallback idleStart = ctx ->
                 Component.literal("Idle"));
 ```
 
-#### 注意事项
+:::warning 注意事项
 
 - 该接口是 `sealed`，不能由用户自行实现；如需自定义行为，组合 `RecipeBehavior` 或 `TickBehavior`。
 - 内部函数式接口通过 `RecipeBehavior.Builder` / `TickBehavior.Builder` 暴露，而不是直接由用户实现。
 
 ---
-
+:::
 ### `MachineBehaviorContext`
 
 完整类名：`cn.howxu.mmcr.api.publicapi.machine.MachineBehaviorContext`
@@ -1878,14 +1878,14 @@ public MachineBehaviorContext(MachineControllerBlockEntity controller, ServerLev
 - `upgradeItems` 会被深拷贝，外部修改不会影响上下文中的列表。
 - `controllerPos` 会被冻结为不可变副本。
 
-#### 注意事项
+:::warning 注意事项
 
 - 上下文中的所有字段都是只读视图；要修改机器内部状态，应当通过 `controller()` 或 `screenText()` 提供的句柄。
 - `gameTime()` 是服务端世界时间，不是客户端世界时间，不要在客户端回调中使用。
 - 默认 `MachineBehaviorContext.empty(machineId)` 会构造一个无控制器、无屏幕文本、无 IO 视图的占位上下文，仅用于 MMCR 内部不直接来自控制器的场景（如 `RecipeStartContext` 的初始构造）。
 
 ---
-
+:::
 ### `RecipeBehavior`
 
 完整类名：`cn.howxu.mmcr.api.publicapi.machine.RecipeBehavior`
@@ -1967,14 +1967,14 @@ MachineBuilder.machine(MY_ID)
                 }));
 ```
 
-#### 注意事项
+:::warning 注意事项
 
 - `RecipeBehavior` 与 `TickBehavior` 互斥；在 `MachineBuilder` 中调用 `recipeBehavior(...)` 后再调用 `tickBehavior(...)` 会抛 `IllegalStateException`。
 - `preServerTick` / `postServerTick` 只在 `recipeBehavior` 上下文中可用；`tickBehavior(...)` 之后调用会抛 `IllegalStateException`。
 - 回调抛出的异常会被 MMCR 捕获并记录，机器会进入失败状态。
 
 ---
-
+:::
 ### `RecipeStartContext`
 
 完整类名：`cn.howxu.mmcr.api.publicapi.machine.RecipeStartContext`
@@ -2043,13 +2043,13 @@ MMCR 内部构造。Mod 通常通过 `beforeStart` 钩子接收上下文，而�
 - `IllegalArgumentException`：`requestedParallelism <= 0` / `effectiveParallelism <= 0` / `duration <= 0`。
 - `NullPointerException`：`recipe` / `machineContext` / `requirements` / `outputs` 为 `null`。
 
-#### 注意事项
+:::warning 注意事项
 
 - 修改 `duration` / `requirements` / `outputs` 不会立即影响底层 `MachineRecipe`；MMCR 在 `beforeStart` 结束时统一应用。
 - 在 `setRequirements(...)` 中只能修改内置需求（物品 / 流体 / 能量），自定义输出条目必须改用 `setOutputs(...)`。
 
 ---
-
+:::
 ### `RecipeTickContext`
 
 完整类名：`cn.howxu.mmcr.api.publicapi.machine.RecipeTickContext`
@@ -2082,13 +2082,13 @@ public RecipeTickContext(MachineBehaviorContext machineContext, MachineRecipe re
 - `IllegalArgumentException`：`currentTick < 0` / `totalTick <= 0` / `parallelism <= 0`。
 - `NullPointerException`：任一引用参数为 `null`。
 
-#### 注意事项
+:::warning 注意事项
 
 - 与 `RecipeStartContext` / `RecipeFinishContext` 不同，`RecipeTickContext` 的 `requirements` / `outputs` 是只读副本；不要尝试调用 `setXxx(...)`。
 - 修改配方运行时表现应通过 `MachineIoView` 读取状态后使用 `MachineBuilder.recipeBehavior(...)` 中的其他钩子。
 
 ---
-
+:::
 ### `RecipeFinishContext`
 
 完整类名：`cn.howxu.mmcr.api.publicapi.machine.RecipeFinishContext`
@@ -2130,13 +2130,13 @@ public RecipeFinishContext(MachineBehaviorContext machineContext, MachineRecipe 
 - `IllegalArgumentException`：`requestedParallelism <= 0` / `effectiveParallelism <= 0`、或输出包含空 `ItemStack` / `FluidStack`。
 - `NullPointerException`：任一引用参数为 `null`。
 
-#### 注意事项
+:::warning 注意事项
 
 - 自定义输出条目在 `setOutputs(...)` 时按 codec 校验，但与 `RecipeStartContext` 不同，本上下文不主动推导需求；修改自定义输出可能需要同步修改 `requirements`。
 - `cancel()` 与 `discardOutputs()` 二选一：调用 `discardOutputs()` 后再调用 `cancel()` 仍按取消处理。
 
 ---
-
+:::
 ### `TickBehavior`
 
 完整类名：`cn.howxu.mmcr.api.publicapi.machine.TickBehavior`
@@ -2197,13 +2197,13 @@ MachineBuilder.machine(MY_ID)
         }));
 ```
 
-#### 注意事项
+:::warning 注意事项
 
 - 调用 `TickBehavior` 后再调用 `RecipeBehavior`（或在 `MachineBuilder` 中调用 `preServerTick` / `postServerTick`）会抛 `IllegalStateException`。
 - `serverTick` 回调中如果要做"配方消费"，应通过 `MachineIoPlan` 显式声明输入输出并 commit；不要假定 MMCR 会自动 tick 配方。
 
 ---
-
+:::
 ### `TickBehaviorContext`
 
 完整类名：`cn.howxu.mmcr.api.publicapi.machine.TickBehaviorContext`
@@ -2243,13 +2243,13 @@ public TickBehaviorContext(MachineBehaviorContext base, CapabilitySnapshot snaps
 - `IllegalArgumentException`：`factoryThreadCount < 1` / `parallelism < 1`。
 - `NullPointerException`：`base` / `snapshot` 为 `null`。
 
-#### 注意事项
+:::warning 注意事项
 
 - `ioPlan()` 每次调用都返回新的 `MachineIoPlan`；多次调用之间状态不共享。
 - `capabilityTickContext(phase)` 的阶段由调用者决定；MMCR 内部按阶段调度能力，Mod 通常使用 `IDLE` 即可。
 
 ---
-
+:::
 ## 7 控制器规格
 
 本节覆盖控制器方块的外观与朝向规格。
@@ -2348,14 +2348,14 @@ MachineBuilder.machine(MY_ID)
                 .tooltip("controller.my_mod.my_controller.tip"));
 ```
 
-#### 注意事项
+:::warning 注意事项
 
 - 控制器纹理与朝向是玩家放置控制器方块时的判定依据；若开启 `requireVerticalFacing()`，玩家无法将其放置为水平朝向。
 - `tooltip` 元素会自动去重空字符串，但不会去重重复行；如有需要可在调用方处理。
 - `MachineDefinition.controller` 默认是空 `ControllerSpec`，所有纹理字段为 `null`；MMCR 启动期会使用内置回退纹理。
 
 ---
-
+:::
 ## 8 高级机器属性
 
 本节覆盖机器的高级属性：角色、IO 计划与视图、显示物品栈、并行控制器等级。
@@ -2382,13 +2382,13 @@ MachineBuilder.machine(MY_HOST)
         .acceptedModule(Identifier.fromNamespaceAndPath("my_mod", "module_a"));
 ```
 
-#### 注意事项
+:::warning 注意事项
 
 - `MachineRole.HOST` 与 `acceptedModule(...)` 是一对约束：只有 `HOST` 可以声明模块；只有 `MODULE` 角色会被宿主 `acceptedModule(...)` 接受。
 - `MODULE` 角色的机器通常不能独立形成结构——它们只能作为宿主结构的一部分。
 
 ---
-
+:::
 ### `MachineIoPlan`
 
 完整类名：`cn.howxu.mmcr.api.publicapi.machine.MachineIoPlan`
@@ -2505,14 +2505,14 @@ if (sim.inputsSatisfied()) {
 }
 ```
 
-#### 注意事项
+:::warning 注意事项
 
 - `MachineIoPlan` 是一次性的，`commit(...)` 后不可再用；多次调用 `commit(...)` 会返回 `successful=false`。
 - `OutputPolicy.ALLOW_PARTIAL` 允许输出在容量受限时部分完成；`REQUIRE_FULL` 要求输出全部能放下，否则视为失败。
 - 调用 `addInput(...)` / `addOutput(...)` 会重置已缓存的 `Simulation`；不需要手动调用 `simulate()` 来清空。
 
 ---
-
+:::
 ### `MachineIoView`
 
 完整类名：`cn.howxu.mmcr.api.publicapi.machine.MachineIoView`
@@ -2581,14 +2581,14 @@ long spare = view.itemOutputCapacity(new ItemStack(Items.DIAMOND));
 Optional<Float> tier = view.smartInterfaceValue("efficiency");
 ```
 
-#### 注意事项
+:::warning 注意事项
 
 - 所有容量与数量都是聚合值，可能溢出到 `Long.MAX_VALUE`（`saturatedAdd`）。
 - `itemAmount(...)` / `fluidAmount(...)` 使用 `Ingredient.test(...)` 进行匹配，对于复合谓词可能产生多次比较；调用频率高时请注意性能。
 - `displays()` 返回的是渲染用的展示条目；不应在逻辑判断中依赖其内容。
 
 ---
-
+:::
 ### `DisplayStack`
 
 完整类名：`cn.howxu.mmcr.api.publicapi.machine.DisplayStack`
@@ -2624,13 +2624,13 @@ DisplayStack sample = DisplayStack.of(new ItemStack(Items.DIAMOND));
 Optional<DisplayStack> optional = DisplayStack.optional(registry.getItem("my_mod:icon").map(Item::getDefaultInstance).orElse(null));
 ```
 
-#### 注意事项
+:::warning 注意事项
 
 - 每次 `stack()` 调用都返回新拷贝，外部修改不会影响 `DisplayStack` 内部状态。
 - 构造时若传入空栈（`stack.isEmpty()`），构造器仍然允许——`DisplayStack` 不校验内容。`optional(...)` 才将空栈视为"无"。
 
 ---
-
+:::
 ### `ParallelTier`
 
 完整类名：`cn.howxu.mmcr.api.publicapi.machine.ParallelTier`
@@ -2664,13 +2664,13 @@ Identifier blockId = Identifier.fromNamespaceAndPath("mmcr", ParallelTier.PRO.id
 int max = ParallelTier.PRO.maxParallelism();  // 256
 ```
 
-#### 注意事项
+:::warning 注意事项
 
 - 这些等级对应 MMCR 内置的并行控制器方块；如果 Mod 添加自定义并行控制器，需要自己扩展此枚举或通过 `MachineBuilder.maxParallelism(...)` 自行控制。
 - `ULTIMATE.maxParallelism()` 等于 `Integer.MAX_VALUE`，用于理论上限；实际受机器上限 `MachineDefinition.maxParallelism` 进一步约束。
 
 ---
-
+:::
 ## 9 接口与等级
 
 本节覆盖端口等级与端口需求的便捷工厂。这些工厂是 `PortTiers` / `PortRequirements` 的快捷方式，主要供 `StructureStage.Builder` 之外的代码（如工具方法、跨阶段共享声明）使用。
@@ -2714,13 +2714,13 @@ PortTiers tiers = InterfaceTiers.combine(
         InterfaceTiers.fluid(PortTiers.FluidTier.BIG));
 ```
 
-#### 注意事项
+:::warning 注意事项
 
 - `InterfaceTiers` 不会主动检查 `PortTiers` 是否会与结构中已有的等级声明冲突；冲突由结构加载阶段的最终一致性校验处理。
 - 字符串 ID 与枚举常量的映射不区分大小写，如 `"NORMAL"` / `"normal"` / `"Normal"` 都解析到 `NORMAL`。
 
 ---
-
+:::
 ### `PortRequirements`
 
 完整类名：`cn.howxu.mmcr.api.publicapi.machine.PortRequirements`
@@ -2791,14 +2791,14 @@ PortRequirements req = PortRequirements.builder()
         .build();
 ```
 
-#### 注意事项
+:::warning 注意事项
 
 - `PortRequirements` 与 `PortTiers` 是两个独立维度：前者声明数量，后者声明等级。一台机器通常同时声明两者。
 - `PortRequirements.builder().build()` 不会因为没有声明任何端口而抛错——空声明等价于 `none()`。
 - `requirements` 是不可变 `LinkedHashMap` 的快照，键按插入顺序保留。
 
 ---
-
+:::
 ## 10 模式与结构
 
 本节覆盖结构模式定义与结构高级要求。`PatternDefinition` 是 `PatternBuilder` 链式构建的不可变结果；`StructureRequirements` 承载修饰符替换与等级槽位声明。
@@ -2859,14 +2859,14 @@ PatternDefinition pattern = new PatternDefinition(
         'C', 3, 1, 1);
 ```
 
-#### 注意事项
+:::warning 注意事项
 
 - `PatternDefinition` 是不可变值对象；同一实例可以被多台机器共享（实际上 `PatternBuilder.build()` 会被结构加载阶段调用 `bindController(...)`）。
 - 字符 `' '`（空格）保留为"空匹配"，不会出现在 `predicates` 中。
 - `width` / `height` / `depth` 由构造器从 `layers` 推导，但用户直接构造时仍需自行提供正确数值。
 
 ---
-
+:::
 ### `StructureRequirements`
 
 完整类名：`cn.howxu.mmcr.api.publicapi.machine.StructureRequirements`
@@ -2921,14 +2921,14 @@ StructureRequirements req = StructureRequirements.builder()
         .build();
 ```
 
-#### 注意事项
+:::warning 注意事项
 
 - 等级槽位字符必须出现在模式中且只对应一个方块谓词，否则结构匹配失败。
 - 修饰符替换会按顺序尝试：玩家在结构中放置 `symbol` 对应方块时，按 `modifierReplacements.get(symbol)` 列表顺序尝试第一个能放下的修饰符物品。
 - `StructureRequirements.EMPTY` 是无修饰符无等级槽位的空声明。
 
 ---
-
+:::
 ## 11 等级系统
 
 本节覆盖等级类型与等级实例声明。等级是结构中"标识玩家将机器升级到某级"的标记；每台机器可选地声明若干等级槽位，每个槽位对应一个等级类型。
@@ -2965,13 +2965,13 @@ LevelType type = new LevelType(
 event.registerLevelType(type);
 ```
 
-#### 注意事项
+:::warning 注意事项
 
 - `LevelType` 是不可变值对象；同一实例可被多个等级引用。
 - 等级类型必须在结构加载阶段之前注册，否则 `MachineLevel.typeId` 会指向未注册 ID。
 
 ---
-
+:::
 ### `MachineLevel`
 
 完整类名：`cn.howxu.mmcr.api.publicapi.machine.MachineLevel`
@@ -3018,13 +3018,13 @@ MachineLevel lv = new MachineLevel(
 event.registerLevel(lv);
 ```
 
-#### 注意事项
+:::warning 注意事项
 
 - `statePredicate` 必须与等级槽位字符所绑定的方块一致；不一致会导致结构匹配时该等级被忽略。
 - `modifier` 影响所有走该机器的配方：持续时间倍率小于 1 表示加速，大于 1 表示减速；并行度加成加到机器原本的并行上限上。
 
 ---
-
+:::
 ### `LevelModifier`
 
 完整类名：`cn.howxu.mmcr.api.publicapi.machine.LevelModifier`
@@ -3069,13 +3069,13 @@ LevelModifier speedTwo = new LevelModifier(0.5D, 1.0D, 1.0D, 0, 0); // 2x 加速
 LevelModifier bonus = new LevelModifier(1.0D, 1.0D, 2.0D, 4, 1);      // 2x 输出、+4 并行、+1 线程
 ```
 
-#### 注意事项
+:::warning 注意事项
 
 - 乘数对配方持续时间的影响在 `beforeStart` 钩子应用之前就已计算完毕——回调中的 `duration()` 反映的是等级修正后的结果。
 - `parallelismBonus` 会直接加到 `MachineDefinition.maxParallelism` 上；超过 `maxParallelAmount` 的并行度上限仍受机器配置约束。
 
 ---
-
+:::
 ### `LevelRequirement`
 
 完整类名：`cn.howxu.mmcr.api.publicapi.machine.LevelRequirement`
@@ -3108,13 +3108,13 @@ MachineRecipeBuilder.recipe(MY_RECIPE, MY_MACHINE)
                 Identifier.fromNamespaceAndPath("my_mod", "tech_level/mk2"));
 ```
 
-#### 注意事项
+:::warning 注意事项
 
 - 等级要求在配方执行时由 MMCR 校验；如果玩家的机器未达到该等级，配方不匹配。
 - 配方可以声明多个 `LevelRequirement`，全部需要满足。
 
 ---
-
+:::
 ## 12 修饰符系统
 
 本节覆盖机器修饰符（modifier）的定义与使用声明。修饰符是玩家可以放置到结构中的特殊物品，会按配方中预先声明的规则影响配方执行。
@@ -3163,13 +3163,13 @@ event.registerModifier(Identifier.fromNamespaceAndPath("my_mod", "speed"),
         ModifierDefinition.of("duration", "input", 0.5F, "multiply", false));
 ```
 
-#### 注意事项
+:::warning 注意事项
 
 - `ModifierDefinition` 是不可变值对象；同一修饰符 ID 的注册只能有一次。
 - 多个 `RecipeModifier` 项在配方执行时按顺序应用——前面的修饰符可能影响后续修饰符的目标值。
 
 ---
-
+:::
 ### `ModifierUse`
 
 完整类名：`cn.howxu.mmcr.api.publicapi.machine.ModifierUse`
@@ -3208,13 +3208,13 @@ StructureRequirements.builder()
                 BlockPredicate.block(Items.REDSTONE_BLOCK)));
 ```
 
-#### 注意事项
+:::warning 注意事项
 
 - 同一字符可以挂多个 `ModifierUse`（通过 `StructureRequirements.Builder.modifier(char, ModifierUse)` 多次调用）。匹配时按注册顺序尝试。
 - `replacement` 是方块谓词，可以是单方块 / 方块状态 / 标签 / 并集；详见 `BlockPredicate` 一节。
 
 ---
-
+:::
 ### `OutputPolicy`
 
 完整类名：`cn.howxu.mmcr.api.publicapi.machine.OutputPolicy`
@@ -3235,13 +3235,13 @@ MachineIoPlan plan = tickCtx.ioPlan()
         .addOutput(requirement, OutputPolicy.ALLOW_PARTIAL);
 ```
 
-#### 注意事项
+:::warning 注意事项
 
 - `ALLOW_PARTIAL` 在 `TickBehavior` 中常用——很多直接驱动的机器（反应堆、发电机）允许产物部分输出。
 - `OutputPolicy` 仅影响 `MachineIoPlan`；`MachineRecipeDefinition.allowPartialOutputs` 是另一个独立字段，控制配方路径下的部分输出语义。
 
 ---
-
+:::
 ## 13 智能接口
 
 本节覆盖智能接口（Smart Interface）类型与修饰符。智能接口允许玩家向机器传递非物品 / 流体的浮点参数（如"效率"），并由机器按修饰符规则影响配方。
@@ -3312,14 +3312,14 @@ SmartInterfaceType type = new SmartInterfaceType("efficiency", 0F, 5F, 0);
 MachineBuilder.machine(MY_ID).smartInterface(type);
 ```
 
-#### 注意事项
+:::warning 注意事项
 
 - `type` 名称是注册 ID，必须全局唯一；在 `MachineBuilder.smartInterface(...)` 中重复注册同一名称抛 `IllegalArgumentException`。
 - `INTEGER` 类型的最小 / 最大值使用 `Math.rint(...)` 校验小数部分；不要把 `0.5F` 之类的值传给 `INTEGER` 类型。
 - `priority` 决定当多个智能接口实例出现时的优先级；通常 0 即可。
 
 ---
-
+:::
 ### `SmartInterfaceModifier`
 
 完整类名：`cn.howxu.mmcr.api.publicapi.machine.SmartInterfaceModifier`
@@ -3379,13 +3379,13 @@ SmartInterfaceModifier durationMod = SmartInterfaceModifier.duration(
 MachineBuilder.machine(MY_ID).smartInterfaceModifier(durationMod);
 ```
 
-#### 注意事项
+:::warning 注意事项
 
 - `atMin` / `atMax` 决定智能接口值与配方修饰值的映射曲线。当 `op == MULTIPLY` 时，`atMin = 1F` 表示"最小智能接口值时不缩放"，`atMax = 0.25F` 表示"最大智能接口值时缩放到 0.25x"。
 - 智能接口的实际值由运行时 `MachineIoView.smartInterfaceValue(name)` 提供，回调中的取值随玩家设置变化。
 
 ---
-
+:::
 ## 14 配方 IO 类型
 
 本节覆盖配方 IO 类型的不可变记录。这些类都是 `record`，仅包含数据字段与构造约束。运行时操作（添加输入 / 输出到配方）请使用 `MachineRecipeBuilder`。
@@ -3434,13 +3434,13 @@ CustomRecipeIo io = new CustomRecipeIo(
         RecipeIo.INPUT, payload);
 ```
 
-#### 注意事项
+:::warning 注意事项
 
 - 直接用 `new CustomRecipeIo(...)` 不会主动校验 `typeId` 与 `payload` 是否一致；类型错配会在 `freeze()` 阶段或运行时被发现。
 - `payload` 在构造与 `payload()` 读取时都会被深拷贝，可以安全持有外部引用。
 
 ---
-
+:::
 ### `ItemInput`
 
 完整类名：`cn.howxu.mmcr.api.publicapi.recipe.ItemInput`
@@ -3484,13 +3484,13 @@ ItemInput input = new ItemInput(Ingredient.of(Items.IRON_INGOT), 2);
 ItemInput chanced = new ItemInput(Ingredient.of(Items.COAL), 1, DataComponentPredicateSet.EMPTY, 0.5F);
 ```
 
-#### 注意事项
+:::warning 注意事项
 
 - `components` 可以包含模糊谓词（`Range` / `TextValue`），这些值在匹配时按模糊规则生效。
 - `consumeChance = 1F` 表示每次执行必定消耗；`< 1F` 表示按概率保留物品（用于"工具磨损"或"概率消耗"场景）。
 
 ---
-
+:::
 ### `ItemOutput`
 
 完整类名：`cn.howxu.mmcr.api.publicapi.recipe.ItemOutput`
@@ -3536,13 +3536,13 @@ ItemOutput out = new ItemOutput(new ItemStack(Items.DIAMOND, 1));
 ItemOutput chanced = new ItemOutput(new ItemStack(Items.EMERALD, 1), 0.25F);
 ```
 
-#### 注意事项
+:::warning 注意事项
 
 - 与 `ItemInput` 不同，`ItemOutput` 不允许模糊组件谓词——输出必须明确指定 `Exact` 谓词。
 - `stack()` 每次返回新拷贝，外部修改不会影响 `ItemOutput`。
 
 ---
-
+:::
 ### `ItemRequirement`
 
 完整类名：`cn.howxu.mmcr.api.publicapi.recipe.ItemRequirement`
@@ -3599,13 +3599,13 @@ ItemRequirement in = ItemRequirement.input(new ItemInput(Ingredient.of(Items.IRO
 ItemRequirement out = ItemRequirement.output(new ItemOutput(new ItemStack(Items.IRON_NUGGET, 10)));
 ```
 
-#### 注意事项
+:::warning 注意事项
 
 - 这是 `MachineRecipeDefinition.itemInputs` / `itemOutputs` 字段实际存储的类型。
 - `stack()` 每次返回新拷贝。
 
 ---
-
+:::
 ### `FluidInput`
 
 完整类名：`cn.howxu.mmcr.api.publicapi.recipe.FluidInput`
@@ -3640,12 +3640,12 @@ FluidInput in = new FluidInput(Fluids.WATER, 1000);
 FluidInput tag = new FluidInput(FluidIngredient.tag(FluidTags.WATER), 500);
 ```
 
-#### 注意事项
+:::warning 注意事项
 
 - 与 `ItemInput` 不同，`FluidInput` 没有消耗概率与数据组件字段——流体的消耗在 MMCR 中总是按配方定义执行。
 
 ---
-
+:::
 ### `FluidOutput`
 
 完整类名：`cn.howxu.mmcr.api.publicapi.recipe.FluidOutput`
@@ -3723,12 +3723,12 @@ public record FluidRequirement(
 | `input(FluidInput input)` | 从 `FluidInput` 创建 `INPUT` 方向的 `FluidRequirement`。 |
 | `output(FluidOutput output)` | 从 `FluidOutput` 创建 `OUTPUT` 方向的 `FluidRequirement`。 |
 
-#### 注意事项
+:::warning 注意事项
 
 - 与 `ItemRequirement` 对称，但是不包含 `components` 与 `consumeChance` 字段——流体不支持模糊组件或消耗概率。
 
 ---
-
+:::
 ### `EnergyInput`
 
 完整类名：`cn.howxu.mmcr.api.publicapi.recipe.EnergyInput`
@@ -3753,12 +3753,12 @@ public record EnergyInput(long fePerTick);
 EnergyInput fe = new EnergyInput(40L); // 40 FE/t
 ```
 
-#### 注意事项
+:::warning 注意事项
 
 - 实际能量需求 / 产生由 `MachineRecipeBuilder.inputEnergy(...)` / `outputEnergy(...)` 设置；`EnergyInput` 类型仅在 `MachineRecipeDefinition` 字段中复用，按 `ioType` 区分输入 / 输出。
 
 ---
-
+:::
 ### `EnergyRequirement`
 
 完整类名：`cn.howxu.mmcr.api.publicapi.recipe.EnergyRequirement`
@@ -3784,12 +3784,12 @@ public record EnergyRequirement(RecipeIo io, long fePerTick) implements RecipeRe
 EnergyRequirement req = new EnergyRequirement(RecipeIo.INPUT, 80L);
 ```
 
-#### 注意事项
+:::warning 注意事项
 
 - 与 `EnergyInput` 不同，`EnergyRequirement` 显式携带 `io` 字段，因此可以直接用于 `MachineRecipeDefinition.energyInputs` / `energyOutputs`。
 
 ---
-
+:::
 ### `RecipeIo`
 
 完整类名：`cn.howxu.mmcr.api.publicapi.recipe.RecipeIo`
@@ -3848,13 +3848,13 @@ RecipeRequirement req = RecipeRequirement.custom(
         JsonParser.parseString("{\"amount\": 500}"));
 ```
 
-#### 注意事项
+:::warning 注意事项
 
 - 直接用 `new CustomRecipeIo(...)` 不会执行 codec 校验，`RecipeRequirement.custom(...)` 会主动校验。
 - 该接口是 `sealed`，不能由用户自行实现——如需扩展自定义需求，需通过 MMCR 内部的 codec 注册路径。
 
 ---
-
+:::
 ### `RequiredHost`
 
 完整类名：`cn.howxu.mmcr.api.publicapi.recipe.RequiredHost`
@@ -3880,12 +3880,12 @@ MachineRecipeBuilder.recipe(MY_RECIPE, MY_MODULE)
         .requiredHost(Identifier.fromNamespaceAndPath("my_mod", "module_host"));
 ```
 
-#### 注意事项
+:::warning 注意事项
 
 - `RequiredHost` 不是 `RecipeRequirement`——它是 `MachineRecipeDefinition.requiredHosts` 字段的独立条目类型，专门表示"此模块配方只能在指定宿主的机器上执行"。
 
 ---
-
+:::
 ### `SmartInterfaceRequirement`
 
 完整类名：`cn.howxu.mmcr.api.publicapi.recipe.SmartInterfaceRequirement`
@@ -3927,12 +3927,12 @@ public record SmartInterfaceRequirement(RecipeIo io, String interfaceType, float
 SmartInterfaceRequirement req = SmartInterfaceRequirement.input("efficiency", 0F, 5F);
 ```
 
-#### 注意事项
+:::warning 注意事项
 
 - 智能接口需求仅在机器声明了对应 `SmartInterfaceType` 时生效；否则该需求始终不满足，配方永不匹配。
 
 ---
-
+:::
 ### `ComponentPredicate`
 
 完整类名：`cn.howxu.mmcr.api.publicapi.recipe.component.ComponentPredicate`
@@ -4005,13 +4005,13 @@ ComponentPredicate range = ComponentPredicate.range(0D, 100D);
 ComponentPredicate text = ComponentPredicate.text("Hello", ComponentPredicate.TextMode.PLAIN);
 ```
 
-#### 注意事项
+:::warning 注意事项
 
 - `Exact` 用于输出端的精确匹配；模糊谓词（`Range` / `TextValue` / `MapValue` / `ListValue`）仅允许出现在输入端，输出端若包含模糊谓词会抛 `IllegalArgumentException("Item output components must be exact")`。
 - `map` / `list` 是嵌套谓词，可以组合出复杂的数据组件匹配规则。
 
 ---
-
+:::
 ### `DataComponentPredicateSet`
 
 完整类名：`cn.howxu.mmcr.api.publicapi.recipe.component.DataComponentPredicateSet`
@@ -4053,13 +4053,13 @@ DataComponentPredicateSet set = new DataComponentPredicateSet(Map.of(
         ComponentPredicate.range(0D, 50D)));
 ```
 
-#### 注意事项
+:::warning 注意事项
 
 - `DataComponentPredicateSet` 构造时不会主动校验 ID 是否对应已注册的数据组件；校验发生在配方匹配阶段。
 - `hasNonExactValues()` 在 `ItemOutput` 构造时被调用，输出端不允许模糊谓词。
 
 ---
-
+:::
 ## 15 控制器渲染
 
 本节覆盖客户端控制器方块的渲染器接口。渲染器通过 `MMCRMachineRendersEvent` 注册，绑定到机器 ID，并在控制器方块的 `BlockEntityRenderer` 流程中被回调。
@@ -4118,14 +4118,14 @@ ControllerRenderer renderer = (context, pose, collector, camera) -> {
 event.register(MY_MACHINE, renderer);
 ```
 
-#### 注意事项
+:::warning 注意事项
 
 - `render(...)` 中不应修改任何服务端状态——它运行在客户端。
 - `shouldRenderOffScreen()` 与 `getViewDistance()` 是性能调优接口；过度启用会导致大量不必要的渲染。
 - 渲染器回调中不要持有 `ControllerRenderContext` 跨 tick 使用——它是当前帧的不可变快照。
 
 ---
-
+:::
 ### `ControllerRenderContext`
 
 完整类名：`cn.howxu.mmcr.api.publicapi.render.ControllerRenderContext`
@@ -4205,14 +4205,14 @@ ControllerRenderer renderer = (ctx, pose, collector, camera) -> {
 };
 ```
 
-#### 注意事项
+:::warning 注意事项
 
 - `CraftingView.failure` 是不可变副本，可以安全地序列化到渲染线程外使用。
 - `dataStorageValues` 仅包含显式标记为"客户端可见"的数据值；不要假设服务端所有数据都可读。
 - `partialTick` 用于在两个 tick 之间做插值（例如进度条动画），但不应用于逻辑判断。
 
 ---
-
+:::
 ## 16 控制器屏幕文本
 
 本节覆盖服务端运行时控制器屏幕文本的注册与渲染。屏幕文本通过 `ControllerScreenTextRegistry` 注册到机器 ID，每次控制器 tick 时由 MMCR 调用。
@@ -4270,13 +4270,13 @@ ctx.screenText().append(
         Component.literal("Working..."));
 ```
 
-#### 注意事项
+:::warning 注意事项
 
 - `lineId` 应保持稳定——MMCR 用它做幂等检查；不同 tick 之间使用相同 `lineId` 的 `append(...)` 会替换上一帧的内容。
 - `OPERATION` scope 的内容会随当前配方操作状态变化（开始 / 结束 / 失败），由 MMCR 在每个 tick 自动重置；`CONTROLLER` scope 由 Mod 完全控制。
 
 ---
-
+:::
 ### `ControllerScreenTextHandler`
 
 完整类名：`cn.howxu.mmcr.api.publicapi.controller.ControllerScreenTextHandler`
@@ -4315,13 +4315,13 @@ ControllerScreenTextHandler handler = ctx -> {
 };
 ```
 
-#### 注意事项
+:::warning 注意事项
 
 - `apply(...)` 运行在服务端线程内；可访问服务端能力。
 - 一个机器 ID 可以注册多个 handler，按注册顺序依次执行。
 
 ---
-
+:::
 ### `ControllerScreenTextRegistry`
 
 完整类名：`cn.howxu.mmcr.api.publicapi.controller.ControllerScreenTextRegistry`
@@ -4397,13 +4397,13 @@ Registration reg = ControllerScreenTextRegistry.register(
 reg.unregister();
 ```
 
-#### 注意事项
+:::warning 注意事项
 
 - 注册表是进程内单例；服务关闭 / 重载时由 MMCR 自动清空。
 - `clearForTesting()` 是测试专用的清空方法，**生产代码不要调用**。
 
 ---
-
+:::
 ### `ControllerScreenTextScope`
 
 完整类名：`cn.howxu.mmcr.api.publicapi.controller.ControllerScreenTextScope`
@@ -4426,13 +4426,13 @@ ctx.screenText().append(
         Component.literal("50%"));
 ```
 
-#### 注意事项
+:::warning 注意事项
 
 - `OPERATION` scope 在配方未运行时不显示任何内容；适合"当前配方状态"等临时信息。
 - `CONTROLLER` scope 适合"机器标题"、"升级等级"等长驻显示的内容。
 
 ---
-
+:::
 ### `ControllerRuntimeContext`
 
 完整类名：`cn.howxu.mmcr.api.publicapi.controller.ControllerRuntimeContext`
@@ -4468,13 +4468,13 @@ ControllerScreenTextHandler handler = ctx -> {
 };
 ```
 
-#### 注意事项
+:::warning 注意事项
 
 - 与 `MachineBehaviorContext` 不同，本上下文只携带机器 ID、位置与屏幕文本句柄——handler 不应假设可以读取 IO / 等级 / 数据存储。
 - `screenText` 在每次 `apply(...)` 调用之间是同一个实例，handler 写入的内容会一直保留直到下次 tick。
 
 ---
-
+:::
 ### `JadeText`
 
 完整类名：`cn.howxu.mmcr.api.publicapi.controller.JadeText`
@@ -4528,13 +4528,13 @@ ctx.jadeText().append(
         Component.literal("Temp: " + temperature + "°C"));
 ```
 
-#### 注意事项
+:::warning 注意事项
 
 - `JadeText` 的 `lineId` 命名空间化习惯与 `ControllerScreenText` 相同，但两者是独立的文本层——`ControllerScreenText` 用于控制器屏幕，`JadeText` 用于 JADE 的悬浮提示。
 - 当玩家未安装 JADE 时，`MachineBehaviorContext.jadeText()` 始终返回 `noop()`；因此调用方无需判空即可安全调用。
 
 ---
-
+:::
 ## 17 数据子包
 
 本节覆盖 `cn.howxu.mmcr.api.publicapi.data` 子包——机器数据存储的公共视图、值包装、跨机器数据查询扩展点以及事务封装的对外入口。运行期类型位于公共 jar 内，但**不在** `package-info.java` 列出的"启动期 ABI allow-list"中，调用方应在小版本升级时回归验证。
@@ -4562,13 +4562,13 @@ ctx.jadeText().append(
 | `LIST` | `List<DataValue>` | 有序复合值，元素为 `DataValue`。 |
 | `MAP` | `Map<String, DataValue>` | 键值复合值，键为非空字符串，值为 `DataValue`。 |
 
-#### 注意事项
+:::warning 注意事项
 
 - 公共枚举与底层 NBT 序列化一一对应；Mod 只需通过工厂方法构造 `DataValue`，序列化由 MMCR 内部完成。
 - 浮点 `FLOAT` / `DOUBLE` 工厂在传入 `NaN` / `Infinity` 时会抛 `IllegalArgumentException("value must be finite")`。
 
 ---
-
+:::
 ### `DataValue`
 
 完整类名：`cn.howxu.mmcr.api.publicapi.data.DataValue`
@@ -4673,13 +4673,13 @@ DataValue list = DataValue.list(List.of(
         DataValue.of(true)));
 ```
 
-##### 注意事项
+:::warning 注意事项
 
 - `DataValue` 是不可变且实现值相等：相同类型 + 相同值的两实例 `equals` 返回 `true`；`DataStorage` 内部据此跳过同值写入。
 - `LIST` / `MAP` 工厂返回的容器都是不可修改的；尝试修改会抛 `UnsupportedOperationException`。
 
 ---
-
+:::
 ### `DataStorage`
 
 完整类名：`cn.howxu.mmcr.api.publicapi.data.DataStorage`
@@ -4779,7 +4779,7 @@ plan.commit(transaction -> {
 double power = storage.get("power").flatMap(DataValue::asDouble).orElse(0.0);
 ```
 
-##### 注意事项
+:::warning 注意事项
 
 - `DataStorage` 是公共视图而不是原始存储——`view(...)` 接受 MMCR 内部的 `cn.howxu.mmcr.api.data.DataStorage` 实例（来自 `ctx.dataStorage()` 返回的对象），并包装成可被外部 Mod 操作的公共类型。
 - 外部 Mod **不能** 直接 `new DataStorage(...)`——构造器私有。
@@ -4787,7 +4787,7 @@ double power = storage.get("power").flatMap(DataValue::asDouble).orElse(0.0);
 - `get(...)` 返回 `Optional`，**不要**用 `null` 判定键是否存在；用 `contains(...)`。
 
 ---
-
+:::
 ### `DataReservation`
 
 完整类名：`cn.howxu.mmcr.api.publicapi.data.DataReservation`
@@ -4813,12 +4813,12 @@ public interface DataReservation {
 
 主动释放预留；通常在请求方决定不再消费时被调用。
 
-##### 注意事项
+:::warning 注意事项
 
 - 当前 MMCR 不会主动暴露数据存储库实现，`DataRepository` 接口（见下）只为未来扩展而保留——除非自行实现 `DataRepository`，否则无需直接构造 `DataReservation`。
 
 ---
-
+:::
 ### `DataRepositoryContext`
 
 完整类名：`cn.howxu.mmcr.api.publicapi.data.DataRepositoryContext`
@@ -4841,12 +4841,12 @@ public record DataRepositoryContext(Identifier machineId, BlockPos controllerPos
 | `key` | `String` | 待读写的数据键。`null` 或空白 → `IllegalArgumentException("key must not be blank")`。 |
 | `requestedType` | `DataValueType` | 期望的 `DataValue` 类型。`null` → `IllegalArgumentException("requestedType must not be null")`。 |
 
-#### 注意事项
+:::warning 注意事项
 
 - 该类型为未来扩展点保留；当前 MMCR 数据存储块仍按"每控制器独立持有 `DataStorage`"模式运作。
 
 ---
-
+:::
 ### `DataRepositoryRequest`
 
 完整类名：`cn.howxu.mmcr.api.publicapi.data.DataRepositoryRequest`
@@ -4893,12 +4893,12 @@ public record DataRepositoryRequest(Identifier repositoryId, BlockPos controller
 
 工厂：构造一个无可用预留的请求。
 
-##### 注意事项
+:::warning 注意事项
 
 - 该类型为未来扩展点保留；当前 MMCR 数据存储块不调用 `DataRepository.request(...)`。
 
 ---
-
+:::
 ### `DataRepository`
 
 完整类名：`cn.howxu.mmcr.api.publicapi.data.DataRepository`
@@ -4925,13 +4925,13 @@ public interface DataRepository {
 
 - 返回：`DataRepositoryRequest`。返回值的 `reservation` 字段为空表示当前无可用结果；非空表示调用方可以保留并在事务中提交。
 
-##### 注意事项
+:::warning 注意事项
 
 - 当前 MMCR 数据存储块仍按"每控制器独立持有 `DataStorage`"运作；`DataRepository` 仅作为未来跨机器数据查询的扩展点。
 - 实现类不应主动假定自己的 `request(...)` 何时被调用——MMCR 仅在启用跨机器数据查询时调用。
 
 ---
-
+:::
 ## 18 网络子包
 
 本节覆盖 `cn.howxu.mmcr.api.publicapi.network` 子包——机器网络通信的公共视图、不可变消息体、回调接口与静态门面。运行期网络类型位于公共 jar 内，但**不在** `package-info.java` 列出的"启动期 ABI allow-list"中，调用方应在小版本升级时回归验证。
@@ -4975,13 +4975,13 @@ long peerHash = peer.hash();
 storage.set("power_" + peerHash, DataValue.of(reported));
 ```
 
-#### 注意事项
+:::warning 注意事项
 
 - `hash` 由 MMCR 内部从结构快照计算；不同实例即使机器 ID 相同也会有不同 `hash`。
 - 该类型在网络通信中用作对端标识，是 `RequestInfo.peer()` 与 `NetworkInterfaceReference.connections()` 的公共字段类型。
 
 ---
-
+:::
 ### `NetworkInterfaceReference`
 
 完整类名：`cn.howxu.mmcr.api.publicapi.network.NetworkInterfaceReference`
@@ -5025,14 +5025,14 @@ for (NetworkInterfaceReference iface : interfaces) {
 }
 ```
 
-##### 注意事项
+:::warning 注意事项
 
 - 该类**不能**自行构造；只能通过 `NetworkApi.interfaces(...)` 获取。
 - 返回值依赖于调用时接口方块所在的 chunk 是否已加载——未加载的接口会被 `NetworkApi.interfaces(...)` 过滤。
 - 公共视图不再暴露 `sourceController()` / `source()` / `server()` / `sourceFailure(...)` 等内部状态访问器；如需源控制器位置或失败回调，请通过 `MachineBuilder.requestFailed(...)` 注册处理器，并在 `RequestProcess` 内通过 `RequestInfo.peer()` 获取对端引用。
 
 ---
-
+:::
 ### `RequestBody`
 
 完整类名：`cn.howxu.mmcr.api.publicapi.network.RequestBody`
@@ -5086,13 +5086,13 @@ RequestBody body = RequestBody.of(Map.of(
 double power = body.get("power").flatMap(DataValue::asDouble).orElse(0.0);
 ```
 
-##### 注意事项
+:::warning 注意事项
 
 - 与 KubeJS 端不同——Java 端必须显式用 `DataValue.of(...)` 包好每个值；脚本端由 [`api.dataValue(...)`](#) 自动包装。
 - 构造时键与值都需合法；构造完成后请求体不可修改。
 
 ---
-
+:::
 ### `RequestInfo`
 
 完整类名：`cn.howxu.mmcr.api.publicapi.network.RequestInfo`
@@ -5124,12 +5124,12 @@ ctx.requestProcess(REPORT_POWER, (body, request, senderStorage, receiverStorage)
 });
 ```
 
-#### 注意事项
+:::warning 注意事项
 
 - 该类型为不可变值对象——可以安全地在 `RequestProcess` 闭包内捕获。
 
 ---
-
+:::
 ### `RequestProcess`
 
 完整类名：`cn.howxu.mmcr.api.publicapi.network.RequestProcess`
@@ -5169,14 +5169,14 @@ ctx.requestProcess(REPORT_POWER,
         });
 ```
 
-##### 注意事项
+:::warning 注意事项
 
 - 通过 `MachineBuilder.requestProcess(Identifier, RequestProcess)` 注册；同一请求 ID 注册多次时，以最后一次为准。
 - 公共签名上的 `senderStorage` / `receiverStorage` 不再带 `@Nullable` 注解，但运行时仍可能为 `null`——处理器必须在闭包开头自行判空。
 - 抛出的异常会被 MMCR 捕获并记日志；不要把控制流逻辑放在异常抛出上。
 
 ---
-
+:::
 ### `RequestFailed`
 
 完整类名：`cn.howxu.mmcr.api.publicapi.network.RequestFailed`
@@ -5203,13 +5203,13 @@ public interface RequestFailed {
 | `senderStorage` | `DataStorage` 或 `null` | 发送方 `DataStorage`；发送方未启用数据存储时为 `null`。参数带 `@Nullable`，可直接判空。 |
 | `reason` | `RequestFailureReason` | 失败原因枚举。 |
 
-##### 注意事项
+:::warning 注意事项
 
 - 仅当 MMCR 内部判定请求**不能**送达时才会调用该回调；正常接收请使用 `RequestProcess`。
 - 注册位置见 `MachineBuilder.requestFailed(...)`。
 
 ---
-
+:::
 ### `RequestFailureReason`
 
 完整类名：`cn.howxu.mmcr.api.publicapi.network.RequestFailureReason`
@@ -5231,12 +5231,12 @@ public interface RequestFailed {
 | `TARGET_HANDLER_MISSING` | 目标方未注册对应请求 ID 的处理器。 |
 | `UNREACHABLE` | 通用不可达兜底原因。 |
 
-#### 注意事项
+:::warning 注意事项
 
 - 多个常量可同时触发；MMCR 内部选择最先匹配的常量。回调方应只依据具体常量做对应处理，不要假设互斥。
 
 ---
-
+:::
 ### `NetworkApi`
 
 完整类名：`cn.howxu.mmcr.api.publicapi.network.NetworkApi`
@@ -5303,14 +5303,14 @@ public final class ProducerBehavior implements MachineBehavior {
 }
 ```
 
-##### 注意事项
+:::warning 注意事项
 
 - 该类是网络通信的**唯一** Java 入口——不要直接访问 MMCR 内部的 `NetworkServerState` / `PendingRequest`。
 - `interfaces(...)` 仅在控制器已成型时返回非空；调用方应忽略空结果。
 - `sendRequest(...)` 是异步入队；目标方实际处理发生在服务端下一 tick。
 
 ---
-
+:::
 ## 19 修饰符与需求类型
 
 本节覆盖 `cn.howxu.mmcr.api.publicapi.recipe.modifier.RecipeModifier`、`cn.howxu.mmcr.api.publicapi.recipe.requirement.MachineRequirement` 及其扩展点 `CustomRequirement`。
@@ -5349,13 +5349,13 @@ public final class RecipeModifier {
 | `INPUT` | 输入方向——消耗方向。 |
 | `OUTPUT` | 输出方向——产出方向。 |
 
-##### 注意事项
+:::warning 注意事项
 
 - 在配方 IO 类型语义上与 `cn.howxu.mmcr.api.publicapi.recipe.RecipeIo.INPUT` / `RecipeIo.OUTPUT` 完全一致（见 [14 配方 IO 类型](#14-配方-io-类型)）。`FluidRequirement` / `ItemRequirement` / `EnergyRequirement` 等公共 `MachineRequirement` 子类型在 Java 端使用 `RecipeIo` 作为 IO 字段；`RecipeModifier.IOType` 主要在配方修饰表达式中引用。
 - KubeJS 教程引用此类型时写作 `RecipeModifier.IOType`，对应此锚点。
 
 ---
-
+:::
 #### `RecipeModifier.Operation`
 
 完整类名：`cn.howxu.mmcr.api.publicapi.recipe.modifier.RecipeModifier.Operation`
@@ -5371,12 +5371,12 @@ public final class RecipeModifier {
 | `SUBTRACT` | 减法。 |
 | `DIVIDE` | 除法。 |
 
-##### 注意事项
+:::warning 注意事项
 
 - 与之前版本的命名顺序一致；序列化协议保持向后兼容。
 
 ---
-
+:::
 ### `MachineRequirement`
 
 完整类名：`cn.howxu.mmcr.api.publicapi.recipe.requirement.MachineRequirement`
@@ -5419,13 +5419,13 @@ ItemRequirement in = ItemRequirement.input(new ItemInput(
 MachineRequirement out = ItemRequirement.output(new ItemOutput(new ItemStack(Items.IRON_BLOCK), 1F));
 ```
 
-##### 注意事项
+:::warning 注意事项
 
 - 实现类至少要正确实现 `io()`；MMCR 内部按 `io()` 区分输入输出。
 - 公共 API 不再暴露 `MachineRequirement.CODEC` / `copyOf` / `copyList` / `fromInput` 等运行期工具——这些能力在 MMCR 内部由专属注册表与处理器负责。
 
 ---
-
+:::
 ### `CustomRequirement`
 
 完整类名：`cn.howxu.mmcr.api.publicapi.recipe.requirement.CustomRequirement`
@@ -5468,9 +5468,10 @@ CustomRecipeIo mana = RecipeRequirement.custom(
         new JsonObject()); // 由 my_mod 的 RequirementHandler 解析
 ```
 
-##### 注意事项
+:::warning 注意事项
 
 - `CustomRequirement` 自身**不能**直接 new——它是空标记接口；外部 Mod 一般通过 `RecipeRequirement.custom(...)` 工厂构造，实例类型为 `CustomRecipeIo`。
 - `typeId` 必须在 MMCR 内部注册——未注册的 typeId 会在 `RecipeRequirement.custom(...)` 阶段抛异常；序列化 / 反序列化失败时配方加载会失败。
 
 ---
+:::

@@ -200,7 +200,9 @@ if (!plan_fe.commit().successful()) {
 
 屏幕文本用 `ctx.screenText().replace(lineId, text)` 替换上一帧同 ID 的内容——这是 KubeJS 端 [`ControllerScreenTextEventJS.replace(...)`](../API/KubeJS#replacestring-lineid-component-text--void)。
 
-> 注意：`ioPlan()` 每次返回**新**的 `MachineIoPlan`——两次调用之间的状态不共享。下面步骤还要重新 `ctx.ioPlan()` 才能加物品。
+:::warning 注意
+`ioPlan()` 每次返回**新**的 `MachineIoPlan`——两次调用之间的状态不共享。下面步骤还要重新 `ctx.ioPlan()` 才能加物品。
+:::
 
 ### 3. 范围搜玩家 → 召唤闪电
 

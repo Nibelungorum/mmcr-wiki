@@ -133,7 +133,9 @@ if (!planFe.commit().successful()) {
 
 [`EnergyRequirement`](../API/JavaAPI#energyrequirement) 是不可变记录（`RecipeIo io, long fePerTick`）。这里的 `RecipeModifier.IOType.INPUT` 是 MMCR 内部修饰符系统沿用下来的方向枚举，其语义和 [`RecipeIo.INPUT`](../API/JavaAPI#recipeio) 完全相同。
 
-> 注意：`ioPlan()` 每次返回**新**的 `MachineIoPlan`——两次调用之间的状态不共享。下面步骤还要重新 `context.ioPlan()` 才能加物品。
+:::warning 注意
+`ioPlan()` 每次返回**新**的 `MachineIoPlan`——两次调用之间的状态不共享。下面步骤还要重新 `context.ioPlan()` 才能加物品。
+:::
 
 ### 3) 范围搜玩家 → 召唤闪电
 

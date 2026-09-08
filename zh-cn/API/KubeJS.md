@@ -1722,7 +1722,7 @@ machine.durationByInterface("temperature", 0, 100, 2, 0.5)
 - **示例**：
 
 ```javascript
-const Operation = Java.loadClass("cn.howxu.mmcr.api.recipe.modifier.RecipeModifier$Operation")
+const Operation = Java.loadClass("cn.howxu.mmcr.api.publicapi.recipe.modifier.RecipeModifier$Operation")
 machine.durationByInterface("temperature", 0, 100, 2, 0.5, Operation.ADD)
 ```
 
@@ -1747,7 +1747,7 @@ machine.energyByInterface("mode", 1, 3, 1, 2)
 - **示例**：
 
 ```javascript
-const Operation = Java.loadClass("cn.howxu.mmcr.api.recipe.modifier.RecipeModifier$Operation")
+const Operation = Java.loadClass("cn.howxu.mmcr.api.publicapi.recipe.modifier.RecipeModifier$Operation")
 machine.energyByInterface("mode", 1, 3, 1, 2, Operation.MULTIPLY)
 ```
 
@@ -1796,7 +1796,7 @@ machine.itemInputChanceByInterface("quality", 0, 1, 0.5, 1)
 - **示例**：
 
 ```javascript
-const Operation = Java.loadClass("cn.howxu.mmcr.api.recipe.modifier.RecipeModifier$Operation")
+const Operation = Java.loadClass("cn.howxu.mmcr.api.publicapi.recipe.modifier.RecipeModifier$Operation")
 machine.itemInputChanceByInterface("quality", 0, 1, 0.5, 1, Operation.ADD)
 ```
 
@@ -1821,7 +1821,7 @@ machine.itemOutputChanceByInterface("quality", 0, 1, 0.5, 1)
 - **示例**：
 
 ```javascript
-const Operation = Java.loadClass("cn.howxu.mmcr.api.recipe.modifier.RecipeModifier$Operation")
+const Operation = Java.loadClass("cn.howxu.mmcr.api.publicapi.recipe.modifier.RecipeModifier$Operation")
 machine.itemOutputChanceByInterface("quality", 0, 1, 0.5, 1, Operation.MULTIPLY)
 ```
 
@@ -1870,7 +1870,7 @@ machine.fluidInputChanceByInterface("quality", 0, 1, 0.5, 1)
 - **示例**：
 
 ```javascript
-const Operation = Java.loadClass("cn.howxu.mmcr.api.recipe.modifier.RecipeModifier$Operation")
+const Operation = Java.loadClass("cn.howxu.mmcr.api.publicapi.recipe.modifier.RecipeModifier$Operation")
 machine.fluidInputChanceByInterface("quality", 0, 1, 0.5, 1, Operation.MULTIPLY)
 ```
 
@@ -1895,7 +1895,7 @@ machine.fluidOutputChanceByInterface("quality", 0, 1, 0.5, 1)
 - **示例**：
 
 ```javascript
-const Operation = Java.loadClass("cn.howxu.mmcr.api.recipe.modifier.RecipeModifier$Operation")
+const Operation = Java.loadClass("cn.howxu.mmcr.api.publicapi.recipe.modifier.RecipeModifier$Operation")
 machine.fluidOutputChanceByInterface("quality", 0, 1, 0.5, 1, Operation.ADD)
 ```
 

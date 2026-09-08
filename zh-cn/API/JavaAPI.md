@@ -8,14 +8,21 @@ title: JavaAPI
 
 ## 包路径
 
-所有公共 API 都位于 `cn.howxu.mmcr.api.publicapi` 及其子包：
+所有公共 API 都位于 `cn.howxu.mmcr.api.publicapi` 及其子包，并通过 `apiJar` 单独发布：
 
-- `cn.howxu.mmcr.api.publicapi` — 顶层接口与运行时入口。
+- `cn.howxu.mmcr.api.publicapi` — 顶层接口与运行时入口（`MachineApi`、`RecipeApi`、`ReadableNumber`、`ApiRegistrationException`、`ApiRuntime`、`MachineDefinitionProvider` 等）。
 - `cn.howxu.mmcr.api.publicapi.event` — 事件总线事件。
 - `cn.howxu.mmcr.api.publicapi.machine` — 机器相关类型。
 - `cn.howxu.mmcr.api.publicapi.recipe` — 配方相关类型。
+- `cn.howxu.mmcr.api.publicapi.recipe.component` — 配方组件谓词（`ComponentPredicate`、`DataComponentPredicateSet`）。
+- `cn.howxu.mmcr.api.publicapi.recipe.modifier` — 配方修饰符操作名（`RecipeModifier.IOType`、`RecipeModifier.Operation`）。
+- `cn.howxu.mmcr.api.publicapi.recipe.requirement` — 配方需求项边界接口（`MachineRequirement`、`CustomRequirement`）。
+- `cn.howxu.mmcr.api.publicapi.data` — 机器数据存储与值包装（`DataStorage`、`DataValue`、`DataValueType`、`DataReservation`、`DataRepository*`）。
+- `cn.howxu.mmcr.api.publicapi.network` — 机器网络通信（`NetworkApi`、`MachineReference`、`NetworkInterfaceReference`、`RequestBody`、`RequestInfo`、`RequestProcess`、`RequestFailed`、`RequestFailureReason`）。
 - `cn.howxu.mmcr.api.publicapi.controller` — 控制器屏幕文本与 Jade。
 - `cn.howxu.mmcr.api.publicapi.render` — 控制器渲染器。
+
+启动期注册相关的类型（见 `package-info.java` 的 ABI allow-list）是稳定 API；运行期数据存储、网络与配方修饰符等子包位于公共 jar 内、API 仍可能在后续小版本内调整，调用方应在小版本升级时回归验证。
 
 ## 阅读建议
 
@@ -4530,11 +4537,11 @@ ctx.jadeText().append(
 
 ## 17 数据子包
 
-本节覆盖 `cn.howxu.mmcr.api.data` 子包——机器数据存储、跨机器数据查询抽象以及事务感知的读写入口。
+本节覆盖 `cn.howxu.mmcr.api.publicapi.data` 子包——机器数据存储的公共视图、值包装、跨机器数据查询扩展点以及事务封装的对外入口。运行期类型位于公共 jar 内，但**不在** `package-info.java` 列出的"启动期 ABI allow-list"中，调用方应在小版本升级时回归验证。
 
 ### `DataValueType`
 
-完整类名：`cn.howxu.mmcr.api.data.DataValueType`
+完整类名：`cn.howxu.mmcr.api.publicapi.data.DataValueType`
 
 `DataValue` 支持的类型标签枚举。决定 `DataStorage` 中键对应值的存储与反序列化格式。
 
@@ -4557,37 +4564,87 @@ ctx.jadeText().append(
 
 #### 注意事项
 
-- 所有 `DataValueType` 都被 `DataStorage` 完整支持；序列化在内部通过 NBT 完成，无需 Mod 自行处理。
-- 浮点 `FLOAT` / `DOUBLE` 工厂在传入 `NaN` / `Infinity` 时会抛 `IllegalArgumentException`。
+- 公共枚举与底层 NBT 序列化一一对应；Mod 只需通过工厂方法构造 `DataValue`，序列化由 MMCR 内部完成。
+- 浮点 `FLOAT` / `DOUBLE` 工厂在传入 `NaN` / `Infinity` 时会抛 `IllegalArgumentException("value must be finite")`。
 
 ---
 
 ### `DataValue`
 
-完整类名：`cn.howxu.mmcr.api.data.DataValue`
+完整类名：`cn.howxu.mmcr.api.publicapi.data.DataValue`
 
-不可变、带类型标签的值包装。所有 `DataStorage` 键对应的值都是 `DataValue`；`RequestBody` 也只接受 `DataValue` 作为载荷。
+不可变、带类型标签的值包装。所有 `DataStorage` 键对应的值都是 `DataValue`；`RequestBody` 也只接受 `DataValue` 作为载荷。**没有公开构造器**——只能通过工厂方法创建。
+
+#### 类签名
+
+```java
+public final class DataValue {
+    public static DataValue of(boolean value);
+    public static DataValue of(String value);
+    public static DataValue of(byte value);
+    public static DataValue of(short value);
+    public static DataValue of(int value);
+    public static DataValue of(long value);
+    public static DataValue of(float value);
+    public static DataValue of(double value);
+    public static DataValue of(BigInteger value);
+    public static DataValue of(BigDecimal value);
+
+    public static DataValue list(List<DataValue> values);
+    public static DataValue map(Map<String, DataValue> values);
+
+    public Object value();
+    public DataValueType type();
+
+    public Optional<Boolean> asBoolean();
+    public Optional<String> asString();
+    public Optional<Byte> asByte();
+    public Optional<Short> asShort();
+    public Optional<Integer> asInt();
+    public Optional<Long> asLong();
+    public Optional<Float> asFloat();
+    public Optional<Double> asDouble();
+    public Optional<BigInteger> asBigInteger();
+    public Optional<BigDecimal> asBigDecimal();
+    public Optional<List<DataValue>> asList();
+    public Optional<Map<String, DataValue>> asMap();
+
+    public boolean booleanValue();
+    public String stringValue();
+    public byte byteValue();
+    public short shortValue();
+    public int intValue();
+    public long longValue();
+    public float floatValue();
+    public double doubleValue();
+    public BigInteger bigIntegerValue();
+    public BigDecimal bigDecimalValue();
+}
+```
 
 ##### 工厂方法
 
 | 方法 | 含义 |
 | --- | --- |
 | `DataValue.of(boolean)` | 布尔。 |
-| `DataValue.of(String)` | 字符串。`null` → `IllegalArgumentException`。 |
+| `DataValue.of(String)` | 字符串。`null` → `NullPointerException("value")`。 |
 | `DataValue.of(byte)` / `short` / `int` / `long` | 整数。 |
-| `DataValue.of(float)` / `double` | 浮点。`NaN` / `Infinity` → `IllegalArgumentException`。 |
-| `DataValue.of(BigInteger)` / `BigDecimal` | 任意精度数。`null` → `IllegalArgumentException`。 |
-| `DataValue.list(List<DataValue>)` | 有序列表。元素或入参为 `null` → `IllegalArgumentException`。 |
-| `DataValue.map(Map<String, DataValue>)` | 键值映射。键为空 / `null` 或入参为 `null` → `IllegalArgumentException`。 |
+| `DataValue.of(float)` / `double` | 浮点。`NaN` / `Infinity` → `IllegalArgumentException("value must be finite")`。 |
+| `DataValue.of(BigInteger)` / `BigDecimal` | 任意精度数。`null` → `NullPointerException("value")`。 |
+| `DataValue.list(List<DataValue>)` | 有序列表。元素或入参为 `null` → `NullPointerException("values")`。 |
+| `DataValue.map(Map<String, DataValue>)` | 键值映射。键为空 / `null` → `IllegalArgumentException("map key must not be blank")`；值或入参为 `null` → `NullPointerException("map value")`。 |
 
-##### 字段读取
+##### `value() → Object`
 
-- `type()` → `DataValueType`：当前值的类型标签。
-- `value()` → `Object`：原始 Java 对象（布尔 / 字符串 / 数值 / `List<DataValue>` / `Map<String, DataValue>`）。调用方应先用 `type()` 判类型。
+返回原始 Java 对象（`Boolean` / `String` / 数值包装类 / `List<DataValue>` / `Map<String, DataValue>`）。调用方应先用 `type()` 判类型再取值。
+
+##### `type() → DataValueType`
+
+当前值的类型标签——通过运行时类型分派，不存额外字段。
 
 ##### 安全转换 `asXxx() → Optional<...>`
 
-每个支持的类型都有一对取值器：返回 `Optional`（类型不匹配返回空）。
+类型不匹配返回 `Optional.empty()`。
 
 | 方法 | 返回 | 适用类型 |
 | --- | --- | --- |
@@ -4601,14 +4658,16 @@ ctx.jadeText().append(
 
 ##### 强类型取值 `xxxValue() → ...`
 
-与 `asXxx()` 同名但不带 `Optional`、类型不匹配时抛 `IllegalStateException("Expected X, got Y")`。
+与 `asXxx()` 同名但不带 `Optional`、类型不匹配时抛 `IllegalStateException("Expected <类型名>")`。
 
 ##### 示例
 
 ```java
 DataValue v = DataValue.of(42L);
 long n = v.longValue();                         // 42
+DataValueType tag = v.type();                   // DataValueType.LONG
 double miss = v.asDouble().orElse(0.0);         // 0.0（类型不对）
+
 DataValue list = DataValue.list(List.of(
         DataValue.of("hello"),
         DataValue.of(true)));
@@ -4623,76 +4682,87 @@ DataValue list = DataValue.list(List.of(
 
 ### `DataStorage`
 
-完整类名：`cn.howxu.mmcr.api.data.DataStorage`
+完整类名：`cn.howxu.mmcr.api.publicapi.data.DataStorage`
 
-有序、类型化、支持 NeoForge 事务的机器数据存储。`MachineBehaviorContext.dataStorage()` 在机器持有数据存储方块时返回其实例，否则返回 `null`。
+机器数据存储的**公共视图**——MMCR 在底层持有的存储块（`cn.howxu.mmcr.api.data.DataStorage`）只能通过静态工厂 `DataStorage.view(Object)` 转换为公共视图暴露给外部 Mod。`MachineBehaviorContext.dataStorage()` 在机器持有数据存储方块时返回公共视图，否则返回 `null`。
 
 #### 类签名
 
 ```java
-public final class DataStorage extends SnapshotJournal<Map<String, DataValue>> {
-    public DataStorage();
-    public DataStorage(Consumer<Map<String, DataValue>> changeListener);
+public final class DataStorage {
+    public static DataStorage view(Object storage);
 
     public Optional<DataValue> get(String key);
     public boolean contains(String key);
     public Map<String, DataValue> values();
 
     public void set(String key, DataValue value);
-    public boolean set(String key, DataValue value, TransactionContext transaction);
+    public boolean set(String key, DataValue value, DataStorage.Transaction transaction);
     public Optional<DataValue> remove(String key);
 
-    public Object contentFingerprint();
+    public Object bridgeValue();
+
+    public static final class Transaction {
+        public static Transaction view(Object context);
+    }
 }
 ```
 
-##### 构造方法
+##### `view(storage) → DataStorage`
 
-| 构造器 | 含义 |
-| --- | --- |
-| `DataStorage()` | 不注册变更监听器（变更回调为空实现）。 |
-| `DataStorage(Consumer<Map<String, DataValue>> changeListener)` | `changeListener` 在每次值变更或事务根提交后被回调；传入 `null` 等价于空实现。 |
+将 MMCR 内部存储块转换为公共视图。
+
+- `storage`：MMCR 内部的 `cn.howxu.mmcr.api.data.DataStorage` 实例（来自 `MachineBehaviorContext.dataStorage()` 返回的对象）。`null` 或类型不匹配 → `IllegalArgumentException("storage must be a machine data storage")`。
+- 返回：包装后的公共视图。**不要**自行缓存——同一内部存储块通过 `view(...)` 反复调用会得到不同视图对象，但都引用同一份底层数据。
 
 ##### `get(key) → Optional<DataValue>`
 
-- `key`：`String` — 键名。`null` 或空白 → `IllegalArgumentException`。
-- 返回：键对应的 `DataValue`；不存在时返回 `Optional.empty()`。
+- `key`：`String` — 键名。
+- 返回：键对应的 `DataValue`（从内部存储自动转换为公共值包装）；不存在时返回 `Optional.empty()`。
 
 ##### `contains(key) → boolean`
 
-判断键是否存在。`key` 校验同 `get(...)`。
+判断键是否存在。
 
 ##### `values() → Map<String, DataValue>`
 
-返回当前全部键值的**不可变**快照（按插入顺序，`LinkedHashMap`）。返回值在后续 `set(...)` / `remove(...)` 之后仍引用旧快照——MMCR 内部会随写入失效缓存。
+返回当前全部键值的**不可变**快照（按插入顺序，`LinkedHashMap`）。每次调用都会重新生成快照；调用方在 `set(...)` / `remove(...)` 后需要重新取值。
 
 ##### `set(key, value)`
 
 非事务写入。值与现存值相等时跳过变更通知；其他情况覆写键、失效缓存、触发监听器。
 
-- 抛出：`IllegalArgumentException`（键非法）、`NullPointerException`（`value` 为 `null`）。
-
 ##### `set(key, value, transaction) → boolean`
 
 事务感知写入。事务回滚时写入自动撤销；根提交时按需触发监听器。
 
-- `transaction`：`TransactionContext`（NeoForge 事务上下文），`null` → `NullPointerException`。
+- `transaction`：`DataStorage.Transaction`（公共事务包装），`null` → `NullPointerException("transaction")`。
 - 返回：`true` 表示值真正发生变化；`false` 表示新值与现存值相等，未发生写入。
 
 ##### `remove(key) → Optional<DataValue>`
 
 删除键。键不存在时返回 `Optional.empty()` 且不触发监听器。
 
-- 返回：被删除的值；不存在时返回空。
+##### `bridgeValue() → Object`
 
-##### `contentFingerprint() → Object`
+返回底层 MMCR 内部存储块实例。仅供 MMCR 内部适配器使用；外部 Mod 不应调用。
 
-返回 `values()`——MMCR 用作内容指纹做脏检查。
+##### `Transaction`
+
+公共事务包装——把 NeoForge 的 `TransactionContext` 转换成可被外部代码持有的类型。
+
+```java
+public static final class Transaction {
+    public static Transaction view(Object context);
+}
+```
+
+`view(context)`：将 NeoForge `TransactionContext` 包装为 `Transaction`。`context` 为 `null` 或类型不匹配 → `IllegalArgumentException("context must be a transaction")`。
 
 ##### 示例
 
 ```java
-DataStorage storage = ctx.dataStorage();
+DataStorage storage = DataStorage.view(ctx.dataStorageBridge());
 if (storage == null) return;
 
 // 非事务写入
@@ -4700,7 +4770,8 @@ storage.set("power", DataValue.of(20.0));
 
 // 事务写入（MachineIoPlan.commit 回调里）
 plan.commit(transaction -> {
-    storage.set("energy", DataValue.of(next), transaction);
+    DataStorage.Transaction publicTransaction = DataStorage.Transaction.view(transaction);
+    storage.set("energy", DataValue.of(next), publicTransaction);
     if (energyShort) transaction.getSnapshotLedger().abort();
 });
 
@@ -4710,23 +4781,24 @@ double power = storage.get("power").flatMap(DataValue::asDouble).orElse(0.0);
 
 ##### 注意事项
 
-- `DataStorage` 继承 `SnapshotJournal<Map<String, DataValue>>`——非事务版本（`set(...)` 不带 `transaction`）与事务版本（带 `transaction`）行为不同。`MachineIoPlan` 失败回滚时，只有事务版本的写入会被撤销；非事务版本一旦调用立即生效。
+- `DataStorage` 是公共视图而不是原始存储——`view(...)` 接受 MMCR 内部的 `cn.howxu.mmcr.api.data.DataStorage` 实例（来自 `ctx.dataStorage()` 返回的对象），并包装成可被外部 Mod 操作的公共类型。
+- 外部 Mod **不能** 直接 `new DataStorage(...)`——构造器私有。
+- 非事务版本（`set(...)` 不带 `transaction`）与事务版本（带 `transaction`）行为不同：`MachineIoPlan` 失败回滚时只有事务版本的写入会被撤销，非事务版本一旦调用立即生效。
 - `get(...)` 返回 `Optional`，**不要**用 `null` 判定键是否存在；用 `contains(...)`。
-- 键不能为空字符串或全空白；写入时 key 校验失败抛 `IllegalArgumentException`。
 
 ---
 
 ### `DataReservation`
 
-完整类名：`cn.howxu.mmcr.api.data.DataReservation`
+完整类名：`cn.howxu.mmcr.api.publicapi.data.DataReservation`
 
-未来惰性数据存储库的事务性预留边界接口。当前实现由 MMCR 内部提供；外部 Mod 一般不需要直接实现。
+未来惰性数据存储库的事务性预留边界接口。外部 Mod 一般不需要直接实现。
 
 #### 接口签名
 
 ```java
 public interface DataReservation {
-    boolean commit(TransactionContext transaction);
+    boolean commit(DataStorage.Transaction transaction);
     void cancel();
 }
 ```
@@ -4735,7 +4807,7 @@ public interface DataReservation {
 
 在事务上下文中确认预留。返回 `true` 表示预留成功落实；返回 `false` 表示已取消。
 
-- `transaction`：`TransactionContext`，`null` → `NullPointerException`。
+- `transaction`：`DataStorage.Transaction`，`null` → `NullPointerException`。
 
 ##### `cancel()`
 
@@ -4749,7 +4821,7 @@ public interface DataReservation {
 
 ### `DataRepositoryContext`
 
-完整类名：`cn.howxu.mmcr.api.data.DataRepositoryContext`
+完整类名：`cn.howxu.mmcr.api.publicapi.data.DataRepositoryContext`
 
 请求未来数据存储库时的不可变输入上下文。
 
@@ -4764,10 +4836,10 @@ public record DataRepositoryContext(Identifier machineId, BlockPos controllerPos
 
 | 字段 | 类型 | 含义 |
 | --- | --- | --- |
-| `machineId` | `Identifier` | 目标机器 ID。`null` → `IllegalArgumentException`。 |
-| `controllerPos` | `BlockPos` | 目标控制器方块位置。构造时调用 `immutable()` 冻结；`null` → `IllegalArgumentException`。 |
-| `key` | `String` | 待读写的数据键。`null` 或空白 → `IllegalArgumentException`。 |
-| `requestedType` | `DataValueType` | 期望的 `DataValue` 类型。`null` → `IllegalArgumentException`。 |
+| `machineId` | `Identifier` | 目标机器 ID。`null` → `IllegalArgumentException("machineId must not be null")`。 |
+| `controllerPos` | `BlockPos` | 目标控制器方块位置。构造时调用 `immutable()` 冻结；`null` → `IllegalArgumentException("controllerPos must not be null")`。 |
+| `key` | `String` | 待读写的数据键。`null` 或空白 → `IllegalArgumentException("key must not be blank")`。 |
+| `requestedType` | `DataValueType` | 期望的 `DataValue` 类型。`null` → `IllegalArgumentException("requestedType must not be null")`。 |
 
 #### 注意事项
 
@@ -4777,9 +4849,9 @@ public record DataRepositoryContext(Identifier machineId, BlockPos controllerPos
 
 ### `DataRepositoryRequest`
 
-完整类名：`cn.howxu.mmcr.api.data.DataRepositoryRequest`
+完整类名：`cn.howxu.mmcr.api.publicapi.data.DataRepositoryRequest`
 
-对 `DataRepository.request(...)` 的不可变请求；可附带一个 `DataReservation` 表示惰性可获取的结果。
+`DataRepository.request(...)` 的不可变结果，可附带一个 `DataReservation` 表示惰性可获取的结果。
 
 #### 记录签名
 
@@ -4802,12 +4874,12 @@ public record DataRepositoryRequest(Identifier repositoryId, BlockPos controller
 
 | 字段 | 类型 | 含义 |
 | --- | --- | --- |
-| `repositoryId` | `Identifier` | 数据存储库 ID。`null` → `IllegalArgumentException`。 |
-| `controllerPos` | `BlockPos` | 控制器方块位置。构造时调用 `immutable()` 冻结；`null` → `IllegalArgumentException`。 |
-| `key` | `String` | 数据键。`null` 或空白 → `IllegalArgumentException`。 |
-| `requestedType` | `DataValueType` | 期望类型。`null` → `IllegalArgumentException`。 |
-| `requestedValue` | `DataValue` | 期望值。`null` → `IllegalArgumentException`；`requestedValue.type()` 必须等于 `requestedType`，否则 `IllegalArgumentException("requestedValue type must match requestedType")`。 |
-| `reservation` | `Optional<DataReservation>` | 可选的预留结果；空表示当前无可用数据。`null` → `IllegalArgumentException`。 |
+| `repositoryId` | `Identifier` | 数据存储库 ID。`null` → `IllegalArgumentException("repositoryId must not be null")`。 |
+| `controllerPos` | `BlockPos` | 控制器方块位置。构造时调用 `immutable()` 冻结；`null` → `IllegalArgumentException("controllerPos must not be null")`。 |
+| `key` | `String` | 数据键。`null` 或空白 → `IllegalArgumentException("key must not be blank")`。 |
+| `requestedType` | `DataValueType` | 期望类型。`null` → `IllegalArgumentException("requestedType must not be null")`。 |
+| `requestedValue` | `DataValue` | 期望值。`null` → `IllegalArgumentException("requestedValue must not be null")`；`requestedValue.type()` 必须等于 `requestedType`，否则 `IllegalArgumentException("requestedValue type must match requestedType")`。 |
+| `reservation` | `Optional<DataReservation>` | 可选的预留结果；空表示当前无可用数据。`null` → `IllegalArgumentException("reservation must not be null")`。 |
 
 ##### 便捷构造（无预留）
 
@@ -4815,7 +4887,7 @@ public record DataRepositoryRequest(Identifier repositoryId, BlockPos controller
 
 ##### `available(...) → DataRepositoryRequest`
 
-工厂：构造一个带 `DataReservation` 的请求。`reservation` 为 `null` → `NullPointerException`。
+工厂：构造一个带 `DataReservation` 的请求。`reservation` 为 `null` → `NullPointerException("reservation")`。
 
 ##### `unavailable(...) → DataRepositoryRequest`
 
@@ -4829,7 +4901,7 @@ public record DataRepositoryRequest(Identifier repositoryId, BlockPos controller
 
 ### `DataRepository`
 
-完整类名：`cn.howxu.mmcr.api.data.DataRepository`
+完整类名：`cn.howxu.mmcr.api.publicapi.data.DataRepository`
 
 未来惰性数据存储库的开放扩展点。当前 MMCR 不提供内置仓库；实现类需自行注册（注册路径见未来扩展）。
 
@@ -4862,26 +4934,37 @@ public interface DataRepository {
 
 ## 18 网络子包
 
-本节覆盖 `cn.howxu.mmcr.api.network` 子包——机器网络通信的不可变消息体、回调接口与静态门面。
+本节覆盖 `cn.howxu.mmcr.api.publicapi.network` 子包——机器网络通信的公共视图、不可变消息体、回调接口与静态门面。运行期网络类型位于公共 jar 内，但**不在** `package-info.java` 列出的"启动期 ABI allow-list"中，调用方应在小版本升级时回归验证。
 
 ### `MachineReference`
 
-完整类名：`cn.howxu.mmcr.api.network.MachineReference`
+完整类名：`cn.howxu.mmcr.api.publicapi.network.MachineReference`
 
 已成型机器控制器的稳定身份标识。`record`，值类型。
 
 #### 记录签名
 
 ```java
-public record MachineReference(Identifier type, long hash);
+public record MachineReference(Identifier type, long hash) {
+    public Object bridgeValue();
+    public static MachineReference fromInternal(cn.howxu.mmcr.api.network.MachineReference reference);
+}
 ```
 
 #### 字段
 
 | 字段 | 类型 | 含义 |
 | --- | --- | --- |
-| `type` | `Identifier` | 机器 ID（如 `Identifier.fromNamespaceAndPath("my_mod", "producer")`）。`null` → `NullPointerException`。 |
+| `type` | `Identifier` | 机器 ID（如 `Identifier.fromNamespaceAndPath("my_mod", "producer")`）。`null` → `NullPointerException("type")`。 |
 | `hash` | `long` | 实例稳定哈希——成型后生成，跨重启保持。 |
+
+##### `bridgeValue() → Object`
+
+返回底层 MMCR 内部 `cn.howxu.mmcr.api.network.MachineReference` 实例。仅供 MMCR 内部适配器使用；外部 Mod 不应调用。
+
+##### `fromInternal(reference) → MachineReference`
+
+把 MMCR 内部 `MachineReference` 转换为公共 `MachineReference`。外部 Mod 一般不直接调用——`RequestInfo.peer()` / `NetworkInterfaceReference.connections()` 已返回公共类型。
 
 #### 示例
 
@@ -4895,15 +4978,15 @@ storage.set("power_" + peerHash, DataValue.of(reported));
 #### 注意事项
 
 - `hash` 由 MMCR 内部从结构快照计算；不同实例即使机器 ID 相同也会有不同 `hash`。
-- 该类型在网络通信中用作对端标识，是 `RequestBody` / `RequestInfo` 等的公共字段类型。
+- 该类型在网络通信中用作对端标识，是 `RequestInfo.peer()` 与 `NetworkInterfaceReference.connections()` 的公共字段类型。
 
 ---
 
 ### `NetworkInterfaceReference`
 
-完整类名：`cn.howxu.mmcr.api.network.NetworkInterfaceReference`
+完整类名：`cn.howxu.mmcr.api.publicapi.network.NetworkInterfaceReference`
 
-服务端活跃网络接口方块的句柄。由 `NetworkApi.interfaces(...)` 创建并返回；不要自行构造。
+服务端活跃网络接口方块的**公共视图句柄**。由 `NetworkApi.interfaces(...)` 创建并返回；不要自行构造（构造器为包级，外部不可见）。
 
 #### 类签名
 
@@ -4912,38 +4995,23 @@ public final class NetworkInterfaceReference {
     public BlockPos position();
     public List<MachineReference> connections();
 
-    public GlobalPos sourceController();
-    public RequestFailed sourceFailure(Identifier requestId);
-    public MinecraftServer server();
-    public GlobalPos source();
+    public Object bridgeValue();
 }
 ```
 
 ##### `position() → BlockPos`
 
-当前接口方块的世界坐标（与 `source().pos()` 一致）。
+当前接口方块的世界坐标。
 
 ##### `connections() → List<MachineReference>`
 
-该接口方块当前已建立的物理连接对应的机器引用列表。返回按服务端稳定顺序；空列表表示接口已放置但暂未连任何机器。
+该接口方块当前已建立的物理连接对应的机器引用列表（已转换为公共 `MachineReference`）。返回按服务端稳定顺序；空列表表示接口已放置但暂未连任何机器。
 
 - 返回：接口连接表为空或接口方块实体不存在时返回空列表。
 
-##### `sourceController() → GlobalPos`
+##### `bridgeValue() → Object`
 
-发出请求的源机器控制器所在维度 + 坐标。
-
-##### `sourceFailure(requestId) → RequestFailed`
-
-源机器控制器上登记的、针对 `requestId` 的失败回调。`null` 表示源机器没有为该请求 ID 注册失败处理。
-
-##### `server() → MinecraftServer`
-
-所属服务端实例。
-
-##### `source() → GlobalPos`
-
-接口方块自身所在的维度 + 坐标。
+返回底层 MMCR 内部 `cn.howxu.mmcr.api.network.NetworkInterfaceReference` 实例。仅供 MMCR 内部适配器使用；外部 Mod 不应调用。
 
 ##### 示例
 
@@ -4959,14 +5027,15 @@ for (NetworkInterfaceReference iface : interfaces) {
 
 ##### 注意事项
 
-- 该类**不能**自行构造（包级构造器）；只能通过 `NetworkApi.interfaces(...)` 获取。
+- 该类**不能**自行构造；只能通过 `NetworkApi.interfaces(...)` 获取。
 - 返回值依赖于调用时接口方块所在的 chunk 是否已加载——未加载的接口会被 `NetworkApi.interfaces(...)` 过滤。
+- 公共视图不再暴露 `sourceController()` / `source()` / `server()` / `sourceFailure(...)` 等内部状态访问器；如需源控制器位置或失败回调，请通过 `MachineBuilder.requestFailed(...)` 注册处理器，并在 `RequestProcess` 内通过 `RequestInfo.peer()` 获取对端引用。
 
 ---
 
 ### `RequestBody`
 
-完整类名：`cn.howxu.mmcr.api.network.RequestBody`
+完整类名：`cn.howxu.mmcr.api.publicapi.network.RequestBody`
 
 不可变的网络请求体。本质是带校验的 `Map<String, DataValue>`。
 
@@ -4978,6 +5047,9 @@ public final class RequestBody {
 
     public Map<String, DataValue> values();
     public Optional<DataValue> get(String key);
+
+    public static RequestBody fromInternal(cn.howxu.mmcr.api.network.RequestBody body);
+    public Object bridgeValue();
 }
 ```
 
@@ -4985,8 +5057,8 @@ public final class RequestBody {
 
 构造不可变请求体。
 
-- `values`：`Map<String, DataValue>`，`null` → `NullPointerException`。
-- 内部深拷贝：键不允许为 `null` / 空白字符串，值不允许为 `null`——任一违规抛 `IllegalArgumentException("request body key/value must not be null/blank")`。
+- `values`：`Map<String, DataValue>`，`null` → `NullPointerException("values")`。
+- 内部深拷贝：键不允许为 `null` / 空白字符串（`IllegalArgumentException("request body key must not be blank")`），值不允许为 `null`（`NullPointerException("request body value")`）。
 
 ##### `values() → Map<String, DataValue>`
 
@@ -4995,6 +5067,14 @@ public final class RequestBody {
 ##### `get(key) → Optional<DataValue>`
 
 读取键对应的值。键不存在时返回空。
+
+##### `fromInternal(body) → RequestBody`
+
+把 MMCR 内部 `cn.howxu.mmcr.api.network.RequestBody` 转换为公共 `RequestBody`。外部 Mod 一般不直接调用——`RequestProcess.process(...)` 收到的 `body` 已为公共类型。
+
+##### `bridgeValue() → Object`
+
+返回底层 MMCR 内部 `RequestBody` 实例。仅供 MMCR 内部适配器使用；外部 Mod 不应调用。
 
 ##### 示例
 
@@ -5015,7 +5095,7 @@ double power = body.get("power").flatMap(DataValue::asDouble).orElse(0.0);
 
 ### `RequestInfo`
 
-完整类名：`cn.howxu.mmcr.api.network.RequestInfo`
+完整类名：`cn.howxu.mmcr.api.publicapi.network.RequestInfo`
 
 `RequestProcess.process(...)` 回调收到的请求上下文——标识一次到达的请求与对端机器。
 
@@ -5029,8 +5109,8 @@ public record RequestInfo(Identifier requestId, MachineReference peer);
 
 | 字段 | 类型 | 含义 |
 | --- | --- | --- |
-| `requestId` | `Identifier` | 请求 ID（命名空间 + 路径均非空）。`null` → `NullPointerException`。 |
-| `peer` | `MachineReference` | 发送方机器引用。`null` → `NullPointerException`。 |
+| `requestId` | `Identifier` | 请求 ID（命名空间 + 路径均非空）。`null` → `NullPointerException("requestId")`。 |
+| `peer` | `MachineReference` | 发送方机器引用。`null` → `NullPointerException("peer")`。 |
 
 #### 示例
 
@@ -5052,7 +5132,7 @@ ctx.requestProcess(REPORT_POWER, (body, request, senderStorage, receiverStorage)
 
 ### `RequestProcess`
 
-完整类名：`cn.howxu.mmcr.api.network.RequestProcess`
+完整类名：`cn.howxu.mmcr.api.publicapi.network.RequestProcess`
 
 `@FunctionalInterface`：处理一次到达的网络请求的回调。
 
@@ -5062,8 +5142,8 @@ ctx.requestProcess(REPORT_POWER, (body, request, senderStorage, receiverStorage)
 @FunctionalInterface
 public interface RequestProcess {
     void process(RequestBody body, RequestInfo request,
-                 @Nullable DataStorage senderStorage,
-                 @Nullable DataStorage receiverStorage);
+                 DataStorage senderStorage,
+                 DataStorage receiverStorage);
 }
 ```
 
@@ -5073,8 +5153,8 @@ public interface RequestProcess {
 | --- | --- | --- |
 | `body` | `RequestBody` | 来自发送方的请求体。 |
 | `request` | `RequestInfo` | 请求 ID 与发送方机器引用。 |
-| `senderStorage` | `DataStorage` 或 `null` | 发送方机器的 `DataStorage`；发送方未启用数据存储时为 `null`。 |
-| `receiverStorage` | `DataStorage` 或 `null` | 接收方（当前机器）的 `DataStorage`；当前机器未启用数据存储时为 `null`。 |
+| `senderStorage` | `DataStorage` | 发送方机器的公共数据存储视图；发送方未启用数据存储或当前不在主线程时为 `null`（需在闭包内自行判空）。 |
+| `receiverStorage` | `DataStorage` | 接收方（当前机器）的公共数据存储视图；当前机器未启用数据存储或当前不在主线程时为 `null`（需在闭包内自行判空）。 |
 
 ##### 示例
 
@@ -5092,13 +5172,14 @@ ctx.requestProcess(REPORT_POWER,
 ##### 注意事项
 
 - 通过 `MachineBuilder.requestProcess(Identifier, RequestProcess)` 注册；同一请求 ID 注册多次时，以最后一次为准。
+- 公共签名上的 `senderStorage` / `receiverStorage` 不再带 `@Nullable` 注解，但运行时仍可能为 `null`——处理器必须在闭包开头自行判空。
 - 抛出的异常会被 MMCR 捕获并记日志；不要把控制流逻辑放在异常抛出上。
 
 ---
 
 ### `RequestFailed`
 
-完整类名：`cn.howxu.mmcr.api.network.RequestFailed`
+完整类名：`cn.howxu.mmcr.api.publicapi.network.RequestFailed`
 
 `@FunctionalInterface`：当网络请求无法送达时触发的回调。
 
@@ -5119,7 +5200,7 @@ public interface RequestFailed {
 | --- | --- | --- |
 | `body` | `RequestBody` | 未能送达的请求体。 |
 | `request` | `RequestInfo` | 原始请求的 ID 与对端机器引用。 |
-| `senderStorage` | `DataStorage` 或 `null` | 发送方 `DataStorage`；发送方未启用数据存储时为 `null`。 |
+| `senderStorage` | `DataStorage` 或 `null` | 发送方 `DataStorage`；发送方未启用数据存储时为 `null`。参数带 `@Nullable`，可直接判空。 |
 | `reason` | `RequestFailureReason` | 失败原因枚举。 |
 
 ##### 注意事项
@@ -5131,7 +5212,7 @@ public interface RequestFailed {
 
 ### `RequestFailureReason`
 
-完整类名：`cn.howxu.mmcr.api.network.RequestFailureReason`
+完整类名：`cn.howxu.mmcr.api.publicapi.network.RequestFailureReason`
 
 `RequestFailed.fail(...)` 的失败原因枚举。
 
@@ -5156,47 +5237,9 @@ public interface RequestFailed {
 
 ---
 
-### `KeyCardBinding`
-
-完整类名：`cn.howxu.mmcr.api.network.KeyCardBinding`
-
-网络钥匙卡内存储的不可变绑定关系——目标接口方块位置 + 目标机器身份。提供 `Codec` 与 `StreamCodec` 用于 NBT 与网络包的序列化。
-
-#### 记录签名
-
-```java
-public record KeyCardBinding(GlobalPos interfacePos, MachineReference machine) {
-    public static final Codec<KeyCardBinding> CODEC;
-    public static final StreamCodec<FriendlyByteBuf, KeyCardBinding> STREAM_CODEC;
-}
-```
-
-#### 字段
-
-| 字段 | 类型 | 含义 |
-| --- | --- | --- |
-| `interfacePos` | `GlobalPos` | 目标网络接口方块的维度 + 坐标。`null` → `NullPointerException`。 |
-| `machine` | `MachineReference` | 目标机器身份（机器 ID + 实例哈希）。`null` → `NullPointerException`。 |
-
-##### `CODEC` / `STREAM_CODEC`
-
-MMCR 已提供这两个序列化器；外部 Mod 在保存到自定义物品 NBT 或编写自定义网络包时可复用：
-
-```java
-CompoundTag tag = KeyCardBinding.CODEC.encodeStart(NbtOps.INSTANCE, binding)
-        .getOrThrow(IllegalStateException::new);
-```
-
-##### 注意事项
-
-- `KeyCardBinding` 是公开记录类型，外部 Mod 可自行构造——但调用方需保证 `interfacePos` 指向已成型机器的网络接口，否则 MMCR 内部会判定为无效。
-- 与 [`MachineReference`](#machinereference) 的 `hash` 一致：实例哈希跨重启保持，跨世界保持。
-
----
-
 ### `NetworkApi`
 
-完整类名：`cn.howxu.mmcr.api.network.NetworkApi`
+完整类名：`cn.howxu.mmcr.api.publicapi.network.NetworkApi`
 
 机器网络通信的 Java 静态门面。提供"枚举当前机器的网络接口"与"把请求入队"两个入口。
 
@@ -5214,14 +5257,14 @@ public final class NetworkApi {
 
 ##### `interfaces(context) → List<NetworkInterfaceReference>`
 
-返回当前机器所有活跃网络接口的服务端引用，按方块位置 `(x, y, z)` 升序排序。
+返回当前机器所有活跃网络接口的公共视图，按方块位置 `(x, y, z)` 升序排序。
 
-- `context`：`MachineBehaviorContext`（来自 `MachineBehavior` 钩子），`null` → `NullPointerException`。
+- `context`：`MachineBehaviorContext`（来自 `MachineBehavior` 钩子），`null` → `NullPointerException("context")`。
 - 返回：仅在 `ServerLevel` 上调用且控制器当前已成型时返回非空列表；其他情况返回空列表。
 - 行为细节：
   - 接口方块所在 chunk 必须已加载，否则被过滤；
   - 通过 `executeBlocking(...)` 在主线程同步获取；
-  - 返回值是**不可变**副本（`List.copyOf(...)`）。
+  - 返回值是**不可变**副本。
 
 ##### `sendRequest(source, target, requestId, body)`
 
@@ -5229,16 +5272,16 @@ public final class NetworkApi {
 
 | 参数 | 类型 | 含义 |
 | --- | --- | --- |
-| `source` | `NetworkInterfaceReference` | 发送方接口引用。`null` → `NullPointerException`。 |
-| `target` | `MachineReference` | 目标机器引用。`null` → `NullPointerException`。 |
-| `requestId` | `Identifier` | 请求 ID；命名空间 + 路径均非空，否则 `IllegalArgumentException("requestId must not be blank")`。`null` → `NullPointerException`。 |
-| `body` | `RequestBody` | 请求体。`null` → `NullPointerException`。 |
+| `source` | `NetworkInterfaceReference` | 发送方接口引用（公共视图）。`null` → `NullPointerException("source")`。 |
+| `target` | `MachineReference` | 目标机器引用。`null` → `NullPointerException("target")`。 |
+| `requestId` | `Identifier` | 请求 ID；命名空间 + 路径均非空，否则 `IllegalArgumentException("requestId must not be blank")`。`null` → `NullPointerException("requestId")`。 |
+| `body` | `RequestBody` | 请求体。`null` → `NullPointerException("body")`。 |
 
 行为细节：
 
-- 通过 `source.server().executeBlocking(...)` 在主线程入队；
+- 通过 `source.bridgeValue()` 取出内部 `cn.howxu.mmcr.api.network.NetworkInterfaceReference`，由 MMCR 在主线程入队；
 - 目标不在 `source` 的连接表中时抛 `IllegalArgumentException("Target is not connected to the source interface")`；
-- 若目标方未注册对应 `requestId` 的 `RequestProcess`，请求在送达时按 `TARGET_HANDLER_MISSING` 失败，调用 `source.sourceFailure(requestId)` 回调。
+- 若目标方未注册对应 `requestId` 的 `RequestProcess`，请求在送达时按 `TARGET_HANDLER_MISSING` 失败，调用源机器通过 `MachineBuilder.requestFailed(...)` 注册的失败回调。
 
 ##### 示例
 
@@ -5270,256 +5313,122 @@ public final class ProducerBehavior implements MachineBehavior {
 
 ## 19 修饰符与需求类型
 
-本节覆盖 `cn.howxu.mmcr.api.recipe.modifier.RecipeModifier`、`cn.howxu.mmcr.api.recipe.requirement.MachineRequirement` 及其扩展点 `CustomRequirement`。这些类型在配方定义与运行时同时使用：`RecipeModifier` 在配方编译期确定 `apply(...)` 的顺序，`MachineRequirement` 是配方 IO 的统一抽象。
+本节覆盖 `cn.howxu.mmcr.api.publicapi.recipe.modifier.RecipeModifier`、`cn.howxu.mmcr.api.publicapi.recipe.requirement.MachineRequirement` 及其扩展点 `CustomRequirement`。
+
+注意：公共 API 中的 `RecipeModifier` 仅作为命名空间持有 `IOType` / `Operation` 两个枚举——实际的修饰符值、修饰器逻辑、Codec 都不属于公共 API 表面，由 MMCR 内部实现。配方修饰项的构造与注入仍由 `MachineRecipeBuilder` / `MachineDefinition.modifierUse(...)` 等高层 API 处理（见 [12 修饰符系统](#12-修饰符系统)）。
 
 ### `RecipeModifier`
 
-完整类名：`cn.howxu.mmcr.api.recipe.modifier.RecipeModifier`
+完整类名：`cn.howxu.mmcr.api.publicapi.recipe.modifier.RecipeModifier`
 
-不可变的单条配方修饰项——按 `target` / `ioTarget` / `operation` 作用于配方的某项数值。`ModifierDefinition.modifiers`（见 [12 修饰符系统](#12-修饰符系统)）与 `MachineRecipeDefinition.modifiers` 都使用此类型。
+仅作为命名空间持有 `IOType` 与 `Operation` 两个枚举。无方法、无字段；不可实例化（私有构造器）。
 
 #### 类签名
 
 ```java
 public final class RecipeModifier {
-    public RecipeModifier(String target, RecipeModifier.IOType ioTarget, float modifier,
-                          RecipeModifier.Operation operation, boolean affectsChance);
+    private RecipeModifier();
 
-    public String getTarget();
-    public RecipeModifier.IOType getIOTarget();
-    public float getModifier();
-    public RecipeModifier.Operation getOperation();
-    public boolean affectsChance();
-
-    public RecipeModifier multiply(float value);
-    public RecipeModifier add(float value);
-
-    public static float applyModifiers(Collection<RecipeModifier> modifiers, String target,
-                                       RecipeModifier.IOType ioType, float value, boolean isChance);
-
-    public CompoundTag serializeNbt();
-    public static RecipeModifier deserializeNbt(CompoundTag tag);
-
-    public static final Codec<RecipeModifier> CODEC;
-    public static final Codec<RecipeModifier.IOType> IO_TYPE_CODEC;
-    public static final Codec<RecipeModifier.Operation> OPERATION_CODEC;
-
-    public static final String IO_INPUT = "input";
-    public static final String IO_OUTPUT = "output";
-
-    public static class ModifierApplier {
-        public static final ModifierApplier DEFAULT_APPLIER;
-        public float inputAdd, inputMul, outputAdd, outputMul;
-        public float apply(float value, RecipeModifier.IOType ioType);
-        public boolean isDefault();
-    }
-
-    public static void applyValueToApplier(ModifierApplier applier, RecipeModifier mod);
+    public enum IOType { INPUT, OUTPUT }
+    public enum Operation { ADD, MULTIPLY, SUBTRACT, DIVIDE }
 }
 ```
-
-##### 字段
-
-| 字段 | 类型 | 含义 |
-| --- | --- | --- |
-| `target` | `String` | 修饰目标。空字符串表示"通配"（作用所有目标）。`null` 替换为空字符串。常见值：`"duration"`、`"energy"`、`"input.<id>"`、`"output.<id>"`。 |
-| `ioTarget` | `RecipeModifier.IOType` | IO 方向。`null` → `IOType.INPUT`。 |
-| `modifier` | `float` | 修饰系数。具体含义取决于 `operation`。 |
-| `operation` | `RecipeModifier.Operation` | 操作类型。`null` → `Operation.ADD`。 |
-| `affectsChance` | `boolean` | 是否影响概率字段（仅 `IOType.OUTPUT` 时生效）。 |
-
-##### `multiply(value) → RecipeModifier`
-
-返回新的 `RecipeModifier`，其 `modifier` 字段等于 `modifier * value`；其他字段不变。
-
-##### `add(value) → RecipeModifier`
-
-返回新的 `RecipeModifier`，其 `modifier` 字段等于 `modifier + value`；其他字段不变。
-
-##### `applyModifiers(modifiers, target, ioType, value, isChance) → float`
-
-将一组 `RecipeModifier` 累加应用到 `value`。
-
-- 累加规则：所有匹配的 `ADD` / `SUBTRACT` 加到 `add`（减则减），所有匹配的 `MULTIPLY` / `DIVIDE` 乘到 `mul`；最终返回 `(value + add) * mul`。
-- 匹配条件：`target` 为空（通配）或与 `mod.target` 相等；`ioType` 不为 `null` 且与 `mod.ioTarget` 相等；`affectsChance == isChance`。
-- `DIVIDE` 修饰值为 `0` 时跳过（避免除零）。
-- `modifiers` 为 `null` 或空集合时直接返回 `value`。
-
-##### `serializeNbt() → CompoundTag`
-
-把当前 `RecipeModifier` 序列化为 NBT。键：`target` / `ioTarget` / `operation` / `value` / `chance`。
-
-##### `deserializeNbt(tag) → RecipeModifier`
-
-NBT 反序列化。读取失败或缺字段时使用默认值（`target = ""`、`ioTarget = INPUT`、`operation = ADD`、`value = 0F`、`chance = false`）。
-
-##### `CODEC` / `IO_TYPE_CODEC` / `OPERATION_CODEC`
-
-`RecipeModifier` 的 Mojang Codec，用于配方 JSON 与世界存档；详见 `RecipeModifier.CODEC` 字段描述。
-
-##### `ModifierApplier`
-
-聚合器——把多条 `RecipeModifier` 折叠成 `inputAdd` / `inputMul` / `outputAdd` / `outputMul` 四个累计量，再以 `apply(value, ioType)` 一次应用到目标值。`DEFAULT_APPLIER` 是全零 / 全 1 的初始实例；`isDefault()` 用于判断是否完全无修饰。
-
-##### `applyValueToApplier(applier, mod)`
-
-把单条 `RecipeModifier` 折叠到 `applier`。`ADD` / `SUBTRACT` 累加到对应 `add`；`MULTIPLY` / `DIVIDE` 乘到对应 `mul`（`DIVIDE` 修饰值为 `0` 跳过）。
-
-##### 示例
-
-```java
-RecipeModifier speedup = new RecipeModifier(
-        "duration", RecipeModifier.IOType.INPUT, 0.5F,
-        RecipeModifier.Operation.MULTIPLY, false);
-
-float ticked = RecipeModifier.applyModifiers(
-        List.of(speedup), "duration", RecipeModifier.IOType.INPUT, 200F, false);
-// ticked == 100F
-```
-
-##### 注意事项
-
-- `IOType` 与 `Operation` 都是公开枚举；详见下两子节。
-- 构造函数对 `null` 参数采取宽容策略：`null` target → `""`、`null` ioTarget → `INPUT`、`null` operation → `ADD`。
-- `applyModifiers(...)` 中 `target` 的匹配是**精确字符串相等**，不含通配符；`RecipeModifier.target` 为空字符串表示通配。
 
 ---
 
 #### `RecipeModifier.IOType`
 
-完整类名：`cn.howxu.mmcr.api.recipe.modifier.RecipeModifier.IOType`（KubeJS / Java 端引用写作 `RecipeModifier.IOType`）
+完整类名：`cn.howxu.mmcr.api.publicapi.recipe.modifier.RecipeModifier.IOType`
 
-IO 方向枚举，标记 `RecipeModifier` 与 `MachineRequirement` 的输入 / 输出方向。
+配方 IO 方向枚举。
 
 ##### 枚举值
 
-| 常量 | 键字符串 | 含义 |
-| --- | --- | --- |
-| `INPUT` | `"input"` | 输入方向——消耗方向。 |
-| `OUTPUT` | `"output"` | 输出方向——产出方向。 |
-
-##### `getKey() → String`
-
-返回对应的字符串键（用于序列化与解码）。
-
-##### `byKey(key) → IOType`
-
-按字符串键解析。`key` 不匹配任何已知常量时**默认返回 `INPUT`**（非 `null`）；`null` 输入会抛 `NullPointerException`。
+| 常量 | 含义 |
+| --- | --- |
+| `INPUT` | 输入方向——消耗方向。 |
+| `OUTPUT` | 输出方向——产出方向。 |
 
 ##### 注意事项
 
-- 在配方 IO 类型语义上与 `RecipeIo.INPUT` / `RecipeIo.OUTPUT` 完全一致（见 [14 配方 IO 类型](#14-配方-io-类型)）。`FluidRequirement` / `ItemRequirement` / `EnergyRequirement` 在 Java 端沿用此枚举作为 IO 字段；调用方不必在意"修饰符"字面含义。
+- 在配方 IO 类型语义上与 `cn.howxu.mmcr.api.publicapi.recipe.RecipeIo.INPUT` / `RecipeIo.OUTPUT` 完全一致（见 [14 配方 IO 类型](#14-配方-io-类型)）。`FluidRequirement` / `ItemRequirement` / `EnergyRequirement` 等公共 `MachineRequirement` 子类型在 Java 端使用 `RecipeIo` 作为 IO 字段；`RecipeModifier.IOType` 主要在配方修饰表达式中引用。
 - KubeJS 教程引用此类型时写作 `RecipeModifier.IOType`，对应此锚点。
 
 ---
 
 #### `RecipeModifier.Operation`
 
-完整类名：`cn.howxu.mmcr.api.recipe.modifier.RecipeModifier.Operation`
+完整类名：`cn.howxu.mmcr.api.publicapi.recipe.modifier.RecipeModifier.Operation`
 
 修饰运算类型枚举。
 
 ##### 枚举值
 
-| 常量 | ID | 含义 |
-| --- | --- | --- |
-| `ADD` | `0` | 加法。 |
-| `MULTIPLY` | `1` | 乘法。 |
-| `SUBTRACT` | `2` | 减法。 |
-| `DIVIDE` | `3` | 除法。 |
-
-##### `getId() → int`
-
-返回整型 ID（用于序列化）。
-
-##### `byId(id) → Operation`
-
-按整型 ID 解析。未知 ID 抛 `IllegalArgumentException("Unknown modifier operation: <id>")`。
+| 常量 | 含义 |
+| --- | --- |
+| `ADD` | 加法。 |
+| `MULTIPLY` | 乘法。 |
+| `SUBTRACT` | 减法。 |
+| `DIVIDE` | 除法。 |
 
 ##### 注意事项
 
-- `ADD` 与 `SUBTRACT` 在 `applyModifiers(...)` 中按"加到 `add`"统一处理（`SUBTRACT` 减去修饰值）；`MULTIPLY` / `DIVIDE` 按"乘到 `mul`"统一处理。
-- `DIVIDE` 修饰值为 `0` 时跳过该条目。
+- 与之前版本的命名顺序一致；序列化协议保持向后兼容。
 
 ---
 
 ### `MachineRequirement`
 
-完整类名：`cn.howxu.mmcr.api.recipe.requirement.MachineRequirement`
+完整类名：`cn.howxu.mmcr.api.publicapi.recipe.requirement.MachineRequirement`
 
-配方 IO 项的统一抽象接口——任何配方输入 / 输出（`ItemRequirement`、`FluidRequirement`、`EnergyRequirement`、`SmartInterfaceRequirement`、`CustomRequirement` 等）都实现该接口。`MachineRecipeBuilder.addInput(...)` / `addOutput(...)` 与 `MachineBehaviorContext.requirements()` 都通过此类型。
+配方 IO 项的统一抽象接口——任何配方输入 / 输出（`ItemRequirement`、`FluidRequirement`、`EnergyRequirement`、`SmartInterfaceRequirement`、`CustomRequirement`、`RecipeRequirement.custom(...)` 等）都实现该接口。`MachineRecipeBuilder.addInput(...)` / `addOutput(...)` 与 `MachineBehaviorContext.requirements()` 都通过此类型。
 
 #### 接口签名
 
 ```java
-public interface MachineRequirement {
-    Codec<List<String>> TAGS_CODEC;
-    Codec<MachineRequirement> CODEC;
-
-    RequirementType<? extends MachineRequirement> type();
-    RecipeModifier.IOType io();
-
-    default List<String> tags();
-
-    static MachineRequirement copyOf(MachineRequirement requirement);
-    static List<MachineRequirement> copyList(List<MachineRequirement> requirements);
-    static MachineRequirement fromInput(MachineIngredient ingredient);
-    static MachineRequirement itemOutput(ItemStack stack);
-    static MachineRequirement itemOutput(ItemStack stack, float chance);
-    static MachineRequirement fluidOutput(FluidStack stack);
-    static MachineRequirement fluidOutput(FluidStack stack, float chance);
+public interface MachineRequirement extends RecipeRequirement {
+    RecipeIo io();
 }
 ```
 
-##### `type() → RequirementType<? extends MachineRequirement>`
+##### `io() → RecipeIo`
 
-当前需求项注册到 `RequirementHandlerRegistry` 的类型。用于序列化 / 反序列化与跨处理器分派。
+IO 方向（`RecipeIo.INPUT` / `RecipeIo.OUTPUT`）。
 
-##### `io() → RecipeModifier.IOType`
+##### 父接口 `RecipeRequirement`
 
-IO 方向（`INPUT` / `OUTPUT`）。
+```java
+public interface RecipeRequirement {
+    static CustomRecipeIo custom(Identifier typeId, RecipeIo ioType, JsonElement payload);
+}
+```
 
-##### `tags() → List<String>`（默认 `List.of()`）
-
-可选的标签列表。用于配方筛选与配方变体匹配；默认实现返回空列表，特定需求可覆写。
-
-##### 静态工具
-
-| 方法 | 含义 |
-| --- | --- |
-| `copyOf(requirement) → MachineRequirement` | 通过规范化类型克隆当前需求。`requirement.type()` 必须注册为 canonical；否则 `IllegalArgumentException("Requirement type is not registered canonically: ...")`。`null` → `NullPointerException`。 |
-| `copyList(requirements) → List<MachineRequirement>` | 把整张需求表克隆一份。`requirements` 为 `null` → `NullPointerException`。 |
-| `fromInput(ingredient) → MachineRequirement` | 把 `MachineIngredient` 适配为对应的需求项。支持的 ingredient：`ItemIngredient` → `ItemRequirement`（`INPUT`）、`FluidIngredient` → `FluidRequirement`（`INPUT`）、`EnergyIngredient` → `EnergyRequirement`（`io` 来自 ingredient）。其他类型抛 `IllegalArgumentException("Unknown machine ingredient: ...")`。 |
-| `itemOutput(stack)` / `itemOutput(stack, chance)` | 便捷构造物品输出需求（`IOType.OUTPUT`）。 |
-| `fluidOutput(stack)` / `fluidOutput(stack, chance)` | 便捷构造流体输出需求（`IOType.OUTPUT`）。 |
-
-##### `CODEC`
-
-通过 `RequirementHandlerRegistry` 分派的统一 Codec——根据需求项的 `type()` 字段路由到对应类型的 Codec。JSON / NBT 反序列化失败时返回 `DataResult.error(...)`。
+- `custom(typeId, ioType, payload)`：通过已注册的 `RequirementType`（`typeId`）构造一条自定义 IO 项。`payload` 必须是 JSON 对象；构造时深拷贝传入 payload，`null` payload / 非对象 payload 分别抛 `IllegalArgumentException("Recipe IO payload must be an object")`。构造失败由 `RecipeApi.custom(...)` 抛出。
+- `MachineRequirement` 仅扩展 `RecipeRequirement` 并强制暴露 `io()`——其余工具方法（`copyOf`、`copyList`、`fromInput`、`itemOutput`、`fluidOutput`、`CODEC` 等）位于 MMCR 内部实现，**不在公共 API 表面**。配方需求项的具体类型见 `cn.howxu.mmcr.api.publicapi.recipe.ItemRequirement` / `FluidRequirement` / `EnergyRequirement` / `SmartInterfaceRequirement` / `CustomRecipeIo`；修饰项注入见 `MachineDefinition.modifierUse(...)` 与 `MachineRecipeBuilder` 的对应字段。
 
 ##### 示例
 
 ```java
-MachineRequirement in = MachineRequirement.fromInput(
-        new MachineIngredient.ItemIngredient(
-                Ingredient.of(Items.IRON_INGOT), 1,
-                DataComponentPredicateSet.EMPTY, 1F));
+import cn.howxu.mmcr.api.publicapi.recipe.ItemRequirement;
+import cn.howxu.mmcr.api.publicapi.recipe.RecipeIo;
+import cn.howxu.mmcr.api.publicapi.recipe.component.DataComponentPredicateSet;
 
-MachineRequirement out = MachineRequirement.itemOutput(new ItemStack(Items.IRON_BLOCK), 1F);
+ItemRequirement in = ItemRequirement.input(new ItemInput(
+        Ingredient.of(Items.IRON_INGOT), 1, DataComponentPredicateSet.EMPTY, 1F));
 
-List<MachineRequirement> requirements = MachineRequirement.copyList(List.of(in, out));
+MachineRequirement out = ItemRequirement.output(new ItemOutput(new ItemStack(Items.IRON_BLOCK), 1F));
 ```
 
 ##### 注意事项
 
-- 实现类至少要正确实现 `type()` 与 `io()`；MMCR 内部按 `type()` 路由处理器、按 `io()` 区分输入输出。
-- `copyOf(...)` 不会保留任何运行期装饰（cached snapshot 等）；多次 `copyOf(...)` 是幂等的，但**不保证**深拷贝需求项持有的可变容器（实现类应自行保证不可变）。
+- 实现类至少要正确实现 `io()`；MMCR 内部按 `io()` 区分输入输出。
+- 公共 API 不再暴露 `MachineRequirement.CODEC` / `copyOf` / `copyList` / `fromInput` 等运行期工具——这些能力在 MMCR 内部由专属注册表与处理器负责。
 
 ---
 
 ### `CustomRequirement`
 
-完整类名：`cn.howxu.mmcr.api.recipe.requirement.CustomRequirement`
+完整类名：`cn.howxu.mmcr.api.publicapi.recipe.requirement.CustomRequirement`
 
 对 `MachineRequirement` 的扩展点——供 Mod 在 MMCR 内置需求集之外自定义需求项时实现。
 
@@ -5527,43 +5436,41 @@ List<MachineRequirement> requirements = MachineRequirement.copyList(List.of(in, 
 
 ```java
 public interface CustomRequirement extends MachineRequirement {
-    @Override
-    RequirementType<? extends CustomRequirement> type();
+    Identifier typeId();
+    JsonElement payload();
 }
 ```
 
-##### `type() → RequirementType<? extends CustomRequirement>`
+##### `typeId() → Identifier`
 
-协变覆写——必须返回具体支持当前自定义需求的 `RequirementType` 注册项。
+当前需求项对应已注册的 `RequirementType` 标识。MMCR 内部按此字段路由处理器与 Codec。
+
+##### `payload() → JsonElement`
+
+自定义需求项的 Codec 载荷（JSON 对象）。返回深拷贝后的不可修改 payload。
 
 ##### 注册与使用
 
-1. 实现 `CustomRequirement` 子接口（或直接实现该接口）。
-2. 实现对应的 `RequirementHandler<...>`、`RequirementType<...>`，并通过 `RequirementHandlerRegistry.register(...)` 注册。
-3. 在配方定义中使用 `MachineRequirement.CODEC`（Mojang Codec）即可自动发现——`type()` 字段路由到该自定义类型的 Codec。
+1. 实现 `CustomRequirement` 子接口（或直接实现该接口），并通过 `RecipeRequirement.custom(typeId, ioType, payload)` 构造（返回 `CustomRecipeIo`）。
+2. 在 MMCR 内部注册对应的 `RequirementType` / `RequirementHandler`（注册路径与 `MachineRequirement` 的内部 `RequirementHandlerRegistry` 一致，但这些 API 不在公共 API 表面）。
+3. 在配方定义中使用 `MachineRecipeBuilder.addInput(...)` / `addOutput(...)` 直接传入构造好的 `CustomRecipeIo`。
 
-##### 示例（接口实现）
+##### 示例（通过 `RecipeRequirement.custom(...)`）
 
 ```java
-public final class ManaRequirement implements CustomRequirement {
-    private final RecipeModifier.IOType io;
-    private final int mana;
+import cn.howxu.mmcr.api.publicapi.recipe.RecipeIo;
+import cn.howxu.mmcr.api.publicapi.recipe.RecipeRequirement;
+import com.google.gson.JsonObject;
 
-    public ManaRequirement(RecipeModifier.IOType io, int mana) {
-        this.io = Objects.requireNonNull(io);
-        if (mana < 0) throw new IllegalArgumentException("mana must be >= 0");
-        this.mana = mana;
-    }
-
-    @Override public RequirementType<? extends ManaRequirement> type() { return ManaRequirementHandler.TYPE; }
-    @Override public RecipeModifier.IOType io() { return io; }
-    public int mana() { return mana; }
-}
+CustomRecipeIo mana = RecipeRequirement.custom(
+        Identifier.fromNamespaceAndPath("my_mod", "mana"),
+        RecipeIo.INPUT,
+        new JsonObject()); // 由 my_mod 的 RequirementHandler 解析
 ```
 
 ##### 注意事项
 
-- `CustomRequirement` 自身**不能**直接 new——它是空标记接口；必须由具体需求类型实现。
-- 注册的 `RequirementType` 必须包含合法的 `Codec`；序列化 / 反序列化失败时 `MachineRequirement.CODEC` 会返回 `DataResult.error(...)`，配方加载会失败。
+- `CustomRequirement` 自身**不能**直接 new——它是空标记接口；外部 Mod 一般通过 `RecipeRequirement.custom(...)` 工厂构造，实例类型为 `CustomRecipeIo`。
+- `typeId` 必须在 MMCR 内部注册——未注册的 typeId 会在 `RecipeRequirement.custom(...)` 阶段抛异常；序列化 / 反序列化失败时配方加载会失败。
 
 ---

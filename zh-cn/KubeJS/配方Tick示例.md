@@ -71,7 +71,7 @@ Java 对照：[RECIPE_TICKER](../JavaAPI/RECIPE_TICKER)。
 | --- | --- |
 | `net.minecraft.world.entity.LivingEntity` | 在范围内搜生物用于加效果 |
 | `net.minecraft.world.effect.MobEffects` | `STRENGTH` / `NIGHT_VISION` 效果常量 |
-| `cn.howxu.mmcr.api.recipe.requirement.ItemRequirement` | `beforeStart` 里构造新需求 |
+| `cn.howxu.mmcr.api.publicapi.recipe.ItemRequirement` | `beforeStart` 里构造新需求 |
 | `java.util.ArrayList` | 累积新需求列表 |
 | `net.minecraft.core.registries.BuiltInRegistries` | 通过 item 拿到注册名 |
 
@@ -88,7 +88,7 @@ MMCREvents.startup(event => {
     const MobEffects = Java.loadClass("net.minecraft.world.effect.MobEffects")
 
     // Some Class
-    const ItemRequirement = Java.loadClass("cn.howxu.mmcr.api.recipe.requirement.ItemRequirement")
+    const ItemRequirement = Java.loadClass("cn.howxu.mmcr.api.publicapi.recipe.ItemRequirement")
     const ArrayList = Java.loadClass("java.util.ArrayList")
     const BuiltInRegistries = Java.loadClass("net.minecraft.core.registries.BuiltInRegistries")
 
@@ -595,7 +595,7 @@ if (changed) ctx.setRequirements(nextRequirements)
 - **`net.minecraft.world.entity.LivingEntity`** — Minecraft 原版"活体生物"基类；KubeJS 端通过 `Java.loadClass` 拿，作为 `level.getEntitiesOfClass(LivingEntity, area)` 的过滤类型。
 - **`net.minecraft.world.effect.MobEffects`** — 原版药水效果常量（`STRENGTH` / `NIGHT_VISION`），用 `Java.loadClass` 拿。
 - **`net.minecraft.world.phys.AABB`** — KubeJS 提供 `AABB.of(...)` 工厂；但 AABB 的内部字段与方法在 [KubeJS.md](../API/KubeJS) 中没有独立条目。
-- **`cn.howxu.mmcr.api.recipe.requirement.ItemRequirement`** — KubeJS 端通过 `Java.loadClass` 拿，直接 `new ItemRequirement(...)` 构造，构造语法与 Java 端完全一致。`io()` / `item()` / `count()` / `stack()` / `chance()` / `tags()` / `components()` / `consumeChance()` 等字段与 Java 端的 [`ItemRequirement`](../API/JavaAPI#itemrequirement) 一一对应。
+- **`cn.howxu.mmcr.api.publicapi.recipe.ItemRequirement`** — KubeJS 端通过 `Java.loadClass` 拿；公共版本是 `record` 类型，通过 `ItemRequirement.input(ItemInput)` / `ItemRequirement.output(ItemOutput)` 工厂构造，对应字段 `io()` / `ingredient()` / `count()` / `stack()` / `chance()` / `components()` / `consumeChance()`。详细字段说明见 Java 端的 [`ItemRequirement`](../API/JavaAPI#itemrequirement)。
 - **`java.util.ArrayList`** — 标准 JDK 容器，KubeJS 端通过 `Java.loadClass` 拿，用作需求累积容器。
 - **`net.minecraft.core.registries.BuiltInRegistries`** — 用于通过 `Item` 实例拿到注册名（如 `minecraft:gold_ingot`），做配方匹配判断。
 - **`cn.howxu.mmcr.compat.kubejs.MachineRecipeBuilderJS`**（可选配方注册） — 如果想用编程式配方而非数据驱动 JSON 配方，可以在 `MMCREvents.server` 阶段用 `new MachineRecipeBuilderJS(recipeId).machine(machineId).itemInput(...).itemOutput(...).energyPerTick(...).tickTime(...).build()` 注册；详见 [`MachineRecipeBuilderJS`](../API/KubeJS#machinerecipebuilderjs)。

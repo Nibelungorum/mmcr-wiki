@@ -3,17 +3,17 @@ title: 纯Tick测试机器
 order: 12
 ---
 
-# A_Pure_Tick_Machine — KubeJS 直 tick 机器
+# 纯Tick机器示例 — KubeJS 直 tick 机器
 
 本文是 KubeJS 进阶示例的第三篇。我们将逐段拆解 [`A_Pure_Tick_Machine.js`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/main/example/startup_scripts/advance/A_Pure_Tick_Machine.js) 与 [对应的结构脚本](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/main/example/server_scripts/structure/advance/A_Pure_Tick_Machine.js)。
 
-本机器没有配方、完全靠 [`tickBehavior`](../API/KubeJS#tickbehaviorconsumer-machinebehaviorbuilderjs-builder--machinebuilderjs) + [`serverTick`](../API/KubeJS#servertickconsumer-tickbehaviorcontext-callback--machinebehaviorbuilderjs) 自驱——是 [PURE_TICK_MACHINE](../JavaAPI/纯Tick测试机器) 的 KubeJS 版实现。
+本机器没有配方、完全靠 [`tickBehavior`](../API/KubeJS#tickbehaviorconsumer-machinebehaviorbuilderjs-builder--machinebuilderjs) + [`serverTick`](../API/KubeJS#servertickconsumer-tickbehaviorcontext-callback--machinebehaviorbuilderjs) 自驱——是 [纯Tick测试机器](../JavaAPI/纯Tick测试机器) 的 KubeJS 版实现。
 
-它跟 [A_Recipe_Tick_Machine](./配方Tick示例) 是同组对比：两者都"按 tick 自定义"，但本机器**完全没有配方**，所有逻辑都压缩到 `serverTick` 里；A_Recipe_Tick_Machine 走 [`recipeBehavior`](../API/KubeJS#recipebehaviorconsumer-machinebehaviorbuilderjs-builder--machinebuilderjs)，在配方生命周期的 5 个钩子上插入回调。本教程会重点展开 [`MachineBehaviorBuilderJS`](../API/KubeJS#machinebehaviorbuilderjs) 的链式调用 + `idleStart` / `idleEnd` / `preServerTick` / `postServerTick` / `serverTick` 等钩子的可用范围，并区分 PURE_TICK vs RECIPE_TICK。
+它跟 [配方Tick示例](./配方Tick示例) 是同组对比：两者都"按 tick 自定义"，但本机器**完全没有配方**，所有逻辑都压缩到 `serverTick` 里；配方Tick示例 走 [`recipeBehavior`](../API/KubeJS#recipebehaviorconsumer-machinebehaviorbuilderjs-builder--machinebuilderjs)，在配方生命周期的 5 个钩子上插入回调。本教程会重点展开 [`MachineBehaviorBuilderJS`](../API/KubeJS#machinebehaviorbuilderjs) 的链式调用 + `idleStart` / `idleEnd` / `preServerTick` / `postServerTick` / `serverTick` 等钩子的可用范围，并区分 PURE_TICK vs RECIPE_TICK。
 
 ## 机器简介
 
-A_Pure_Tick_Machine 是一台 3×3×3 的绿色陶瓦壳，中心是控制器：
+纯Tick机器示例 是一台 3×3×3 的绿色陶瓦壳，中心是控制器：
 
 1. 每 40 tick 尝试一次——先扣 10 FE 能量；
 2. 扣成功后召唤闪电攻击范围内的所有玩家；
@@ -30,7 +30,7 @@ A_Pure_Tick_Machine 是一台 3×3×3 的绿色陶瓦壳，中心是控制器：
 - [`startup_scripts/advance/A_Pure_Tick_Machine.js`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/main/example/startup_scripts/advance/A_Pure_Tick_Machine.js) — 机器定义、tick 行为。
 - [`server_scripts/structure/advance/A_Pure_Tick_Machine.js`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/main/example/server_scripts/structure/advance/A_Pure_Tick_Machine.js) — 多方块结构。
 
-Java 对照：[PURE_TICK_MACHINE](../JavaAPI/纯Tick测试机器)。
+Java 对照：[纯Tick测试机器](../JavaAPI/纯Tick测试机器)。
 
 ## 本教程涉及的 API 跳转表
 
@@ -141,7 +141,7 @@ MMCREvents.server(event => {
 })
 ```
 
-一个 3×3×3 的扁平方块数组。源码注释 *superise! it's the same to recipe ticker...yeah I do not have any structure avalaible...* 自嘲式地说明——这结构和 [A_Recipe_Tick_Machine](./配方Tick示例) 几乎一模一样，只是 A 槽位多了一个 [`api.factoryController()`](../API/KubeJS#factorycontroller--blockpredicate) 谓词。
+一个 3×3×3 的扁平方块数组。源码注释 *superise! it's the same to recipe ticker...yeah I do not have any structure avalaible...* 自嘲式地说明——这结构和 [配方Tick示例](./配方Tick示例) 几乎一模一样，只是 A 槽位多了一个 [`api.factoryController()`](../API/KubeJS#factorycontroller--blockpredicate) 谓词。
 
 字符含义：
 
@@ -294,7 +294,7 @@ plan.commit()
 - `api.itemOutputRequirement(itemId, count, chance)` 构造"物品输出"需求，`chance = 1.0` 表示必出；
 - 注意 `plan.add(...)` 与 `plan.addInput(...)` / `plan.addOutput(...)` 的区别：`add(...)` 根据 `requirement.io()` 自动路由到 `addInput` 或 `addOutput`，是更通用的写法。
 
-模拟后通过 `simulation.inputsSatisfied()` 校验输入，再遍历 `simulation.outputs()` 检查每个输出项的 `accepted() >= requested()`——本机器强制要求**全部输出能放下**，否则 `return`。这是 PURE_TICK_MACHINE 的设计选择：要么完整产出 1 颗金粒，要么这次 tick 什么都不做。如果换成 [`OutputPolicy.ALLOW_PARTIAL`](../API/KubeJS#outputpolicy--outputpolicyvalues)，即便金粒只能放下半颗也会 `commit` 成功。
+模拟后通过 `simulation.inputsSatisfied()` 校验输入，再遍历 `simulation.outputs()` 检查每个输出项的 `accepted() >= requested()`——本机器强制要求**全部输出能放下**，否则 `return`。这是 纯Tick测试机器 的设计选择：要么完整产出 1 颗金粒，要么这次 tick 什么都不做。如果换成 [`OutputPolicy.ALLOW_PARTIAL`](../API/KubeJS#outputpolicy--outputpolicyvalues)，即便金粒只能放下半颗也会 `commit` 成功。
 
 最后 `plan.commit()` 真正消耗输入并产出；不需要接 `.successful()` 是因为前两段已经做了充分校验。
 
@@ -306,7 +306,7 @@ plan.commit()
 // use static lines and ctx.screenText().replace() always depend on the actual situation
 // the static lines will refresh every client tick and replace is always the last one which is able to cover static lines
 // If you want to make some differences, please use data storage and networks
-// Which will showed in A_Data_Storage_Machine
+// Which will showed in 数据存储测试机器
 event.registerControllerScreenText(
     "mmcr_kubejs:kubejs_pure_tick_machine",
     text => {
@@ -340,7 +340,7 @@ event.registerControllerScreenText(
 - **静态文本行**（`controller` 作用域）每次**客户端 tick** 都会重新执行 `append(...)`，所以玩家会持续看到这两行；
 - **动态文本**（本机器 tick 里的 `replace(...)`）会覆盖静态行的同 ID 内容；
 - 如果玩家既看到静态行又看到 tick 里的动态行，那 tick 行的优先级更高；
-- 如果想保留"运行状态"的差异，建议用 [`DataStorage`](./数据存储测试机器) 做持久化——这正是 [A_Data_Storage_Machine](./数据存储测试机器) 的做法。
+- 如果想保留"运行状态"的差异，建议用 [`DataStorage`](./数据存储测试机器) 做持久化——这正是 [数据存储测试机器](./数据存储测试机器) 的做法。
 
 ## 特殊机制
 
@@ -412,11 +412,11 @@ plan.commit()
 
 ## 与其他教程的对比
 
-- vs [A_Simple_Machine](./高炉)：A_Simple_Machine 走配方数据驱动，本机器完全跑在 `serverTick` 里。它俩共用 [`MachineBuilderJS`](../API/KubeJS#machinebuilderjs) 与 [`MachineStructureBuilderJS`](../API/KubeJS#createstructurestring-id--machinestructurebuilderjs)，但行为路径完全分离。
-- vs [A_Data_Storage_Machine](./数据存储测试机器)：都是 `tickBehavior`，但本机器没有 `DataStorage`——所有状态都只活在 `serverTick` 闭包里的局部变量（`power`、`dry_sec` 等都是这里，本机器没用到这两个；A_Data_Storage_Machine 才有）。重启游戏后本机器会"忘记"所有运行时状态——它本来也没什么要记得的。
-- vs [A_Network_Machine](./算力-网络交互示例)：本机器没有网络通信；A_Network_Machine 的 PRODUCER 才有。
-- vs [A_Recipe_Tick_Machine](./配方Tick示例)：同组对比，下一节展开。
-- vs Java 端 [PURE_TICK_MACHINE](../JavaAPI/纯Tick测试机器)：**逻辑等价**，实现差异如下：
+- vs [高炉](./高炉)：高炉 走配方数据驱动，本机器完全跑在 `serverTick` 里。它俩共用 [`MachineBuilderJS`](../API/KubeJS#machinebuilderjs) 与 [`MachineStructureBuilderJS`](../API/KubeJS#createstructurestring-id--machinestructurebuilderjs)，但行为路径完全分离。
+- vs [数据存储测试机器](./数据存储测试机器)：都是 `tickBehavior`，但本机器没有 `DataStorage`——所有状态都只活在 `serverTick` 闭包里的局部变量（`power`、`dry_sec` 等都是这里，本机器没用到这两个；数据存储测试机器 才有）。重启游戏后本机器会"忘记"所有运行时状态——它本来也没什么要记得的。
+- vs [算力-网络交互示例](./算力-网络交互示例)：本机器没有网络通信；算力-网络交互示例 的 PRODUCER 才有。
+- vs [配方Tick示例](./配方Tick示例)：同组对比，下一节展开。
+- vs Java 端 [纯Tick测试机器](../JavaAPI/纯Tick测试机器)：**逻辑等价**，实现差异如下：
 
   | Java 端 | KubeJS 端 |
   | --- | --- |
@@ -445,16 +445,16 @@ plan.commit()
 | 配方存在但每 tick 的具体动作完全自定 | `recipeBehavior.recipeTick` | 配方生命周期已经接管，能拿到当前 tick / 总 tick |
 | 自定义复杂合成的节奏（多阶段、跨配方共享需求修改） | `recipeBehavior` | 仍需要配方数据来定义"做什么"，但每个阶段需要插入自定义回调 |
 
-本机器同时涵盖了**节流、能量校验、副作用（闪电）、物品 IO**——这是 tick 驱动的典型组合。[A_Recipe_Tick_Machine](./配方Tick示例) 则是另一条路线：有配方，但每个生命周期阶段都要插入自定义逻辑。
+本机器同时涵盖了**节流、能量校验、副作用（闪电）、物品 IO**——这是 tick 驱动的典型组合。[配方Tick示例](./配方Tick示例) 则是另一条路线：有配方，但每个生命周期阶段都要插入自定义逻辑。
 
 ## 延伸阅读
 
-- [A_Simple_Machine](./高炉) — KubeJS 端最简配方机器。
-- [A_Data_Storage_Machine](./数据存储测试机器) — 同为 `tickBehavior` 但带 `DataStorage`。
-- [A_Network_Machine](./算力-网络交互示例) — 同为 `tickBehavior` 但带网络通信。
-- [A_Recipe_Tick_Machine](./配方Tick示例) — 同组对比，演示 `recipeBehavior` 的 5 个钩子。
-- [PURE_TICK_MACHINE](../JavaAPI/纯Tick测试机器) — 本机器的 Java 端实现。
-- [RECIPE_TICKER](../JavaAPI/配方Tick测试机器) — `recipeBehavior` 在 Java 端的完整演示。
+- [高炉](./高炉) — KubeJS 端最简配方机器。
+- [数据存储测试机器](./数据存储测试机器) — 同为 `tickBehavior` 但带 `DataStorage`。
+- [算力-网络交互示例](./算力-网络交互示例) — 同为 `tickBehavior` 但带网络通信。
+- [配方Tick示例](./配方Tick示例) — 同组对比，演示 `recipeBehavior` 的 5 个钩子。
+- [纯Tick测试机器](../JavaAPI/纯Tick测试机器) — 本机器的 Java 端实现。
+- [配方Tick测试机器](../JavaAPI/配方Tick测试机器) — `recipeBehavior` 在 Java 端的完整演示。
 - [KubeJS API](../API/KubeJS) — 本教程引用 API 的集中参考。
 - [KubeJS API#tickBehavior](../API/KubeJS#tickbehaviorconsumer-machinebehaviorbuilderjs-builder--machinebuilderjs) — 直 tick 模式入口。
 - [KubeJS API#serverTick](../API/KubeJS#servertickconsumer-tickbehaviorcontext-callback--machinebehaviorbuilderjs) — 每 tick 一次的回调。

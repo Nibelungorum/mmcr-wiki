@@ -3,26 +3,26 @@ title: 配方Tick测试
 order: 15
 ---
 
-# RECIPE_TICKER — 配方 + 自定义 tick 钩子
+# 配方Tick测试机器 — 配方 + 自定义 tick 钩子
 
 本文是 MMCR 第三篇 Java API 示例。我们逐行拆解 [RECIPE_TICKER.java](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/main/src/main/java/org/nibelungorum/builtin/RECIPE_TICKER.java) 的源代码，看一台有配方、但**每个生命周期阶段都要插入自定义逻辑**的机器是如何搭起来的。
 
 ## 概览
 
-RECIPE_TICKER 是一台使用 [`RecipeBehavior`](../API/JavaAPI#recipebehavior) 的配方机器——它注册 3 条配方，但在配方生命周期的 5 个阶段都插入了自定义钩子：
+配方Tick测试机器 是一台使用 [`RecipeBehavior`](../API/JavaAPI#recipebehavior) 的配方机器——它注册 3 条配方，但在配方生命周期的 5 个阶段都插入了自定义钩子：
 
 - `idleStart` / `idleEnd`：进入 / 离开 idle 时显示提示；
 - `beforeStart`：配方启动前给范围内生物加力量效果，并把"32 金锭"的需求改写成"1 金锭"；
 - `recipeTick`：每 tick 在屏幕上追加"正在使用雷霆大猪咪暴力执行配方"；
 - `beforeFinish`：配方提交输出前给范围内生物加夜视效果。
 
-它与 [PURE_TICK_MACHINE](../JavaAPI/纯Tick测试机器) / [BLAST_FURNACE](../JavaAPI/高炉) 是同一组对比，三台机器分别走三种路线：
+它与 [纯Tick测试机器](../JavaAPI/纯Tick测试机器) / [高炉](../JavaAPI/高炉) 是同一组对比，三台机器分别走三种路线：
 
 | 机器 | 行为实现 | `MachineBehavior.Kind` | 配方 |
 | --- | --- | --- | --- |
-| [BLAST_FURNACE](../JavaAPI/高炉) | `RecipeBehavior.defaults()`（空钩子） | `RECIPE` | 1 条 |
-| [PURE_TICK_MACHINE](../JavaAPI/纯Tick测试机器) | [`TickBehavior`](../API/JavaAPI#tickbehavior) | `TICK` | 无（用 `MachineIoPlan` 自驱） |
-| **RECIPE_TICKER** | [`RecipeBehavior`](../API/JavaAPI#recipebehavior) | `RECIPE` | 3 条 + 5 个钩子 |
+| [高炉](../JavaAPI/高炉) | `RecipeBehavior.defaults()`（空钩子） | `RECIPE` | 1 条 |
+| [纯Tick测试机器](../JavaAPI/纯Tick测试机器) | [`TickBehavior`](../API/JavaAPI#tickbehavior) | `TICK` | 无（用 `MachineIoPlan` 自驱） |
+| **配方Tick测试机器** | [`RecipeBehavior`](../API/JavaAPI#recipebehavior) | `RECIPE` | 3 条 + 5 个钩子 |
 
 [`MachineBehavior.Kind`](../API/JavaAPI#machinebehavior) 是 sealed 接口 `MachineBehavior` 的枚举，仅 `RECIPE` / `TICK` 两个值，分别对应两种机器驱动方式。
 
@@ -84,7 +84,7 @@ var machine = MachineBuilder
 event.registerMachine(machine);
 ```
 
-关键调用 `.recipeBehavior(behavior -> behavior.xxx(...))` 把行为从默认空 `RecipeBehavior` 切换成显式声明 5 个钩子的版本。[`RecipeBehavior.Builder`](../API/JavaAPI#recipebehavior) 总共有 7 个钩子（`idleStart` / `idleEnd` / `beforeStart` / `recipeTick` / `beforeFinish` / `preServerTick` / `postServerTick`），RECIPE_TICKER 用到其中 5 个；`preServerTick` / `postServerTick` 留给"无论机器在不在跑配方，每 tick 都触发"的全局逻辑。
+关键调用 `.recipeBehavior(behavior -> behavior.xxx(...))` 把行为从默认空 `RecipeBehavior` 切换成显式声明 5 个钩子的版本。[`RecipeBehavior.Builder`](../API/JavaAPI#recipebehavior) 总共有 7 个钩子（`idleStart` / `idleEnd` / `beforeStart` / `recipeTick` / `beforeFinish` / `preServerTick` / `postServerTick`），配方Tick测试机器 用到其中 5 个；`preServerTick` / `postServerTick` 留给"无论机器在不在跑配方，每 tick 都触发"的全局逻辑。
 
 5 个钩子的接收上下文与触发时机：
 
@@ -127,7 +127,7 @@ event.registerMachine(machine);
 
 ### `beforeStart`：配方启动前的钩子（核心）
 
-`beforeStart` 是 RECIPE_TICKER 里最有意思的一段——做了两件事：清屏幕、加效果、改需求。
+`beforeStart` 是 配方Tick测试机器 里最有意思的一段——做了两件事：清屏幕、加效果、改需求。
 
 ```java
 .beforeStart(ctx -> {
@@ -182,7 +182,7 @@ event.registerMachine(machine);
 
 1. 把 `idleStart` 写入的两行清掉——避免同时显示"idle 提示"与"运行中提示"。
 2. 给范围内所有 `LivingEntity` 加 10000 tick 的力量 II 效果。
-3. **修改配方需求**：遍历 `ctx.requirements()`，如果某条 `ItemRequirement` 是"32 个金锭"，就替换成 1 个金锭；其他需求保持原样。这正是"RECIPE_TICKER"名字的由来——根据当前状态调整配方内容，让原本要求 32 金锭的配方变成 1 金锭就能跑。
+3. **修改配方需求**：遍历 `ctx.requirements()`，如果某条 `ItemRequirement` 是"32 个金锭"，就替换成 1 个金锭；其他需求保持原样。这正是"配方Tick测试机器"名字的由来——根据当前状态调整配方内容，让原本要求 32 金锭的配方变成 1 金锭就能跑。
 
 > 关键观察：配方数据里写的是 32 金锭，但实际只消耗 1 金锭——这就是 `RecipeStartContext.setRequirements(...)` 的力量：**配方数据 + 运行时调整，二者分离**。
 
@@ -231,13 +231,13 @@ event.registerMachine(machine);
 })
 ```
 
-[`RecipeFinishContext`](../API/JavaAPI#recipefinishcontext) 提供 `ctx.machineContext()` / `ctx.setOutputs(...)` / `ctx.discardOutputs()` / `ctx.cancel()`。RECIPE_TICKER 在 `beforeFinish` 里只施加夜视效果，没修改输出——但已经足够演示 `RecipeFinishContext` 的"读取机器上下文"路径。
+[`RecipeFinishContext`](../API/JavaAPI#recipefinishcontext) 提供 `ctx.machineContext()` / `ctx.setOutputs(...)` / `ctx.discardOutputs()` / `ctx.cancel()`。配方Tick测试机器 在 `beforeFinish` 里只施加夜视效果，没修改输出——但已经足够演示 `RecipeFinishContext` 的"读取机器上下文"路径。
 
 把 `beforeStart`（力量 II）与 `beforeFinish`（夜视）拼起来看：机器在配方开始前给玩家加力量，配方完成时给玩家加夜视——这是个完整的"启动 → 完成"循环。
 
 ## 多方块结构
 
-RECIPE_TICKER 的结构和 [PURE_TICK_MACHINE](../JavaAPI/纯Tick测试机器) 几乎一模一样——3×3×3 外壳 + 同样的 A 位置接口集合，唯一区别是 A 位置不接受 `factoryController()`（RECIPE_TICKER 也没声明 `.factory(...)`）：
+配方Tick测试机器 的结构和 [纯Tick测试机器](../JavaAPI/纯Tick测试机器) 几乎一模一样——3×3×3 外壳 + 同样的 A 位置接口集合，唯一区别是 A 位置不接受 `factoryController()`（配方Tick测试机器 也没声明 `.factory(...)`）：
 
 ```java
 public static void registerStructures(MMCRMachineStructuresEvent event) {
@@ -266,11 +266,11 @@ public static void registerStructures(MMCRMachineStructuresEvent event) {
 }
 ```
 
-复用 PURE_TICK_MACHINE 的结构讲法参考[上篇](../JavaAPI/纯Tick测试机器)。
+复用 纯Tick测试机器 的结构讲法参考[上篇](../JavaAPI/纯Tick测试机器)。
 
 ## 配方
 
-RECIPE_TICKER 一次注册 3 条配方：
+配方Tick测试机器 一次注册 3 条配方：
 
 ```java
 public static void register(MMCRMachineRecipesEvent event) {
@@ -314,7 +314,7 @@ public static void register(MMCRMachineRecipesEvent event) {
 - `beforeStart` 把"32 金锭且只匹配金锭"的需求替换成 1 金锭；
 - 玩家实际只需在输入总线放 1 个金锭就能触发配方。
 
-配方 ID 用 `withSuffix(...)` 把机器 ID 作为前缀（`recipe_ticker_recipe_1` 等）。详见 [BLAST_FURNACE 教程](../JavaAPI/高炉) 对配方阶段的拆解。
+配方 ID 用 `withSuffix(...)` 把机器 ID 作为前缀（`recipe_ticker_recipe_1` 等）。详见 [高炉 教程](../JavaAPI/高炉) 对配方阶段的拆解。
 
 ## 特殊机制：RecipeBehavior 详解
 
@@ -336,9 +336,9 @@ public static void register(MMCRMachineRecipesEvent event) {
 
 5 个钩子抛出的异常都会被 MMCR 捕获并记录，机器进入失败状态。`beforeStart` 里如果 `setRequirements(...)` 抛了 `IllegalArgumentException`（比如把 32 金锭替换成 0 个，违反 `count >= 1` 的约束），机器同样会失败——修改需求时务必保证新参数满足 `MachineRequirement` 的构造约束。
 
-## 与 BLAST_FURNACE、PURE_TICK_MACHINE 的对比
+## 与 高炉、纯Tick测试机器 的对比
 
-| 维度 | [BLAST_FURNACE](../JavaAPI/高炉) | [PURE_TICK_MACHINE](../JavaAPI/纯Tick测试机器) | **RECIPE_TICKER** |
+| 维度 | [高炉](../JavaAPI/高炉) | [纯Tick测试机器](../JavaAPI/纯Tick测试机器) | **配方Tick测试机器** |
 | --- | --- | --- | --- |
 | 行为实现 | `RecipeBehavior.defaults()` | `TickBehavior` | `RecipeBehavior`（5 个钩子全用上） |
 | `MachineBehavior.Kind` | `RECIPE` | `TICK` | `RECIPE` |
@@ -349,21 +349,21 @@ public static void register(MMCRMachineRecipesEvent event) {
 | IO 入口 | 配方字段 | `MachineIoPlan.addInput(...)` / `addOutput(...)` | 配方字段 |
 | 屏幕文本 | `OPERATION`（MMCR 自动）+ `CONTROLLER`（手写） | 全靠 `CONTROLLER` + 手写 | `CONTROLLER` + `OPERATION` 都手写 |
 
-**BLAST_FURNACE 是"配方数据驱动、生命周期透明"**——配方写完就完事；**PURE_TICK_MACHINE 是"代码驱动、无配方"**——所有逻辑写进 `serverTick`；**RECIPE_TICKER 是"配方 + 每阶段自定义"**——既有配方数据驱动，又在每个钩子里插入自己的逻辑。
+**高炉 是"配方数据驱动、生命周期透明"**——配方写完就完事；**纯Tick测试机器 是"代码驱动、无配方"**——所有逻辑写进 `serverTick`；**配方Tick测试机器 是"配方 + 每阶段自定义"**——既有配方数据驱动，又在每个钩子里插入自己的逻辑。
 
 ## 何时用 RECIPE_TICK vs PURE_TICK
 
-详见 [PURE_TICK_MACHINE 的对应章节](../JavaAPI/纯Tick测试机器#何时用-pure_tick-vs-recipe_tick)。核心结论：持续被动效果或完全自定义节奏用 `TickBehavior`；需要配方数据驱动、或需要在生命周期各阶段插入回调用 `RecipeBehavior`；想改配方需求 / 输出用 `beforeStart` / `beforeFinish`；配方每 tick 的副作用用 `recipeTick`。
+详见 [纯Tick测试机器 的对应章节](../JavaAPI/纯Tick测试机器#何时用-pure_tick-vs-recipe_tick)。核心结论：持续被动效果或完全自定义节奏用 `TickBehavior`；需要配方数据驱动、或需要在生命周期各阶段插入回调用 `RecipeBehavior`；想改配方需求 / 输出用 `beforeStart` / `beforeFinish`；配方每 tick 的副作用用 `recipeTick`。
 
 ## 小结
 
-RECIPE_TICKER 把"配方 + 自定义 tick 钩子"完整演示了一遍：
+配方Tick测试机器 把"配方 + 自定义 tick 钩子"完整演示了一遍：
 
 - 行为策略层：用 [`RecipeBehavior`](../API/JavaAPI#recipebehavior) 把 [`MachineBehavior.Kind.RECIPE`](../API/JavaAPI#machinebehavior) 切到"配方驱动 + 5 个钩子"；
 - 5 个钩子的语义：`idleStart` / `idleEnd`（机器状态）、`beforeStart`（改配方需求）、`recipeTick`（配方运行时只读）、`beforeFinish`（改输出或取消）；
 - 上下文层级：`RecipeStartContext` / `RecipeTickContext` / `RecipeFinishContext` 都通过 `ctx.machineContext()` 拿到 [`MachineBehaviorContext`](../API/JavaAPI#machinebehaviorcontext)；
 - 屏幕文本：[`ControllerScreenText.appendAfter(...)`](../API/JavaAPI#controllerscreentext) + [`ControllerScreenTextScope.OPERATION`](../API/JavaAPI#controllerscreentextscope) 让"模板行 → 内容行"的展示顺序可控。
 
-接下来可以回到 [PURE_TICK_MACHINE](../JavaAPI/纯Tick测试机器) 对照 `TickBehavior` 的写法，或者去 [API 参考](../API/开始) 浏览 [`MachineIoPlan`](../API/JavaAPI#machineioplan) / [`MachineBehaviorContext`](../API/JavaAPI#machinebehaviorcontext) 等其他 API。
+接下来可以回到 [纯Tick测试机器](../JavaAPI/纯Tick测试机器) 对照 `TickBehavior` 的写法，或者去 [API 参考](../API/开始) 浏览 [`MachineIoPlan`](../API/JavaAPI#machineioplan) / [`MachineBehaviorContext`](../API/JavaAPI#machinebehaviorcontext) 等其他 API。
 
-KubeJS 端的对应教程：[A_Recipe_Tick_Machine](../KubeJS/A_Recipe_Tick_Machine)。
+KubeJS 端的对应教程：[配方Tick示例](../KubeJS/配方Tick示例)。

@@ -3,28 +3,28 @@ title: 配方Tick示例
 order: 13
 ---
 
-# A_Recipe_Tick_Machine — KubeJS 配方 tick 机器
+# 配方Tick示例 — KubeJS 配方 tick 机器
 
-本文是 KubeJS 进阶示例的第四篇。我们逐段拆解 [`A_Recipe_Tick_Machine.js`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/main/example/startup_scripts/advance/A_Recipe_Tick_Machine.js) 与 [对应的结构脚本](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/main/example/server_scripts/structure/advance/A_Recipe_Tick_Machine.js)。本机器**有配方**，但在配方生命周期的 5 个阶段（`idleStart` / `idleEnd` / `beforeStart` / `recipeTick` / `beforeFinish`）都插入自定义回调——是 [RECIPE_TICKER](../JavaAPI/配方Tick测试机器) 的脚本版实现。
+本文是 KubeJS 进阶示例的第四篇。我们逐段拆解 [`A_Recipe_Tick_Machine.js`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/main/example/startup_scripts/advance/A_Recipe_Tick_Machine.js) 与 [对应的结构脚本](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/main/example/server_scripts/structure/advance/A_Recipe_Tick_Machine.js)。本机器**有配方**，但在配方生命周期的 5 个阶段（`idleStart` / `idleEnd` / `beforeStart` / `recipeTick` / `beforeFinish`）都插入自定义回调——是 [配方Tick测试机器](../JavaAPI/配方Tick测试机器) 的脚本版实现。
 
-它跟 [A_Pure_Tick_Machine](./纯Tick机器示例) 是同组对比：两者都"按 tick 自定义"，但 A_Pure_Tick_Machine 完全没有配方，本机器走 [`recipeBehavior`](../API/KubeJS#recipebehaviorconsumer-machinebehaviorbuilderjs-builder--machinebuilderjs)，在 5 个钩子上插入回调。本教程会重点展开 [`MachineBehaviorBuilderJS`](../API/KubeJS#machinebehaviorbuilderjs) 的链式调用，区分 PURE_TICK vs RECIPE_TICK，并讲清"配方需求改写"的特殊机制。
+它跟 [纯Tick机器示例](./纯Tick机器示例) 是同组对比：两者都"按 tick 自定义"，但 纯Tick机器示例 完全没有配方，本机器走 [`recipeBehavior`](../API/KubeJS#recipebehaviorconsumer-machinebehaviorbuilderjs-builder--machinebuilderjs)，在 5 个钩子上插入回调。本教程会重点展开 [`MachineBehaviorBuilderJS`](../API/KubeJS#machinebehaviorbuilderjs) 的链式调用，区分 PURE_TICK vs RECIPE_TICK，并讲清"配方需求改写"的特殊机制。
 
 ## 机器简介
 
-A_Recipe_Tick_Machine 是一台 3×3×3 的绿色陶瓦壳，中心是控制器，演示 [`RecipeBehavior`](../API/KubeJS#recipebehaviorconsumer-machinebehaviorbuilderjs-builder--machinebuilderjs) 的 5 个钩子：
+配方Tick示例 是一台 3×3×3 的绿色陶瓦壳，中心是控制器，演示 [`RecipeBehavior`](../API/KubeJS#recipebehaviorconsumer-machinebehaviorbuilderjs-builder--machinebuilderjs) 的 5 个钩子：
 
 1. **`idleStart` / `idleEnd`**：进入 / 离开 idle 状态时显示提示。
 2. **`beforeStart`**：配方启动前给范围内生物加力量效果，并把"32 金锭"的需求改写成"1 金锭"。
 3. **`recipeTick`**：配方每 tick 在屏幕上追加"正在使用雷霆大猪咪暴力执行配方"。
 4. **`beforeFinish`**：配方提交输出前给范围内生物加夜视效果。
 
-它与 [A_Pure_Tick_Machine](./纯Tick机器示例) / [A_Simple_Machine](./高炉) / [BLAST_FURNACE](../JavaAPI/高炉) 是同一组对比，四台机器分别走四种路线：
+它与 [纯Tick机器示例](./纯Tick机器示例) / [高炉](./高炉) / [高炉](../JavaAPI/高炉) 是同一组对比，四台机器分别走四种路线：
 
 | 机器 | 行为实现 | `MachineBehavior.Kind` | 配方 |
 | --- | --- | --- | --- |
-| [A_Simple_Machine](./高炉) / [BLAST_FURNACE](../JavaAPI/高炉) | `RecipeBehavior.defaults()`（空钩子） | `RECIPE` | 1 条 |
-| [A_Pure_Tick_Machine](./纯Tick机器示例) | `tickBehavior` | `TICK` | 无（用 `MachineIoPlan` 自驱） |
-| **A_Recipe_Tick_Machine** | `recipeBehavior` | `RECIPE` | 3 条 + 5 个钩子 |
+| [高炉](./高炉) / [高炉](../JavaAPI/高炉) | `RecipeBehavior.defaults()`（空钩子） | `RECIPE` | 1 条 |
+| [纯Tick机器示例](./纯Tick机器示例) | `tickBehavior` | `TICK` | 无（用 `MachineIoPlan` 自驱） |
+| **配方Tick示例** | `recipeBehavior` | `RECIPE` | 3 条 + 5 个钩子 |
 
 本机器**注册了 3 条配方**——但与 KubeJS 端的事件式配方注册不同，本机器**没有 `server_scripts/recipe/...` 文件**。KubeJS 端 `event.custom({ type: 'mmcr:machine_recipe', ... })` 也可以写，但本机器的 3 条配方是通过**程序化配方构建器** + `MMCREvents.server` 事务注册的。具体写法见下文"配方详解"一节。
 
@@ -35,7 +35,7 @@ A_Recipe_Tick_Machine 是一台 3×3×3 的绿色陶瓦壳，中心是控制器�
 - [`startup_scripts/advance/A_Recipe_Tick_Machine.js`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/main/example/startup_scripts/advance/A_Recipe_Tick_Machine.js) — 机器定义、5 个钩子、静态屏幕文本、3 条配方。
 - [`server_scripts/structure/advance/A_Recipe_Tick_Machine.js`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/main/example/server_scripts/structure/advance/A_Recipe_Tick_Machine.js) — 多方块结构。
 
-Java 对照：[RECIPE_TICKER](../JavaAPI/配方Tick测试机器)。
+Java 对照：[配方Tick测试机器](../JavaAPI/配方Tick测试机器)。
 
 ## 本教程涉及的 API 跳转表
 
@@ -114,7 +114,7 @@ MMCREvents.startup(event => {
 
 链式调用：
 
-- `.displayNameKey(...)` / `.recipeFamily(...)` / `.appearance("minecraft:green_terracotta")`：和 [A_Simple_Machine](./高炉) 同一种约定。
+- `.displayNameKey(...)` / `.recipeFamily(...)` / `.appearance("minecraft:green_terracotta")`：和 [高炉](./高炉) 同一种约定。
 - [`.recipeBehavior(behavior => behavior.xxx(...))`](../API/KubeJS#recipebehaviorconsumer-machinebehaviorbuilderjs-builder--machinebuilderjs) 把行为切到 `recipeBehavior`。**与 [`.tickBehavior(...)`](../API/KubeJS#tickbehaviorconsumer-machinebehaviorbuilderjs-builder--machinebuilderjs) 互斥**——一旦调用了其中一个，另一个会抛 `IllegalStateException`。
 
 [`MachineBehaviorBuilderJS`](../API/KubeJS#machinebehaviorbuilderjs) 提供 5 个钩子，本机器全用上：
@@ -155,7 +155,7 @@ MMCREvents.server(event => {
 })
 ```
 
-3×3×3 壳 + 同样的 A 位置接口集合。和 [A_Pure_Tick_Machine](./纯Tick机器示例) 的唯一区别是 A 位置**不**接受 [`api.factoryController()`](../API/KubeJS#factorycontroller--blockpredicate)——本机器没有声明 `.factory(...)`。注释 `this is all parallel controller` 说明 `parallelControllers()` 是"所有并行控制器"的并集。
+3×3×3 壳 + 同样的 A 位置接口集合。和 [纯Tick机器示例](./纯Tick机器示例) 的唯一区别是 A 位置**不**接受 [`api.factoryController()`](../API/KubeJS#factorycontroller--blockpredicate)——本机器没有声明 `.factory(...)`。注释 `this is all parallel controller` 说明 `parallelControllers()` 是"所有并行控制器"的并集。
 
 ## 钩子详解
 
@@ -298,7 +298,7 @@ MMCREvents.server(event => {
 
 1. **清 idle 行**：把 `idleStart` 写入的两行 `remove(...)`——避免同时显示"idle 提示"与"运行中提示"。
 2. **加效果**：给范围内所有 `LivingEntity` 加 10000 tick 的力量 II 效果。源码用 KubeJS 提供的 `entity.potionEffects.add(...)` 封装，比 Java 的 `entity.addEffect(new MobEffectInstance(...))` 简洁。
-3. **修改配方需求**：遍历 `ctx.requirements()`，如果某条 [`ItemRequirement`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/main/src/main/java/cn/howxu/mmcr/api/recipe/requirement/ItemRequirement.java) 是"32 个金锭且唯一匹配 `minecraft:gold_ingot`"的需求，就替换成"1 个金锭"；其他需求保持原样。这就是 "RECIPE_TICKER" 名字的由来——根据当前状态调整配方内容，让原本要求 32 金锭的配方变成 1 金锭就能跑。
+3. **修改配方需求**：遍历 `ctx.requirements()`，如果某条 [`ItemRequirement`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/main/src/main/java/cn/howxu/mmcr/api/recipe/requirement/ItemRequirement.java) 是"32 个金锭且唯一匹配 `minecraft:gold_ingot`"的需求，就替换成"1 个金锭"；其他需求保持原样。这就是 "配方Tick测试机器" 名字的由来——根据当前状态调整配方内容，让原本要求 32 金锭的配方变成 1 金锭就能跑。
 
 源码注释 *I suggest to use Java API if you want more complex tick* 是提示：复杂的需求改写逻辑写脚本会比较啰嗦，Java 端 [`MachineRecipeDefinition.modifiers`](../API/JavaAPI#machinerecipedefinition) 提供更紧凑的写法。
 
@@ -416,10 +416,10 @@ event.registerControllerScreenText("mmcr_kubejs:kubejs_recipe_ticker", text => {
 
 实际上，源仓库的 `startup_scripts/advance/A_Recipe_Tick_Machine.js` **也没有写配方注册**——本机器的所有"配方逻辑"都在 `recipeBehavior` 的 5 个钩子里。如果你需要给本机器添加配方，应该：
 
-- 方式 A：**数据驱动**——在 `server_scripts/recipe/A_Recipe_Tick_Machine.js` 里用 `ServerEvents.recipes(...)` + `event.custom({ type: 'mmcr:machine_recipe', ... })` 写 JSON。详见 [A_Simple_Machine](./高炉) 的"配方"章节。
+- 方式 A：**数据驱动**——在 `server_scripts/recipe/A_Recipe_Tick_Machine.js` 里用 `ServerEvents.recipes(...)` + `event.custom({ type: 'mmcr:machine_recipe', ... })` 写 JSON。详见 [高炉](./高炉) 的"配方"章节。
 - 方式 B：**编程式构建器**——`new (Java.loadClass("cn.howxu.mmcr.compat.kubejs.MachineRecipeBuilderJS"))(recipeId).machine(machineId).itemInput(...).itemOutput(...).energyPerTick(...).tickTime(...).build()`。详见 [`MachineRecipeBuilderJS`](../API/KubeJS#machinerecipebuilderjs)。
 
-Java 端对应 [RECIPE_TICKER](../JavaAPI/配方Tick测试机器) 的 3 条配方：
+Java 端对应 [配方Tick测试机器](../JavaAPI/配方Tick测试机器) 的 3 条配方：
 
 ```java
 var recipe = MachineRecipeBuilder
@@ -465,7 +465,7 @@ ServerEvents.recipes(event => {
 })
 ```
 
-详见 [A_Simple_Machine](./高炉) 的"配方"章节了解字段含义。
+详见 [高炉](./高炉) 的"配方"章节了解字段含义。
 
 ## 特殊机制
 
@@ -526,13 +526,13 @@ if (changed) ctx.setRequirements(nextRequirements)
 
 ## 与其他教程的对比
 
-- vs [A_Simple_Machine](./高炉)：A_Simple_Machine 走 `RecipeBehavior.defaults()`——空钩子，本机器用 5 个钩子做完整配方生命周期控制。
-- vs [A_Pure_Tick_Machine](./纯Tick机器示例)：同组对比，详见下表。
-- vs [A_Data_Storage_Machine](./数据存储测试机器) / [A_Network_Machine](./算力-网络交互示例)：那两台走 `tickBehavior`，本机器走 `recipeBehavior`。前者没有配方，后者依赖配方生命周期。
+- vs [高炉](./高炉)：高炉 走 `RecipeBehavior.defaults()`——空钩子，本机器用 5 个钩子做完整配方生命周期控制。
+- vs [纯Tick机器示例](./纯Tick机器示例)：同组对比，详见下表。
+- vs [数据存储测试机器](./数据存储测试机器) / [算力-网络交互示例](./算力-网络交互示例)：那两台走 `tickBehavior`，本机器走 `recipeBehavior`。前者没有配方，后者依赖配方生命周期。
 
 **PURE_TICK vs RECIPE_TICK**：
 
-| 维度 | [A_Pure_Tick_Machine](./纯Tick机器示例) | **A_Recipe_Tick_Machine** |
+| 维度 | [纯Tick机器示例](./纯Tick机器示例) | **配方Tick示例** |
 | --- | --- | --- |
 | 行为实现 | [`tickBehavior`](../API/KubeJS#tickbehaviorconsumer-machinebehaviorbuilderjs-builder--machinebuilderjs) | [`recipeBehavior`](../API/KubeJS#recipebehaviorconsumer-machinebehaviorbuilderjs-builder--machinebuilderjs) |
 | `MachineBehavior.Kind` | `TICK` | `RECIPE` |
@@ -544,9 +544,9 @@ if (changed) ctx.setRequirements(nextRequirements)
 | 屏幕文本 | `controller` + `OPERATION` 都手写 | `controller` 静态 + `OPERATION` 运行时追加 |
 | 状态保存 | 仅 tick 闭包内 | `DataStorage` 可选 |
 
-**A_Pure_Tick_Machine 是"代码驱动、无配方"——所有逻辑写进 `serverTick`**；**A_Recipe_Tick_Machine 是"配方 + 每阶段自定义"——既有配方数据驱动，又在每个钩子里插入自己的逻辑**。
+**纯Tick机器示例 是"代码驱动、无配方"——所有逻辑写进 `serverTick`**；**配方Tick示例 是"配方 + 每阶段自定义"——既有配方数据驱动，又在每个钩子里插入自己的逻辑**。
 
-- vs Java 端 [RECIPE_TICKER](../JavaAPI/配方Tick测试机器)：**逻辑等价**，实现差异如下：
+- vs Java 端 [配方Tick测试机器](../JavaAPI/配方Tick测试机器)：**逻辑等价**，实现差异如下：
 
   | Java 端 | KubeJS 端 |
   | --- | --- |
@@ -572,17 +572,17 @@ if (changed) ctx.setRequirements(nextRequirements)
 | 配方存在但每 tick 的具体动作完全自定 | `recipeBehavior.recipeTick` | 配方生命周期已经接管，能拿到当前 tick / 总 tick |
 | 自定义复杂合成的节奏（多阶段、跨配方共享需求修改） | `recipeBehavior` | 仍需要配方数据来定义"做什么"，但每个阶段需要插入自定义回调 |
 
-本机器是"`recipeBehavior` 5 个钩子全用上"的完整样本——对应 [PURE_TICK_MACHINE 的"何时用 PURE_TICK vs RECIPE_TICK"](../JavaAPI/纯Tick测试机器#何时用-pure_tick-vs-recipe_tick) 章节的第二种用法。
+本机器是"`recipeBehavior` 5 个钩子全用上"的完整样本——对应 [纯Tick测试机器 的"何时用 PURE_TICK vs RECIPE_TICK"](../JavaAPI/纯Tick测试机器#何时用-pure_tick-vs-recipe_tick) 章节的第二种用法。
 
 ## 延伸阅读
 
-- [A_Simple_Machine](./高炉) — 配方驱动的最简样本。
-- [A_Pure_Tick_Machine](./纯Tick机器示例) — 同组对比，无配方的 `tickBehavior`。
-- [A_Data_Storage_Machine](./数据存储测试机器) — `DataStorage` 的最简样本。
-- [A_Network_Machine](./算力-网络交互示例) — `tickBehavior` + 网络通信。
-- [RECIPE_TICKER](../JavaAPI/配方Tick测试机器) — 本机器的 Java 端实现。
-- [BLAST_FURNACE](../JavaAPI/高炉) — 标准配方机器（空钩子）。
-- [PURE_TICK_MACHINE](../JavaAPI/纯Tick测试机器) — `tickBehavior` 在 Java 端的完整演示。
+- [高炉](./高炉) — 配方驱动的最简样本。
+- [纯Tick机器示例](./纯Tick机器示例) — 同组对比，无配方的 `tickBehavior`。
+- [数据存储测试机器](./数据存储测试机器) — `DataStorage` 的最简样本。
+- [算力-网络交互示例](./算力-网络交互示例) — `tickBehavior` + 网络通信。
+- [配方Tick测试机器](../JavaAPI/配方Tick测试机器) — 本机器的 Java 端实现。
+- [高炉](../JavaAPI/高炉) — 标准配方机器（空钩子）。
+- [纯Tick测试机器](../JavaAPI/纯Tick测试机器) — `tickBehavior` 在 Java 端的完整演示。
 - [KubeJS API](../API/KubeJS) — 本教程引用 API 的集中参考。
 - [KubeJS API#MachineBehaviorBuilderJS](../API/KubeJS#machinebehaviorbuilderjs) — 5 个钩子的签名与触发时机。
 - [KubeJS API#recipeBehavior](../API/KubeJS#recipebehaviorconsumer-machinebehaviorbuilderjs-builder--machinebuilderjs) — `recipeBehavior` 入口。

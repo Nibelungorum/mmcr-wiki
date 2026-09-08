@@ -446,7 +446,7 @@ const policy = MMCR.getAPI().outputPolicy().ALLOW_PARTIAL
 ##### `readableNumber(long value) → String`
 
 - **参数表**：`value`（`long`）— 要格式化的整数。
-- **返回**：紧凑可读格式，例如 `1000` 格式化为 `1k`。
+- **返回**：紧凑可读格式，例如 `1000` 格式化为 `1k`。对应 Java 端 `ReadableNumber.formatCompact(long)`。
 - **抛出**：无。
 - **默认值**：无。
 - **示例**：
@@ -455,16 +455,88 @@ const policy = MMCR.getAPI().outputPolicy().ALLOW_PARTIAL
 const text = MMCR.getAPI().readableNumber(1000000)
 ```
 
+##### `readableNumberBigInt(BigInteger value) → String`
+
+- **参数表**：`value`（`BigInteger`）— 要格式化的任意精度整数。
+- **返回**：紧凑可读格式，例如 `1_000_000` 格式化为 `1M`。对应 Java 端 `ReadableNumber.formatCompact(BigInteger)`，**没有 long 重载的精度上限**。
+- **抛出**：`IllegalArgumentException`（负数）。
+- **示例**：
+
+```javascript
+const BigInteger = Java.loadClass("java.math.BigInteger")
+const stored = new BigInteger("123456789012345678901234567890")
+const text = MMCR.getAPI().readableNumberBigInt(stored) // "123.46E"
+```
+
+##### `readableNumberBigDecimal(BigDecimal value) → String`
+
+- **参数表**：`value`（`BigDecimal`）— 要格式化的任意精度小数。
+- **返回**：紧凑可读格式，例如 `12345.678` 格式化为 `12.35k`。对应 Java 端 `ReadableNumber.formatCompact(BigDecimal)`。
+- **抛出**：`IllegalArgumentException`（负数）。
+- **示例**：
+
+```javascript
+const BigDecimal = Java.loadClass("java.math.BigDecimal")
+const text = MMCR.getAPI().readableNumberBigDecimal(new BigDecimal("12345.678"))
+```
+
 ##### `readableNumberExact(long value) → String`
 
 - **参数表**：`value`（`long`）— 要格式化的整数。
-- **返回**：带分组分隔符的精确格式，例如 `1000000` 格式化为 `1,000,000`。
+- **返回**：带分组分隔符的精确格式，例如 `1000000` 格式化为 `1,000,000`。对应 Java 端 `ReadableNumber.formatExact(long)`——`1_000` 以下也加千分位（`"999"` → `"999"`，`"1000"` → `"1,000"`）。
 - **抛出**：无。
 - **默认值**：无。
 - **示例**：
 
 ```javascript
 const text = MMCR.getAPI().readableNumberExact(1000000)
+```
+
+##### `readableNumberFull(long value) → String`
+
+- **参数表**：`value`（`long`）— 要格式化的整数。
+- **返回**：完整 SI 前缀可读格式——`999_999` 以下直接输出整数（`"999"`），`1_000_000` 起使用 SI 前缀（`"1M"`、`"1.23G"`）。对应 Java 端 `ReadableNumber.format(long)`。
+- **抛出**：`IllegalArgumentException`（负数）。
+- **示例**：
+
+```javascript
+const text = MMCR.getAPI().readableNumberFull(1234567890) // "1.23G"
+```
+
+##### `readableNumberFullBigInt(BigInteger value) → String`
+
+- **参数表**：`value`（`BigInteger`）— 要格式化的任意精度整数。
+- **返回**：完整 SI 前缀可读格式，无 long 精度上限。对应 Java 端 `ReadableNumber.format(BigInteger)`。
+- **抛出**：`IllegalArgumentException`（负数）。
+- **示例**：
+
+```javascript
+const BigInteger = Java.loadClass("java.math.BigInteger")
+const stored = new BigInteger("999999999999999999999999999999")
+const text = MMCR.getAPI().readableNumberFullBigInt(stored) // "1Z"
+```
+
+##### `readableNumberFullBigDecimal(BigDecimal value) → String`
+
+- **参数表**：`value`（`BigDecimal`）— 要格式化的任意精度小数。
+- **返回**：完整 SI 前缀可读格式。对应 Java 端 `ReadableNumber.format(BigDecimal)`。
+- **抛出**：`IllegalArgumentException`（负数）。
+- **示例**：
+
+```javascript
+const BigDecimal = Java.loadClass("java.math.BigDecimal")
+const text = MMCR.getAPI().readableNumberFullBigDecimal(new BigDecimal("1234567.89")) // "1.23M"
+```
+
+##### `readableNumberForSlot(long value, int scale, String unit) → String`
+
+- **参数表**：`value`（`long`）— 原始整数值；`scale`（`int`，`0..18`）— 小数点偏移；`unit`（`String`）— 单位后缀（如 `"B"`、`"FE"`）。
+- **返回**：紧凑 5 字符槽位字符串——按 `value / 10^scale` 在所给 `unit` 下渲染，使用**大写** SI 前缀（`""`、`"K"`、`"M"`、`"G"`、`"T"`、`"P"`、`"E"`），多余位数截断而非四舍五入。例如 `formatForSlot(1_001, 3, "B")` 返回 `"1.00B"`。对应 Java 端 `ReadableNumber.formatForSlot(long, int, String)`。
+- **抛出**：`IllegalArgumentException`（负数 / `scale` 越界 / `unit` 过长导致槽位放不下）。
+- **示例**：
+
+```javascript
+const text = MMCR.getAPI().readableNumberForSlot(1_001, 3, "B") // "1.00B"
 ```
 
 ##### `id(String id) → Identifier`

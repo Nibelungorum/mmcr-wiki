@@ -16,12 +16,12 @@ RECIPE_TICKER 是一台使用 [`RecipeBehavior`](../API/JavaAPI#recipebehavior) 
 - `recipeTick`：每 tick 在屏幕上追加"正在使用雷霆大猪咪暴力执行配方"；
 - `beforeFinish`：配方提交输出前给范围内生物加夜视效果。
 
-它与 [PURE_TICK_MACHINE](../JavaAPI/PURE_TICK_MACHINE) / [BLAST_FURNACE](../JavaAPI/BLAST_FURNACE) 是同一组对比，三台机器分别走三种路线：
+它与 [PURE_TICK_MACHINE](../JavaAPI/纯Tick测试机器) / [BLAST_FURNACE](../JavaAPI/高炉) 是同一组对比，三台机器分别走三种路线：
 
 | 机器 | 行为实现 | `MachineBehavior.Kind` | 配方 |
 | --- | --- | --- | --- |
-| [BLAST_FURNACE](../JavaAPI/BLAST_FURNACE) | `RecipeBehavior.defaults()`（空钩子） | `RECIPE` | 1 条 |
-| [PURE_TICK_MACHINE](../JavaAPI/PURE_TICK_MACHINE) | [`TickBehavior`](../API/JavaAPI#tickbehavior) | `TICK` | 无（用 `MachineIoPlan` 自驱） |
+| [BLAST_FURNACE](../JavaAPI/高炉) | `RecipeBehavior.defaults()`（空钩子） | `RECIPE` | 1 条 |
+| [PURE_TICK_MACHINE](../JavaAPI/纯Tick测试机器) | [`TickBehavior`](../API/JavaAPI#tickbehavior) | `TICK` | 无（用 `MachineIoPlan` 自驱） |
 | **RECIPE_TICKER** | [`RecipeBehavior`](../API/JavaAPI#recipebehavior) | `RECIPE` | 3 条 + 5 个钩子 |
 
 [`MachineBehavior.Kind`](../API/JavaAPI#machinebehavior) 是 sealed 接口 `MachineBehavior` 的枚举，仅 `RECIPE` / `TICK` 两个值，分别对应两种机器驱动方式。
@@ -237,7 +237,7 @@ event.registerMachine(machine);
 
 ## 多方块结构
 
-RECIPE_TICKER 的结构和 [PURE_TICK_MACHINE](../JavaAPI/PURE_TICK_MACHINE) 几乎一模一样——3×3×3 外壳 + 同样的 A 位置接口集合，唯一区别是 A 位置不接受 `factoryController()`（RECIPE_TICKER 也没声明 `.factory(...)`）：
+RECIPE_TICKER 的结构和 [PURE_TICK_MACHINE](../JavaAPI/纯Tick测试机器) 几乎一模一样——3×3×3 外壳 + 同样的 A 位置接口集合，唯一区别是 A 位置不接受 `factoryController()`（RECIPE_TICKER 也没声明 `.factory(...)`）：
 
 ```java
 public static void registerStructures(MMCRMachineStructuresEvent event) {
@@ -266,7 +266,7 @@ public static void registerStructures(MMCRMachineStructuresEvent event) {
 }
 ```
 
-复用 PURE_TICK_MACHINE 的结构讲法参考[上篇](../JavaAPI/PURE_TICK_MACHINE)。
+复用 PURE_TICK_MACHINE 的结构讲法参考[上篇](../JavaAPI/纯Tick测试机器)。
 
 ## 配方
 
@@ -314,7 +314,7 @@ public static void register(MMCRMachineRecipesEvent event) {
 - `beforeStart` 把"32 金锭且只匹配金锭"的需求替换成 1 金锭；
 - 玩家实际只需在输入总线放 1 个金锭就能触发配方。
 
-配方 ID 用 `withSuffix(...)` 把机器 ID 作为前缀（`recipe_ticker_recipe_1` 等）。详见 [BLAST_FURNACE 教程](../JavaAPI/BLAST_FURNACE) 对配方阶段的拆解。
+配方 ID 用 `withSuffix(...)` 把机器 ID 作为前缀（`recipe_ticker_recipe_1` 等）。详见 [BLAST_FURNACE 教程](../JavaAPI/高炉) 对配方阶段的拆解。
 
 ## 特殊机制：RecipeBehavior 详解
 
@@ -338,7 +338,7 @@ public static void register(MMCRMachineRecipesEvent event) {
 
 ## 与 BLAST_FURNACE、PURE_TICK_MACHINE 的对比
 
-| 维度 | [BLAST_FURNACE](../JavaAPI/BLAST_FURNACE) | [PURE_TICK_MACHINE](../JavaAPI/PURE_TICK_MACHINE) | **RECIPE_TICKER** |
+| 维度 | [BLAST_FURNACE](../JavaAPI/高炉) | [PURE_TICK_MACHINE](../JavaAPI/纯Tick测试机器) | **RECIPE_TICKER** |
 | --- | --- | --- | --- |
 | 行为实现 | `RecipeBehavior.defaults()` | `TickBehavior` | `RecipeBehavior`（5 个钩子全用上） |
 | `MachineBehavior.Kind` | `RECIPE` | `TICK` | `RECIPE` |
@@ -353,7 +353,7 @@ public static void register(MMCRMachineRecipesEvent event) {
 
 ## 何时用 RECIPE_TICK vs PURE_TICK
 
-详见 [PURE_TICK_MACHINE 的对应章节](../JavaAPI/PURE_TICK_MACHINE#何时用-pure_tick-vs-recipe_tick)。核心结论：持续被动效果或完全自定义节奏用 `TickBehavior`；需要配方数据驱动、或需要在生命周期各阶段插入回调用 `RecipeBehavior`；想改配方需求 / 输出用 `beforeStart` / `beforeFinish`；配方每 tick 的副作用用 `recipeTick`。
+详见 [PURE_TICK_MACHINE 的对应章节](../JavaAPI/纯Tick测试机器#何时用-pure_tick-vs-recipe_tick)。核心结论：持续被动效果或完全自定义节奏用 `TickBehavior`；需要配方数据驱动、或需要在生命周期各阶段插入回调用 `RecipeBehavior`；想改配方需求 / 输出用 `beforeStart` / `beforeFinish`；配方每 tick 的副作用用 `recipeTick`。
 
 ## 小结
 
@@ -364,6 +364,6 @@ RECIPE_TICKER 把"配方 + 自定义 tick 钩子"完整演示了一遍：
 - 上下文层级：`RecipeStartContext` / `RecipeTickContext` / `RecipeFinishContext` 都通过 `ctx.machineContext()` 拿到 [`MachineBehaviorContext`](../API/JavaAPI#machinebehaviorcontext)；
 - 屏幕文本：[`ControllerScreenText.appendAfter(...)`](../API/JavaAPI#controllerscreentext) + [`ControllerScreenTextScope.OPERATION`](../API/JavaAPI#controllerscreentextscope) 让"模板行 → 内容行"的展示顺序可控。
 
-接下来可以回到 [PURE_TICK_MACHINE](../JavaAPI/PURE_TICK_MACHINE) 对照 `TickBehavior` 的写法，或者去 [API 参考](../API/开始) 浏览 [`MachineIoPlan`](../API/JavaAPI#machineioplan) / [`MachineBehaviorContext`](../API/JavaAPI#machinebehaviorcontext) 等其他 API。
+接下来可以回到 [PURE_TICK_MACHINE](../JavaAPI/纯Tick测试机器) 对照 `TickBehavior` 的写法，或者去 [API 参考](../API/开始) 浏览 [`MachineIoPlan`](../API/JavaAPI#machineioplan) / [`MachineBehaviorContext`](../API/JavaAPI#machinebehaviorcontext) 等其他 API。
 
 KubeJS 端的对应教程：[A_Recipe_Tick_Machine](../KubeJS/A_Recipe_Tick_Machine)。

@@ -11,7 +11,7 @@ order: 14
 
 PURE_TICK_MACHINE 是一台不依赖配方的 tick 驱动机器：每 40 tick 尝试一次，先扣 10 FE 能量，扣成功后再寻找范围内的玩家并召唤闪电，最后如果输入总线里有铁锭，就把它转成金粒放到输出总线上。它在 MMCR 内置机器中的角色，是演示 [`TickBehavior`](../API/JavaAPI#tickbehavior) / [`MachineIoPlan`](../API/JavaAPI#machineioplan) / [`MachineIoView`](../API/JavaAPI#machineioview) 三件套最完整的范例——没有配方、没有 `MachineRecipeBuilder`，所有"配方逻辑"都被压缩到一段 `serverTick` lambda 里。
 
-它与 [BLAST_FURNACE](../JavaAPI/BLAST_FURNACE) 的关键区别在于 **驱动方式**。[`MachineBehavior.Kind`](../API/JavaAPI#machinebehavior) 是 sealed 接口 `MachineBehavior` 的枚举，仅两个值：
+它与 [BLAST_FURNACE](../JavaAPI/高炉) 的关键区别在于 **驱动方式**。[`MachineBehavior.Kind`](../API/JavaAPI#machinebehavior) 是 sealed 接口 `MachineBehavior` 的枚举，仅两个值：
 
 | 常量 | 实现 | 触发方式 |
 | --- | --- | --- |
@@ -61,7 +61,7 @@ public static void registerDefinitions(MMCRMachineDefinationsEvent event) {
 }
 ```
 
-[`ControllerScreenTextRegistry.register(...)`](../API/JavaAPI#controllerscreentextregistry) 把一段屏幕文本初始化逻辑挂到机器 ID 上。与 [BLAST_FURNACE](../JavaAPI/BLAST_FURNACE) 不同的是，**注册窗口文本是 PURE_TICK_MACHINE 必不可少的一步**——它没有配方，`OPERATION` scope 不会有 MMCR 自动写入的进度信息，所有玩家能看到的状态都必须由我们手动 `append(...)`。
+[`ControllerScreenTextRegistry.register(...)`](../API/JavaAPI#controllerscreentextregistry) 把一段屏幕文本初始化逻辑挂到机器 ID 上。与 [BLAST_FURNACE](../JavaAPI/高炉) 不同的是，**注册窗口文本是 PURE_TICK_MACHINE 必不可少的一步**——它没有配方，`OPERATION` scope 不会有 MMCR 自动写入的进度信息，所有玩家能看到的状态都必须由我们手动 `append(...)`。
 
 接下来是机器定义本身：
 
@@ -220,7 +220,7 @@ long              gameTime();             // 服务端游戏时间
 
 ## 多方块结构
 
-PURE_TICK_MACHINE 的结构和 [BLAST_FURNACE](../JavaAPI/BLAST_FURNACE) 的 3×3×3 外壳几乎一致，区别仅在于没有熔炉炉心：
+PURE_TICK_MACHINE 的结构和 [BLAST_FURNACE](../JavaAPI/高炉) 的 3×3×3 外壳几乎一致，区别仅在于没有熔炉炉心：
 
 ```java
 public static void registerStructures(MMCRMachineStructuresEvent event) {
@@ -288,7 +288,7 @@ PURE_TICK_MACHINE **没有配方**——`MachineRecipeBuilder` 与 `MachineRecip
 
 ## 与 BLAST_FURNACE 的对比
 
-| 维度 | [BLAST_FURNACE](../JavaAPI/BLAST_FURNACE) | PURE_TICK_MACHINE |
+| 维度 | [BLAST_FURNACE](../JavaAPI/高炉) | PURE_TICK_MACHINE |
 | --- | --- | --- |
 | 行为实现 | `RecipeBehavior`（默认） | `TickBehavior` |
 | `MachineBehavior.Kind` | `RECIPE` | `TICK` |
@@ -311,7 +311,7 @@ PURE_TICK_MACHINE **没有配方**——`MachineRecipeBuilder` 与 `MachineRecip
 | 配方存在但每 tick 的具体动作完全自定 | `RecipeBehavior.recipeTick` | 配方生命周期已经接管，能拿到当前 tick / 总 tick |
 | 自定义复杂合成的节奏（多阶段、跨配方共享需求修改） | `RecipeBehavior` | 仍需要配方数据来定义"做什么"，但每个阶段需要插入自定义回调 |
 
-PURE_TICK_MACHINE 的 serverTick 同时涵盖了**节流、能量校验、副作用（闪电）、物品 IO**——这是 tick 驱动的典型组合。[RECIPE_TICKER](../JavaAPI/RECIPE_TICKER) 则是另一条路线：有配方，但每个生命周期阶段都要插入自定义逻辑。
+PURE_TICK_MACHINE 的 serverTick 同时涵盖了**节流、能量校验、副作用（闪电）、物品 IO**——这是 tick 驱动的典型组合。[RECIPE_TICKER](../JavaAPI/配方Tick测试机器) 则是另一条路线：有配方，但每个生命周期阶段都要插入自定义逻辑。
 
 ## 小结
 
@@ -323,6 +323,6 @@ PURE_TICK_MACHINE 把"一台不用配方的机器"完整演示了一遍：
 - 节流：`MachineBehaviorContext.isDue(period)` 把"每 tick 跑一次"降频到任意周期；
 - 屏幕文本：[`ControllerScreenText`](../API/JavaAPI#controllerscreentext) 的 `append` / `replace` 配合 [`ControllerScreenTextScope.CONTROLLER`](../API/JavaAPI#controllerscreentextscope) 写出"状态卡片"。
 
-接下来可以阅读 [RECIPE_TICKER](../JavaAPI/RECIPE_TICKER) 看"配方 + 自定义 tick 钩子"的写法。或者去 [API 参考](../API/开始) 浏览 [`RecipeBehavior`](../API/JavaAPI#recipebehavior) / [`RecipeStartContext`](../API/JavaAPI#recipestartcontext) 等其他行为 API。
+接下来可以阅读 [RECIPE_TICKER](../JavaAPI/配方Tick测试机器) 看"配方 + 自定义 tick 钩子"的写法。或者去 [API 参考](../API/开始) 浏览 [`RecipeBehavior`](../API/JavaAPI#recipebehavior) / [`RecipeStartContext`](../API/JavaAPI#recipestartcontext) 等其他行为 API。
 
 KubeJS 端的对应教程：[A_Pure_Tick_Machine](../KubeJS/A_Pure_Tick_Machine)。

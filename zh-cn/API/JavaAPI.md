@@ -292,7 +292,7 @@ public final class MachineBuilder {
 
 #### `shareSmartInterfaces()` / `shareSmartInterfaces(boolean share)`
 
-是否让多线程实例共享智能接口。
+是否允许同一个智能接口方块绑定多个相同机器的控制器，并让这些控制器共享同一份接口值；这不是多线程实例共享。
 
 #### `smartInterfaceModifier(SmartInterfaceModifier modifier)`
 
@@ -400,7 +400,7 @@ public record MachineDefinition(
 | `maxParallelAmount` | `int` | 最大并行倍数。`< 1` 抛 `IllegalArgumentException`。 |
 | `expandableStructure` | `boolean` | 是否支持扩展结构。 |
 | `smartInterfaceTypes` | `Map<String, SmartInterfaceType>` | 智能接口类型映射。 |
-| `shareSmartInterfaces` | `boolean` | 多线程实例是否共享智能接口。 |
+| `shareSmartInterfaces` | `boolean` | 是否允许同一个智能接口方块绑定多个相同机器的控制器，并共享接口值。 |
 | `smartInterfaceModifiers` | `List<SmartInterfaceModifier>` | 智能接口修饰符列表。 |
 | `runningSoundId` | `Identifier` | 运行时音效 ID。 |
 | `finishSoundId` | `Identifier` | 配方结束时音效 ID。 |
@@ -1568,7 +1568,17 @@ MMCR 内部实现的桥接接口。Mod 通常不直接实现它，而是依赖 M
 
 完整类名：`cn.howxu.mmcr.api.publicapi.ReadableNumber`
 
-将非负数字格式化为人类可读的 UI 显示字符串的工具。所有方法都接受非负数；负数会抛 `IllegalArgumentException`。`format` / `formatCompact` 方法支持 4 种数值类型，并自动按数量级选择 SI 前缀；`formatForSlot` 是 5 字符定长格式，专用于屏幕槽位。
+将非负数字格式化为人类可读的 UI 显示字符串的工具。所有方法都接受非负数；负数会抛 `IllegalArgumentException`。`format` / `formatCompact` 方法支持 `int`、`long`、`BigInteger` 和 `BigDecimal`；`formatExact` 只接受 `long`；`formatForSlot` 用于宽度最多为 5 个字符的屏幕槽位。
+
+| 方法族 | 起用 SI 前缀的数量级 | 前缀 | 小数处理 |
+| --- | --- | --- | --- |
+| `format(...)` | `1,000,000` | `k`、`M`、`G`、`T`、`P`、`E`、`Z`、`Y` | 最多 2 位，保留末尾 `0` |
+| `formatCompact(...)` | `1,000` | `k`、`M`、`G`、`T`、`P`、`E`、`Z`、`Y` | 最多 2 位，去除末尾 `0` |
+| `formatExact(long)` | 不使用 | 无 | 带千分位的整数 |
+| `formatForSlot(...)` | 按槽位宽度选择 | `K`、`M`、`G`、`T`、`P`、`E` | 按剩余宽度决定 |
+
+SI 数值始终向下截断，不是四舍五入；超过 `Y` 前缀可表示的数量级时，
+`format(...)` 和 `formatCompact(...)` 使用科学计数法。
 
 #### `format(int value) → String`
 
@@ -1576,7 +1586,7 @@ MMCR 内部实现的桥接接口。Mod 通常不直接实现它，而是依赖 M
 
 #### `format(long value) → String`
 
-小于 100 万时直接返回千分位整数格式；达到 100 万后切换为 SI 前缀（如 `1.23M`），截断为 2 位小数。
+小于 100 万时返回带千分位的整数格式；达到 100 万后切换为 SI 前缀，保留两位小数并向下截断。例如 `999_999` → `"999,999"`、`1_000_000` → `"1.00M"`。
 
 | 参数 | 类型 | 含义 |
 | --- | --- | --- |
@@ -1588,31 +1598,43 @@ MMCR 内部实现的桥接接口。Mod 通常不直接实现它，而是依赖 M
 
 #### `formatExact(long value) → String`
 
-始终返回不带 SI 前缀的千分位整数格式。
+始终返回不带 SI 前缀的千分位整数格式。例如 `1_000` → `"1,000"`。
+
+| 参数 | 类型 | 含义 |
+| --- | --- | --- |
+| `value` | `long` | 非负整数。 |
+
+抛出：`IllegalArgumentException`：`value < 0`。
 
 #### `format(BigInteger value) → String`
 
-`BigInteger` 版本，行为同 `format(long)`。
+`BigInteger` 版本，行为同 `format(long)`，不受 `long` 的数值上限限制。超过 `Y` 前缀后使用科学计数法，例如 30 位整数 `123456789012345678901234567890` → `"1.23E29"`。
+
+抛出：`IllegalArgumentException`：`value < 0`。
 
 #### `format(BigDecimal value) → String`
 
-`BigDecimal` 版本，行为同 `format(long)`。小于 100 万时整数部分向下取整。
+`BigDecimal` 版本，行为同 `format(long)`。小于 100 万时丢弃小数部分；达到 100 万后使用 SI 前缀并保留两位小数，结果向下截断。
+
+抛出：`IllegalArgumentException`：`value < 0`。
 
 #### `formatCompact(int|long|BigInteger|BigDecimal) → String`
 
-`format(...)` 的紧凑变体，从 1000 起跳使用 SI 前缀，单位与 `format` 一致。
+`format(...)` 的紧凑变体，从 1000 起使用 SI 前缀，单位与 `format` 一致，并去除结果末尾多余的 `0`。例如 `1_000` → `"1k"`、`1_500_000` → `"1.5M"`。
+
+抛出：`IllegalArgumentException`：参数小于 `0`。
 
 #### `formatForSlot(long value, int scale, String unit) → String`
 
-5 字符定长槽位格式。`value` 按 `10^scale` 缩放后取整数与两位小数，使用大写 SI 前缀（如 `1.23MFE`），结果截断（不是取整）。
+宽度最多为 5 个字符的槽位格式。它先把 `value` 按 `10^scale` 缩放，再根据剩余宽度选择大写 SI 前缀（`K`、`M`、`G`、`T`、`P`、`E`）。小数位数由整数位、前缀和单位共同决定，结果向下截断而不是四舍五入。
 
 | 参数 | 类型 | 含义 |
 | --- | --- | --- |
 | `value` | `long` | 非负原始值。 |
 | `scale` | `int` | 单位倍率（`10^scale`）。范围 `[0, 18]`。 |
-| `unit` | `String` | 后缀单位字符串，不能为空且不能过长（剩余空间至少 1 个数字）。 |
+| `unit` | `String` | 后缀单位字符串，不能为 `null`，且不能过长（剩余空间至少 1 个数字）。 |
 
-返回：长度恰为 5 字符的字符串，例如 `formatForSlot(1_001, 3, "B")` 返回 `"1.00B"`、`formatForSlot(15_000_000, 0, "FE")` 返回 `"15.0MFE"`。
+返回：长度不超过 5 个字符的字符串，例如 `formatForSlot(1_001, 3, "B")` 返回 `"1.00B"`、`formatForSlot(15_000_000, 0, "FE")` 返回 `"15MFE"`。
 
 抛出：
 
@@ -1622,16 +1644,16 @@ MMCR 内部实现的桥接接口。Mod 通常不直接实现它，而是依赖 M
 
 ```java
 ReadableNumber.format(1_234_567L);             // "1.23M"
-ReadableNumber.formatCompact(1_500_000L);      // "1.50M"
+ReadableNumber.formatCompact(1_500_000L);      // "1.5M"
 ReadableNumber.formatExact(1_234_567L);        // "1,234,567"
-ReadableNumber.formatForSlot(2_500_000, 0, "FE"); // "2.50MFE"
+ReadableNumber.formatForSlot(2_500_000, 0, "FE"); // "2MFE"
 ```
 
 :::warning 注意事项
 
 - 所有数字格式化都按 `Locale.ROOT` 渲染，避免本地化导致 UI 数值错位。
 - `format` / `formatCompact` 使用截断（`RoundingMode.DOWN`），不是四舍五入——`999.999` 会被格式化为 `999`。
-- `formatForSlot` 与 `formatCompact` 的 SI 前缀选择策略不同：`formatCompact` 从 1000 起跳；`formatForSlot` 还会把 `value / 10^scale` 重新对齐到 5 字符宽度。
+- `formatForSlot` 与 `formatCompact` 的 SI 前缀选择策略不同：`formatCompact` 从 1000 起跳；`formatForSlot` 还会把 `value / 10^scale` 重新对齐到最多 5 个字符的槽位宽度。
 
 ---
 :::

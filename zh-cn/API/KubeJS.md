@@ -443,11 +443,26 @@ const policy = MMCR.getAPI().outputPolicy().ALLOW_PARTIAL
 
 #### 字符串与数字
 
+这些方法是 `cn.howxu.mmcr.api.publicapi.ReadableNumber` 的 KubeJS 门面。所有方法
+都拒绝负数；小数和 SI 数值统一向下截断，
+不是四舍五入。
+
+| 方法族 | 起用 SI 前缀的数量级 | 前缀 | 小数位 |
+| --- | --- | --- | --- |
+| `readableNumber(...)` | `1,000` | `k`、`M`、`G`、`T`、`P`、`E`、`Z`、`Y` | 最多 2 位，去除末尾 `0` |
+| `readableNumberFull(...)` | `1,000,000` | `k`、`M`、`G`、`T`、`P`、`E`、`Z`、`Y` | 最多 2 位，保留末尾 `0` |
+| `readableNumberExact(long)` | 不使用 | 无 | 千分位整数 |
+| `readableNumberForSlot(...)` | 按槽位宽度选择 | `K`、`M`、`G`、`T`、`P`、`E` | 按剩余宽度决定 |
+
+超过 `Y` 前缀可表示的数量级时，前两种方法改用科学计数法，例如
+`readableNumberBigInt(new BigInteger("123456789012345678901234567890"))`
+返回 `1.23E29`。
+
 ##### `readableNumber(long value) → String`
 
 - **参数表**：`value`（`long`）— 要格式化的整数。
-- **返回**：紧凑可读格式，例如 `1000` 格式化为 `1k`。对应 Java 端 `ReadableNumber.formatCompact(long)`。
-- **抛出**：无。
+- **返回**：紧凑可读格式。从 `1000` 起使用 SI 前缀，并去除末尾零，例如 `1000` → `1k`、`1500` → `1.5k`。对应 Java 端 `ReadableNumber.formatCompact(long)`。
+- **抛出**：`IllegalArgumentException`（`value < 0`）。
 - **默认值**：无。
 - **示例**：
 
@@ -465,13 +480,13 @@ const text = MMCR.getAPI().readableNumber(1000000)
 ```javascript
 const BigInteger = Java.loadClass("java.math.BigInteger")
 const stored = new BigInteger("123456789012345678901234567890")
-const text = MMCR.getAPI().readableNumberBigInt(stored) // "123.46E"
+const text = MMCR.getAPI().readableNumberBigInt(stored) // "1.23E29"
 ```
 
 ##### `readableNumberBigDecimal(BigDecimal value) → String`
 
 - **参数表**：`value`（`BigDecimal`）— 要格式化的任意精度小数。
-- **返回**：紧凑可读格式，例如 `12345.678` 格式化为 `12.35k`。对应 Java 端 `ReadableNumber.formatCompact(BigDecimal)`。
+- **返回**：紧凑可读格式，例如 `12345.678` 格式化为 `12.34k`。对应 Java 端 `ReadableNumber.formatCompact(BigDecimal)`；结果最多保留两位小数并向下截断。
 - **抛出**：`IllegalArgumentException`（负数）。
 - **示例**：
 
@@ -484,7 +499,7 @@ const text = MMCR.getAPI().readableNumberBigDecimal(new BigDecimal("12345.678"))
 
 - **参数表**：`value`（`long`）— 要格式化的整数。
 - **返回**：带分组分隔符的精确格式，例如 `1000000` 格式化为 `1,000,000`。对应 Java 端 `ReadableNumber.formatExact(long)`——`1_000` 以下也加千分位（`"999"` → `"999"`，`"1000"` → `"1,000"`）。
-- **抛出**：无。
+- **抛出**：`IllegalArgumentException`（`value < 0`）。
 - **默认值**：无。
 - **示例**：
 
@@ -495,7 +510,7 @@ const text = MMCR.getAPI().readableNumberExact(1000000)
 ##### `readableNumberFull(long value) → String`
 
 - **参数表**：`value`（`long`）— 要格式化的整数。
-- **返回**：完整 SI 前缀可读格式——`999_999` 以下直接输出整数（`"999"`），`1_000_000` 起使用 SI 前缀（`"1M"`、`"1.23G"`）。对应 Java 端 `ReadableNumber.format(long)`。
+- **返回**：完整 SI 前缀可读格式——`999_999` 以下返回带分组的整数，`1_000_000` 起使用 SI 前缀并保留两位小数（`1_000_000` → `"1.00M"`、`1_230_000_000` → `"1.23G"`）。对应 Java 端 `ReadableNumber.format(long)`。
 - **抛出**：`IllegalArgumentException`（负数）。
 - **示例**：
 
@@ -513,7 +528,7 @@ const text = MMCR.getAPI().readableNumberFull(1234567890) // "1.23G"
 ```javascript
 const BigInteger = Java.loadClass("java.math.BigInteger")
 const stored = new BigInteger("999999999999999999999999999999")
-const text = MMCR.getAPI().readableNumberFullBigInt(stored) // "1Z"
+const text = MMCR.getAPI().readableNumberFullBigInt(stored) // "9.99E29"
 ```
 
 ##### `readableNumberFullBigDecimal(BigDecimal value) → String`
@@ -531,7 +546,7 @@ const text = MMCR.getAPI().readableNumberFullBigDecimal(new BigDecimal("1234567.
 ##### `readableNumberForSlot(long value, int scale, String unit) → String`
 
 - **参数表**：`value`（`long`）— 原始整数值；`scale`（`int`，`0..18`）— 小数点偏移；`unit`（`String`）— 单位后缀（如 `"B"`、`"FE"`）。
-- **返回**：紧凑 5 字符槽位字符串——按 `value / 10^scale` 在所给 `unit` 下渲染，使用**大写** SI 前缀（`""`、`"K"`、`"M"`、`"G"`、`"T"`、`"P"`、`"E"`），多余位数截断而非四舍五入。例如 `formatForSlot(1_001, 3, "B")` 返回 `"1.00B"`。对应 Java 端 `ReadableNumber.formatForSlot(long, int, String)`。
+- **返回**：最多 5 个字符的槽位字符串——按 `value / 10^scale` 在所给 `unit` 下渲染，使用**大写** SI 前缀（`""`、`"K"`、`"M"`、`"G"`、`"T"`、`"P"`、`"E"`），多余位数截断而非四舍五入。例如 `readableNumberForSlot(1_001, 3, "B")` 返回 `"1.00B"`，`readableNumberForSlot(15_000_000, 0, "FE")` 返回 `"15MFE"`。对应 Java 端 `ReadableNumber.formatForSlot(long, int, String)`。
 - **抛出**：`IllegalArgumentException`（负数 / `scale` 越界 / `unit` 过长导致槽位放不下）。
 - **示例**：
 
@@ -1122,6 +1137,108 @@ ctx.dataStorage().set("state", value)
 - `dataValue` 的映射值也会递归转换；网络请求根对象必须是映射，不能直接发送单个数字或字符串。
 - `smartInterfaceInput` 的 API 门面只有范围签名；固定值需求应使用相同的 `min` 和 `max`，或使用编程式配方构建器的固定值重载。
 :::
+
+#### `DataValue`
+
+完整类名：`cn.howxu.mmcr.api.data.DataValue`
+
+`DataValue` 是数据存储和网络请求使用的不可变、带类型标签的值包装器。KubeJS
+端不能直接调用构造器，应通过 [`api.dataValue(...)`](#datavalueobject-value--datavalue)
+创建。它不做数值类型之间的隐式转换：`Integer` 不会自动变成 `Long`，读取时应使用
+与写入类型对应的 `asXxx()`。
+
+KubeJS 门面声明的实现类是 `cn.howxu.mmcr.api.data.DataValue`；Java 公共 API
+中的 `cn.howxu.mmcr.api.publicapi.data.DataValue` 是另一个用于外部 Mod 的公共视图，
+两者不要在 Java 代码中混用。脚本端直接使用 `api.dataValue(...)` 返回的对象即可。
+
+##### 支持的类型
+
+| `DataValueType` | Java 类型 | KubeJS 输入示例 |
+| --- | --- | --- |
+| `BOOLEAN` | `Boolean` | `true` / `false` |
+| `STRING` | `String` | `"running"` |
+| `BYTE` | `Byte` | `Byte.valueOf(1)` |
+| `SHORT` | `Short` | `Short.valueOf(1)` |
+| `INT` | `Integer` | `1` |
+| `LONG` | `Long` | `Long.valueOf(1)` |
+| `FLOAT` | `Float` | `Float.valueOf(1.5)` |
+| `DOUBLE` | `Double` | `1.5` |
+| `BIG_INTEGER` | `BigInteger` | `new BigInteger("100000000000000000000")` |
+| `BIG_DECIMAL` | `BigDecimal` | `new BigDecimal("1.5")` |
+| `LIST` | `List<DataValue>` | JavaScript 数组或 Java `Collection` |
+| `MAP` | `Map<String, DataValue>` | JavaScript 对象或 Java `Map` |
+
+`api.dataValue(value)` 会按以下顺序递归转换：
+
+- 已经是 `DataValue` 时原样返回。
+- JavaScript 对象/Java `Map` 转换为 `MAP`；键必须是非空字符串，值继续递归转换。
+- JavaScript 数组、Java `Collection` 和 Java 数组转换为 `LIST`；每个元素继续递归转换。
+- 布尔、字符串、`Byte`、`Short`、`Integer`、`Long`、`Float`、`Double`、`BigInteger` 和 `BigDecimal` 转换为对应的标量类型。
+- `null`、空白映射键、`NaN`、正负无穷以及其他 Java 对象都会抛 `IllegalArgumentException`。
+
+##### `type() → DataValueType`
+
+返回当前值的类型标签。标签只描述实际写入的类型，不表示可转换的数值范围。
+
+##### `value() → Object`
+
+返回内部值。标量返回对应 Java 包装类型；复合值返回 `List<DataValue>` 或
+`Map<String, DataValue>`。需要稳定判断类型时优先使用 `type()` 和 `asXxx()`。
+
+##### 安全取值 `asXxx() → Optional<...>`
+
+只有类型完全匹配时才返回值，否则返回 `Optional.empty()`，不会执行数值转换。
+
+| 方法 | 返回类型 | 匹配类型 |
+| --- | --- | --- |
+| `asBoolean()` | `Optional<Boolean>` | `BOOLEAN` |
+| `asString()` | `Optional<String>` | `STRING` |
+| `asByte()` | `Optional<Byte>` | `BYTE` |
+| `asShort()` | `Optional<Short>` | `SHORT` |
+| `asInt()` | `Optional<Integer>` | `INT` |
+| `asLong()` | `Optional<Long>` | `LONG` |
+| `asFloat()` | `Optional<Float>` | `FLOAT` |
+| `asDouble()` | `Optional<Double>` | `DOUBLE` |
+| `asBigInteger()` | `Optional<BigInteger>` | `BIG_INTEGER` |
+| `asBigDecimal()` | `Optional<BigDecimal>` | `BIG_DECIMAL` |
+| `asList()` | `Optional<List<DataValue>>` | `LIST` |
+| `asMap()` | `Optional<Map<String, DataValue>>` | `MAP` |
+
+##### 强类型取值 `xxxValue() → ...`
+
+`booleanValue()`、`stringValue()`、`byteValue()`、`shortValue()`、`intValue()`、
+`longValue()`、`floatValue()`、`doubleValue()`、`bigIntegerValue()` 和
+`bigDecimalValue()` 返回不带 `Optional` 的值。类型不匹配时抛
+`IllegalStateException`，因此脚本通常应优先使用 `asXxx().orElse(...)`。
+
+##### 示例
+
+```javascript
+const BigInteger = Java.loadClass("java.math.BigInteger")
+const api = MMCR.getAPI()
+
+const state = api.dataValue({
+    enabled: true,
+    count: 3,
+    energy: new BigInteger("12345678901234567890"),
+    labels: ["active", "stored"]
+})
+
+const energy = state.asMap()
+    .orElseThrow()
+    .get("energy")
+    .asBigInteger()
+    .orElse(BigInteger.ZERO)
+```
+
+:::warning 注意事项
+
+- `asInt()`、`asLong()`、`asBigInteger()` 等只读取对应标签；它们不会把其他整数类型转换过去。
+- `LIST` 和 `MAP` 是不可变容器；`DataValue` 创建后不能修改其中的元素或键值。
+- 需要发送网络请求时，根值必须是 `MAP`；直接把数字、字符串或列表传给 `sendRequest(...)` 会被拒绝。
+- `DataValue` 的 Java 公共视图、`DataStorage` 和事务写入见 [Java API 的数据子包](./JavaAPI#17-数据子包)。
+:::
+
 ## 5. 机器定义构建器
 
 ### `MachineBuilderJS`
@@ -1752,7 +1869,7 @@ machine.smartInterface("temperature", 0, 100).priority(5).end()
 ##### `shareSmartInterface() → MachineBuilderJS`
 
 - **参数表**：无。
-- **返回**：启用多线程实例共享智能接口并返回构建器。
+- **返回**：允许同一个智能接口方块绑定多个相同机器的控制器，并返回构建器。
 - **抛出**：无。
 - **默认值**：`false`。
 - **示例**：
@@ -1763,7 +1880,7 @@ machine.shareSmartInterface()
 
 ##### `shareSmartInterface(boolean share) → MachineBuilderJS`
 
-- **参数表**：`share`（`boolean`）— 是否共享智能接口值。
+- **参数表**：`share`（`boolean`）— 是否允许同一个智能接口方块绑定多个相同机器的控制器；启用后这些控制器读取同一份接口值。
 - **返回**：当前构建器。
 - **抛出**：无。
 - **默认值**：`false`。
@@ -3637,168 +3754,7 @@ MMCREvents.startup(event => {
 - 静态文本行（`controller` 作用域）每次客户端 tick 都会重新执行；`replace` 是最后一次写入生效的语义。
 - 翻译键占位参数支持 `Component` 与基础数值；不要传入无法序列化为 JSON 的对象。
 :::
-## 11. 智能接口事件
-
-### `SmartInterfaceEvents`
-
-> `cn.howxu.mmcr.compat.kubejs.SmartInterfaceEvents` 是智能接口值/绑定变化的服务器端事件组。
-
-**字段**
-
-| 名称 | 类型 | 描述 |
-|------|------|------|
-| `UPDATED_ID` | `String` | `"mmcr.smart_interface.updated"`。 |
-| `GROUP` | `EventGroup` | `mmcr.smart_interface` 事件组，标记为 `Registration.COMPLETE = true` 后才能 `post`。 |
-
-**监听语法**
-
-```javascript
-MMCREvents.onEvent("mmcr.smart_interface.updated", event => {
-    console.info("interface updated at", event.interfacePos(), "value", event.newValue())
-})
-```
-
-实际入口依赖插件注册的事件组：KubeJS 把 `GROUP` 中名为 `updated` 的 `EventHandler` 注册到 `EventGroupRegistry`；KubeJS 端可通过 `MMCREvents["mmcr.smart_interface"].updated(handler)` 调用（`EventGroupWrapper` 把键查询转发到 `EventHandler`）。
-
-#### `group() → EventGroup`
-
-- **参数表**：无。
-- **返回**：初始化事件组。
-- **抛出**：无。
-- **默认值**：返回静态事件组。
-- **示例**：
-
-```javascript
-const group = SmartInterfaceEvents.group()
-```
-
-#### `post(SmartInterfaceUpdateEventJS event) → void`
-
-- **参数表**：`event`（`SmartInterfaceUpdateEventJS`）— 事件载荷。
-- **返回**：无；在注册已完成且存在监听者时把事件分发到脚本。
-- **抛出**：无。
-- **默认值**：仅当 `Registration.COMPLETE` 为 `true` 且 `Holder.UPDATED.hasListeners()` 为 `true` 时真正触发。
-- **示例**：内部使用，普通脚本不应手动调用。
-
-#### `Holder` 与 `Registration`
-
-`SmartInterfaceEvents.Holder.UPDATED` 是 `EventGroup.server("updated", ...)` 注册的 `EventHandler`；`SmartInterfaceEvents.Registration.COMPLETE` 在第一次调用 `group()` 时被置为 `true`。这两个内部类不暴露给脚本。
-
-### `SmartInterfaceUpdateEventJS`
-
-> `cn.howxu.mmcr.compat.kubejs.SmartInterfaceUpdateEventJS` 是 `SmartInterfaceEvents.UPDATED_ID` 监听到的事件负载。
-
-**记录签名**
-
-```java
-public record SmartInterfaceUpdateEventJS(
-        BlockPos interfacePos,
-        Identifier machineId,
-        String type,
-        @Nullable Float oldValue,
-        @Nullable Float newValue,
-        List<BlockPos> controllerPositions) implements KubeEvent
-```
-
-**字段**
-
-| 名称 | 类型 | 描述 |
-|------|------|------|
-| `interfacePos` | `BlockPos` | 智能接口方块位置，不可变。 |
-| `machineId` | `Identifier` | 接口所属机器的注册 ID。 |
-| `type` | `String` | 智能接口类型名，对应 `MachineBuilderJS.smartInterface(type, ...)`。 |
-| `oldValue` | `Float` 或 `null` | 旧值；`null` 表示新建绑定。 |
-| `newValue` | `Float` 或 `null` | 新值；`null` 表示解除绑定。 |
-| `controllerPositions` | `List<BlockPos>` | 该接口所在或关联的控制器方块列表，已排序为不可变副本。 |
-
-**方法**
-
-#### `controllerCount() → int`
-
-- **参数表**：无。
-- **返回**：`controllerPositions` 列表长度。
-- **抛出**：无。
-- **默认值**：无。
-- **示例**：
-
-```javascript
-MMCREvents["mmcr.smart_interface"].updated(event => {
-    if (event.controllerCount() === 0) return
-})
-```
-
-#### `controllerPos() → BlockPos | null`
-
-- **参数表**：无。
-- **返回**：第一个控制器位置；列表为空时返回 `null`。
-- **抛出**：无。
-- **默认值**：无。
-- **示例**：
-
-```javascript
-const first = event.controllerPos()
-if (first != null) {
-    ctx.level().getBlockEntity(first)
-}
-```
-
-#### `interfacePos() → BlockPos`
-
-- **参数表**：无。
-- **返回**：事件负载中的智能接口位置。
-- **抛出**：无。
-- **默认值**：无。
-- **示例**：
-
-```javascript
-const pos = event.interfacePos()
-```
-
-#### `machineId() → Identifier`
-
-- **参数表**：无。
-- **返回**：事件负载中的机器 ID。
-- **抛出**：无。
-- **默认值**：无。
-- **示例**：
-
-```javascript
-const id = event.machineId()
-```
-
-#### `type() → String`
-
-- **参数表**：无。
-- **返回**：智能接口类型字符串。
-- **抛出**：无。
-- **默认值**：无。
-- **示例**：
-
-```javascript
-const t = event.type()
-```
-
-#### `controllerPositions() → List<BlockPos>`
-
-- **参数表**：无。
-- **返回**：不可变、已排序的控制器位置列表。
-- **抛出**：无。
-- **默认值**：构造时 `null` 被替换为空列表。
-- **示例**：
-
-```javascript
-event.controllerPositions().forEach(p => {
-    // ...
-})
-```
-
-:::warning 注意事项
-
-- 事件仅在 `mmcr.smart_interface.updated` 上发送；目前 `MMCRStartupEventJS.registerControllerScreenText` 与 `SmartInterfaceUpdateEventJS` 是独立的两套 API。
-- `oldValue`/`newValue` 在创建/删除绑定时其中之一为 `null`。
-- 控制器位置以不可变 `BlockPos` 形式给出；直接共享给其他方块实体即可。
-:::
-## 12. 内部辅助
+## 11. 内部辅助
 
 > 本节列出的是 KubeJS 集成层内部使用的辅助类，**不暴露给脚本**。它们的作用是支撑上面的 API，不要在用户脚本里直接引用。
 
@@ -3825,7 +3781,7 @@ event.controllerPositions().forEach(p => {
 
 ### `Plugin`
 
-> `cn.howxu.mmcr.compat.kubejs.Plugin` 是 MMCR 提供的 `KubeJSPlugin` 实现，类路径为 `cn.howxu.mmcr.compat.kubejs.Plugin`。它在 `registerBindings` 中注入 `MMCR` 与 `MMCREvents` 绑定，在 `registerEvents` 中注册 `MMCREvents.GROUP` 与 `SmartInterfaceEvents.GROUP`，在 `registerRecipeFactories`、`registerRecipeComponents`、`registerRecipeSchemas` 中分别注册 `MachineRecipeFactory.INSTANCE`、`JSON_ELEMENT` 与 `MachineRecipeSchema.SCHEMA`。
+> `cn.howxu.mmcr.compat.kubejs.Plugin` 是 MMCR 提供的 `KubeJSPlugin` 实现，类路径为 `cn.howxu.mmcr.compat.kubejs.Plugin`。它在 `registerBindings` 中注入 `MMCR` 与 `MMCREvents` 绑定，在 `registerEvents` 中注册 `MMCREvents.GROUP`，在 `registerRecipeFactories`、`registerRecipeComponents`、`registerRecipeSchemas` 中分别注册 `MachineRecipeFactory.INSTANCE`、`JSON_ELEMENT` 与 `MachineRecipeSchema.SCHEMA`。
 
 `beforeScriptsLoaded` 与 `afterScriptsLoaded` 还负责：
 
@@ -3864,6 +3820,6 @@ event.controllerPositions().forEach(p => {
 - **块谓词类型**：`KubeJSApi` 返回的方块谓词类型是 `cn.howxu.mmcr.api.machine.BlockPredicate`，与 Java 公共 API 包 `cn.howxu.mmcr.api.publicapi.machine.BlockPredicate` 不同。`modifierUse(...)` 会自动从前者转换为后者；结构字符绑定只能使用前者或脚本能识别的 `BlockState`/`Block`/`LevelSlot`。
 - **配方多通道**：MMCR 配方有四条注册路径——`event.custom({ type: 'mmcr:machine_recipe' })` 数据驱动配方、`MachineRecipeBuilderJS` 编程式配方、`RecipeRegistry.registerStatic(...)` 静态注册（`Plugin.completeServerReload` 之外）、`MachineRecipeConverter` 转换的自定义 codec。同一 ID 在任意路径下只允许存在一次。
 - **网络请求**：`sendRequest` 在目标不可达时不会抛异常，失败由源机器上同 ID 的 `requestFailed` 处理器处理。请求体必须是字符串键映射，且每个值都是 `dataValue` 支持的类型。
-- **智能接口**：智能接口类型在 `MachineBuilderJS.smartInterface(type, ...)` 注册时是机器级声明，结构可以同时通过 `set(symbol, smartInterfaceBlock())` 决定哪些位置允许放置接口。`SmartInterfaceUpdateEventJS` 监听写在 `mmcr.smart_interface.updated`，参数与机器定义保持一致。
+- **智能接口**：智能接口类型在 `MachineBuilderJS.smartInterface(type, ...)` 注册时是机器级声明，结构可以同时通过 `set(symbol, smartInterfaceBlock())` 决定哪些位置允许放置接口；接口值由智能接口方块保存并供绑定的控制器读取。
 - **可热加载范围**：机器定义、等级类型、等级、修饰符和控制器屏幕文本注册在启动脚本中，修改后必须重启游戏；结构、配方、控制器屏幕文本内容可随 `/reload` 重载（屏幕文本行的静态/动态重写都遵循 `ControllerScreenText` 的替换语义）。
 - **语言约定**：本文档中的 Java 类型在脚本里以相同名称使用；KubeJS 会把字符串、数组、对象和回调转换为对应参数；标记为 `@HideFromJS` 的重载（见 `MachineStructureBuilderJS` 多个 `extension`/`fullStructure` 与 `MachineBuilderJS` 的 `controllerSpec`/`runningSound(Identifier)` 等）保留给 Java 互操作或内部桥接，不应作为脚本入口。

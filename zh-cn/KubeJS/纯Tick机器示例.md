@@ -49,10 +49,10 @@ Java 对照：[纯Tick测试机器](../JavaAPI/纯Tick测试机器)。
 | `KubeJSApi.recipeIO()` | [链接](../API/KubeJS#recipeio--recipeiovalues) |
 | `KubeJSApi.id(...)` | [链接](../API/KubeJS#idstring-id--identifier) |
 | `KubeJSApi.screenScope()` | [链接](../API/KubeJS#screenscope--screenscopevalues) |
-| `KubeJSApi.energyRequirement(...)` | [链接](../API/KubeJS#energyrequirementrecipeio-io-int-feperopertick--machinerequirement) |
+| `KubeJSApi.energyRequirement(...)` | [链接](../API/KubeJS#energyrequirementrecipeio-io-int-fepertick--machinerequirement) |
 | `KubeJSApi.itemInputRequirement(...)` | [链接](../API/KubeJS#iteminputrequirementstring-itemid-int-count--machinerequirement) |
 | `KubeJSApi.itemOutputRequirement(...)` | [链接](../API/KubeJS#itemoutputrequirementstring-itemid-int-count-float-chance--machinerequirement) |
-| `event.registerControllerScreenText(...)` | [链接](../API/KubeJS#registercontrollerscreentextstring-machineid-consumercontrollerscreenteventeventjs-handler--void) |
+| `event.registerControllerScreenText(...)` | [链接](../API/KubeJS#registercontrollerscreentextstring-machineid-consumercontrollerscreentexteventjs-handler--void) |
 | `ControllerScreenTextEventJS.append(...)` | [链接](../API/KubeJS#appendstring-scope-string-lineid-component-text--void) |
 | `KubeJSApi.block(...)` / `anyOf(...)` | [链接](../API/KubeJS#blockstring-blockid--blockpredicate) / [链接](../API/KubeJS#anyofblockpredicate-children--blockpredicate) |
 | `KubeJSApi.anyOfItemInput()` / `anyOfItemOutput()` / `anyOfEnergyInput()` | [链接](../API/KubeJS#anyofiteminput--blockpredicate) / [链接](../API/KubeJS#anyofitemoutput--blockpredicate) / [链接](../API/KubeJS#anyofenergyinput--blockpredicate) |
@@ -196,7 +196,7 @@ if (!plan_fe.commit().successful()) {
 - `simulate()` 返回 `Simulation`，其中 `energySatisfied()` 告诉调用者能量总线是否真的够 10 FE；
 - `commit()` 才把消耗真正落地——`simulate()` 不会改动物品 / 能量，只读。
 
-[`api.energyRequirement(api.recipeIO().INPUT, 10)`](../API/KubeJS#energyrequirementrecipeio-io-int-feperopertick--machinerequirement) 构造"10 FE 输入"需求。
+[`api.energyRequirement(api.recipeIO().INPUT, 10)`](../API/KubeJS#energyrequirementrecipeio-io-int-fepertick--machinerequirement) 构造"10 FE 输入"需求。
 
 屏幕文本用 `ctx.screenText().replace(lineId, text)` 替换上一帧同 ID 的内容——这是 KubeJS 端 [`ControllerScreenTextEventJS.replace(...)`](../API/KubeJS#replacestring-lineid-component-text--void)。
 
@@ -325,7 +325,7 @@ event.registerControllerScreenText(
 )
 ```
 
-[`event.registerControllerScreenText(machineId, handler)`](../API/KubeJS#registercontrollerscreentextstring-machineid-consumercontrollerscreenteventeventjs-handler--void) 注册一段屏幕文本初始化逻辑。回调里的 `text` 是 [`ControllerScreenTextEventJS`](../API/KubeJS#controllerscreenteventeventjs) 实例，调用 [`text.append(scope, lineId, component)`](../API/KubeJS#appendstring-scope-string-lineid-component-text--void) 添加两行静态提示：
+[`event.registerControllerScreenText(machineId, handler)`](../API/KubeJS#registercontrollerscreentextstring-machineid-consumercontrollerscreentexteventjs-handler--void) 注册一段屏幕文本初始化逻辑。回调里的 `text` 是 [`ControllerScreenTextEventJS`](../API/KubeJS#controllerscreentexteventjs) 实例，调用 [`text.append(scope, lineId, component)`](../API/KubeJS#appendstring-scope-string-lineid-component-text--void) 添加两行静态提示：
 
 - `fe_status` → `"FE is needed!"`；
 - `pure_tick_status` → `"No Ingot input"`。
@@ -390,9 +390,9 @@ plan.commit()
 
 ### 屏幕文本：`replace(...)` vs `append(...)`
 
-[`ControllerScreenTextEventJS`](../API/KubeJS#controllerscreenteventeventjs) 暴露 `append` / `appendAfter` / `remove` / `clear` / `replace`。本机器在 [`registerControllerScreenText(...)`](../API/KubeJS#registercontrollerscreentextstring-machineid-consumercontrollerscreenteventeventjs-handler--void) 注册时用 `append(...)` 写初始两行（`controller` scope，静态）；之后在 `serverTick` 里改写时用 [`replace(lineId, text)`](../API/KubeJS#replacestring-lineid-component-text--void)。
+[`ControllerScreenTextEventJS`](../API/KubeJS#controllerscreentexteventjs) 暴露 `append` / `appendAfter` / `remove` / `clear` / `replace`。本机器在 [`registerControllerScreenText(...)`](../API/KubeJS#registercontrollerscreentextstring-machineid-consumercontrollerscreentexteventjs-handler--void) 注册时用 `append(...)` 写初始两行（`controller` scope，静态）；之后在 `serverTick` 里改写时用 [`replace(lineId, text)`](../API/KubeJS#replacestring-lineid-component-text--void)。
 
-两者关键区别（[`KubeJS.md`](../API/KubeJS#controllerscreenteventeventjs) 中详细列出）：
+两者关键区别（[`KubeJS.md`](../API/KubeJS#controllerscreentexteventjs) 中详细列出）：
 
 | 方法 | 是否要 scope | 行为 |
 | --- | --- | --- |
@@ -467,4 +467,4 @@ plan.commit()
 - **`net.minecraft.world.entity.player.Player`** — Minecraft 原版的 `Player` 类，KubeJS 端通过 `Java.loadClass` 拿，作为 `level.getEntitiesOfClass(Player, area)` 的过滤类型。
 - **`net.minecraft.world.phys.AABB`** — KubeJS 提供 `AABB.of(minX, minY, minZ, maxX, maxY, maxZ)` 工厂；但 AABB 的内部字段与方法在 [KubeJS.md](../API/KubeJS) 中没有单独条目。
 - **`net.minecraft.world.level.Level#spawnLightning(double, double, double, boolean)`** — KubeJS 端用 `level.spawnLightning(x, y, z, isCosmetic)` 调用，文档里没有独立小节。
-- **`cn.howxu.mmcr.api.publicapi.recipe.requirement.MachineRequirement`** / **`MachineIoPlan`** — Java 端的 IO 编程模型，KubeJS 通过 [`api.energyRequirement(...)`](../API/KubeJS#energyrequirementrecipeio-io-int-feperopertick--machinerequirement) / [`api.itemInputRequirement(...)`](../API/KubeJS#iteminputrequirementstring-itemid-int-count--machinerequirement) 等工厂方法间接暴露，但 `MachineIoPlan` 本身在 [KubeJS.md](../API/KubeJS) 中没有条目。
+- **`cn.howxu.mmcr.api.publicapi.recipe.requirement.MachineRequirement`** / **`MachineIoPlan`** — Java 端的 IO 编程模型，KubeJS 通过 [`api.energyRequirement(...)`](../API/KubeJS#energyrequirementrecipeio-io-int-fepertick--machinerequirement) / [`api.itemInputRequirement(...)`](../API/KubeJS#iteminputrequirementstring-itemid-int-count--machinerequirement) 等工厂方法间接暴露，但 `MachineIoPlan` 本身在 [KubeJS.md](../API/KubeJS) 中没有条目。

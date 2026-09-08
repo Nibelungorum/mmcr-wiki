@@ -54,7 +54,7 @@ Java 对照：[配方Tick测试机器](../JavaAPI/配方Tick测试机器)。
 | `MachineBehaviorBuilderJS.beforeFinish(...)` | [链接](../API/KubeJS#beforefinishconsumer-recipefinishcontext-callback--machinebehaviorbuilderjs) |
 | `KubeJSApi.id(...)` | [链接](../API/KubeJS#idstring-id--identifier) |
 | `KubeJSApi.screenScope()` | [链接](../API/KubeJS#screenscope--screenscopevalues) |
-| `event.registerControllerScreenText(...)` | [链接](../API/KubeJS#registercontrollerscreentextstring-machineid-consumercontrollerscreenteventeventjs-handler--void) |
+| `event.registerControllerScreenText(...)` | [链接](../API/KubeJS#registercontrollerscreentextstring-machineid-consumercontrollerscreentexteventjs-handler--void) |
 | `ControllerScreenTextEventJS.append(...)` | [链接](../API/KubeJS#appendstring-scope-string-lineid-component-text--void) |
 | `ControllerScreenTextEventJS.appendAfter(...)` | [链接](../API/KubeJS#appendafterstring-scope-string-lineid-string-afterlineid-component-text--void) |
 | `ControllerScreenTextEventJS.appendTranslatable(...)` | [链接](../API/KubeJS#appendtranslatablestring-scope-string-lineid-string-key-object-args--void) |
@@ -400,7 +400,7 @@ event.registerControllerScreenText("mmcr_kubejs:kubejs_recipe_ticker", text => {
 })
 ```
 
-[`event.registerControllerScreenText(...)`](../API/KubeJS#registercontrollerscreentextstring-machineid-consumercontrollerscreenteventeventjs-handler--void) 注册 3 行静态文本：
+[`event.registerControllerScreenText(...)`](../API/KubeJS#registercontrollerscreentextstring-machineid-consumercontrollerscreentexteventjs-handler--void) 注册 3 行静态文本：
 
 - [`appendTranslatable("controller", "mmcr_kubejs:before_line", "gui.mmcr_kubejs.before_line")`](../API/KubeJS#appendtranslatablestring-scope-string-lineid-string-key-object-args--void) — `before_line` 行。
 - [`appendAfterTranslatable("controller", "mmcr_kubejs:in_line", "mmcr_kubejs:sp_line_1", "gui.mmcr_kubejs.in_line")`](../API/KubeJS#appendaftertranslatablestring-scope-string-lineid-string-afterlineid-string-key-object-args--void) — 把 `in_line` 插到 `sp_line_1`（MMCR 自动生成的内部分隔行）之后。
@@ -586,7 +586,7 @@ if (changed) ctx.setRequirements(nextRequirements)
 - [KubeJS API](../API/KubeJS) — 本教程引用 API 的集中参考。
 - [KubeJS API#MachineBehaviorBuilderJS](../API/KubeJS#machinebehaviorbuilderjs) — 5 个钩子的签名与触发时机。
 - [KubeJS API#recipeBehavior](../API/KubeJS#recipebehaviorconsumer-machinebehaviorbuilderjs-builder--machinebuilderjs) — `recipeBehavior` 入口。
-- [KubeJS API#ControllerScreenTextEventJS](../API/KubeJS#controllerscreenteventeventjs) — 屏幕文本注册的所有方法。
+- [KubeJS API#ControllerScreenTextEventJS](../API/KubeJS#controllerscreentexteventjs) — 屏幕文本注册的所有方法。
 
 ## 未在 KubeJS.md 中覆盖的 API
 

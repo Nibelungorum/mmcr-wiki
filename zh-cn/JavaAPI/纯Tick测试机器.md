@@ -9,7 +9,7 @@ order: 14
 
 ## 概览
 
-纯Tick测试机器 是一台不依赖配方的 tick 驱动机器：每 40 tick 尝试一次，先扣 10 FE 能量，扣成功后再寻找范围内的玩家并召唤闪电，最后如果输入总线里有铁锭，就把它转成金粒放到输出总线上。它在 MMCR 内置机器中的角色，是演示 [`TickBehavior`](../API/JavaAPI#tickbehavior) / [`MachineIoPlan`](../API/JavaAPI#machineioplan) / [`MachineIoView`](../API/JavaAPI#machineioview) 三件套最完整的范例——没有配方、没有 `MachineRecipeBuilder`，所有"配方逻辑"都被压缩到一段 `serverTick` lambda 里。
+纯Tick测试机器 是一台不依赖配方的 tick 驱动机器：每 40 tick 尝试一次，先扣 10 FE 能量，扣成功后再寻找范围内的玩家并召唤闪电，最后如果输入总线里有铁锭，就把它转成金粒放到输出总线上。它在 MMCR 内置机器中的角色，是演示 [`TickBehavior`](../API/JavaAPI#tickbehavior) / [`MachineIoPlan`](../API/JavaAPI#machineioplan) / [`MachineIoView`](../API/JavaAPI#machineioview) 三件套最完整的范例，没有配方、没有 `MachineRecipeBuilder`，所有"配方逻辑"都被压缩到一段 `serverTick` lambda 里。
 
 它与 [高炉](../JavaAPI/高炉) 的关键区别在于 **驱动方式**。[`MachineBehavior.Kind`](../API/JavaAPI#machinebehavior) 是 sealed 接口 `MachineBehavior` 的枚举，仅两个值：
 
@@ -18,7 +18,7 @@ order: 14
 | `RECIPE` | [`RecipeBehavior`](../API/JavaAPI#recipebehavior) | 由配方生命周期触发（`idleStart` / `beforeStart` / `recipeTick` / `beforeFinish` / `preServerTick` / `postServerTick`） |
 | `TICK` | [`TickBehavior`](../API/JavaAPI#tickbehavior) | 每服务端 tick 一次（`serverTick`） |
 
-`BLAST_FURNACE` 是前者，`PURE_TICK_MACHINE` 是后者——`MachineBuilder.tickBehavior(...)` 决定了它根本没有配方，也不会有配方生命周期的钩子，所有"做什么"全靠自己写。
+`BLAST_FURNACE` 是前者，`PURE_TICK_MACHINE` 是后者：`MachineBuilder.tickBehavior(...)` 决定了它根本没有配方，也不会有配方生命周期的钩子，所有"做什么"全靠自己写。
 
 涉及的全部 API 在 API 参考中都有独立页面：
 
@@ -61,7 +61,7 @@ public static void registerDefinitions(MMCRMachineDefinationsEvent event) {
 }
 ```
 
-[`ControllerScreenTextRegistry.register(...)`](../API/JavaAPI#controllerscreentextregistry) 把一段屏幕文本初始化逻辑挂到机器 ID 上。与 [高炉](../JavaAPI/高炉) 不同的是，**注册窗口文本是 纯Tick测试机器 必不可少的一步**——它没有配方，`OPERATION` scope 不会有 MMCR 自动写入的进度信息，所有玩家能看到的状态都必须由我们手动 `append(...)`。
+[`ControllerScreenTextRegistry.register(...)`](../API/JavaAPI#controllerscreentextregistry) 把一段屏幕文本初始化逻辑挂到机器 ID 上。与 [高炉](../JavaAPI/高炉) 不同的是，**注册窗口文本是 纯Tick测试机器 必不可少的一步**，它没有配方，`OPERATION` scope 不会有 MMCR 自动写入的进度信息，所有玩家能看到的状态都必须由我们手动 `append(...)`。
 
 接下来是机器定义本身：
 
@@ -89,11 +89,11 @@ var machine = MachineBuilder
 event.registerMachine(machine);
 ```
 
-对比 高炉：`PURE_TICK_MACHINE` 不需要并行也不需要工厂——`serverTick` 回调里没有 `parallelism()` 维度的循环。它把 `.parallelizable(true)` / `.factory(...)` 全部省掉了，只保留 `.allowMultithreading()` 与 `.maxParallelism(...)`。
+对比 高炉：`PURE_TICK_MACHINE` 不需要并行也不需要工厂，`serverTick` 回调里没有 `parallelism()` 维度的循环。它把 `.parallelizable(true)` / `.factory(...)` 全部省掉了，只保留 `.allowMultithreading()` 与 `.maxParallelism(...)`。
 
 关键一行 `.tickBehavior(behavior -> behavior.serverTick(context -> { ... }))` 的语义：
 
-- `.tickBehavior(...)` 在 [`MachineBuilder`](../API/JavaAPI#machinebuilder) 中把行为从默认的 `RecipeBehavior.defaults()` 切换成 `TickBehavior`——从此该机器 `MachineBehavior.kind() == TICK`，**没有配方、不能用 `preServerTick` / `postServerTick`**，强行调用会抛 `IllegalStateException`。
+- `.tickBehavior(...)` 在 [`MachineBuilder`](../API/JavaAPI#machinebuilder) 中把行为从默认的 `RecipeBehavior.defaults()` 切换成 `TickBehavior`，从此该机器 `MachineBehavior.kind() == TICK`，**没有配方、不能用 `preServerTick` / `postServerTick`**，强行调用会抛 `IllegalStateException`。
 - `behavior -> behavior.serverTick(...)` 是 [`TickBehavior.Builder`](../API/JavaAPI#tickbehavior) 的链式调用入口。`serverTick` 接收 [`MachineBehavior.TickCallback`](../API/JavaAPI#machinebehavior)（`void accept(TickBehaviorContext context)`）。
 
 ## `serverTick` 回调详解
@@ -106,7 +106,7 @@ event.registerMachine(machine);
 if (!context.isDue(40)) return;
 ```
 
-[`MachineBehaviorContext.isDue(long)`](../API/JavaAPI#machinebehaviorcontext) 返回当前 tick 是否对齐到 `period` 的整数倍，等价于 `(gameTime() % period) == 0`。纯Tick测试机器 用它把"实际逻辑"降频到 1 次 / 2 秒——剩下的 tick 直接 `return`。
+[`MachineBehaviorContext.isDue(long)`](../API/JavaAPI#machinebehaviorcontext) 返回当前 tick 是否对齐到 `period` 的整数倍，等价于 `(gameTime() % period) == 0`。纯Tick测试机器 用它把"实际逻辑"降频到 1 次 / 2 秒，剩下的 tick 直接 `return`。
 
 ### 2) 扣能量：`MachineIoPlan.addInput(...)` + `simulate()` + `commit()`
 
@@ -129,12 +129,12 @@ if (!planFe.commit().successful()) {
 [`TickBehaviorContext.ioPlan()`](../API/JavaAPI#tickbehaviorcontext) 返回一个全新的 [`MachineIoPlan`](../API/JavaAPI#machineioplan)。这台机器之所以把 FE 单独走一遍 `MachineIoPlan`：
 
 - `simulate()` 返回 `Simulation`，其中 `energySatisfied()` 告诉调用者能量总线是否真的够 10 FE；
-- `commit()` 才把消耗真正落地——`simulate()` 不会改动物品 / 能量，只读。
+- `commit()` 才把消耗真正落地，`simulate()` 不会改动物品 / 能量，只读。
 
 [`EnergyRequirement`](../API/JavaAPI#energyrequirement) 是不可变记录（`RecipeIo io, long fePerTick`）。这里的 `RecipeModifier.IOType.INPUT` 是 MMCR 内部修饰符系统沿用下来的方向枚举，其语义和 [`RecipeIo.INPUT`](../API/JavaAPI#recipeio) 完全相同。
 
 :::warning 注意
-`ioPlan()` 每次返回**新**的 `MachineIoPlan`——两次调用之间的状态不共享。下面步骤还要重新 `context.ioPlan()` 才能加物品。
+`ioPlan()` 每次返回**新**的 `MachineIoPlan`，两次调用之间的状态不共享。下面步骤还要重新 `context.ioPlan()` 才能加物品。
 :::
 
 ### 3) 范围搜玩家 → 召唤闪电
@@ -157,7 +157,7 @@ for (var player : players) {
 }
 ```
 
-这一步演示了 `TickBehavior` 的关键灵活性：**tick 回调里能做任何想做的事**——不限于读写物品 / 能量，也能操作实体、写 NBT、发包。配方机器的 `recipeTick` 也能做类似的事，但因为同时受配方生命周期约束，写法会更受限。
+这一步演示了 `TickBehavior` 的关键灵活性：**tick 回调里能做任何想做的事**，不限于读写物品 / 能量，也能操作实体、写 NBT、发包。配方机器的 `recipeTick` 也能做类似的事，但因为同时受配方生命周期约束，写法会更受限。
 
 ### 4) 物品输入输出：`MachineIoPlan` 二次使用
 
@@ -189,7 +189,7 @@ plan.commit();
 - 输入端 `Ingredient.of(Items.IRON_INGOT), 1` 显式声明消耗 1 个铁锭；
 - 输出端用 `add(...)` 走"省略 policy，等价于 `REQUIRE_FULL`"分支，把"必须能完整放入"的语义写明。
 
-`Simulation.outputs()` 返回每条输出项的模拟结果，每项有 `accepted()`（实际能放入多少）与 `requested()`（期望放入多少）。这里强制要求**全部输出能放下**，否则 `return`——这是 纯Tick测试机器 的设计选择：要么完整产出 1 颗金粒，要么这次 tick 什么都不做。如果换成 `addOutput(..., OutputPolicy.ALLOW_PARTIAL)`，即便金粒只能放下半颗也会 `commit` 成功。
+`Simulation.outputs()` 返回每条输出项的模拟结果，每项有 `accepted()`（实际能放入多少）与 `requested()`（期望放入多少）。这里强制要求**全部输出能放下**，否则 `return`，这是 纯Tick测试机器 的设计选择：要么完整产出 1 颗金粒，要么这次 tick 什么都不做。如果换成 `addOutput(..., OutputPolicy.ALLOW_PARTIAL)`，即便金粒只能放下半颗也会 `commit` 成功。
 
 [`ItemRequirement`](../API/JavaAPI#itemrequirement) 在输入 / 输出方向上语义对称：
 
@@ -252,24 +252,24 @@ public static void registerStructures(MMCRMachineStructuresEvent event) {
 }
 ```
 
-`where('X', block(Blocks.GREEN_TERRACOTTA))` 外壳统一是绿色陶瓦；`where('A', any(...))` A 位置允许多种接口（包括 `factoryController()`——虽然机器本身没有 `.factory(...)`，但仍能在结构上预留位置）；`.controller('C')` 顶层中心是控制器。
+`where('X', block(Blocks.GREEN_TERRACOTTA))` 外壳统一是绿色陶瓦；`where('A', any(...))` A 位置允许多种接口（包括 `factoryController()`，虽然机器本身没有 `.factory(...)`，但仍能在结构上预留位置）；`.controller('C')` 顶层中心是控制器。
 
 ## 配方
 
-纯Tick测试机器 **没有配方**——`MachineRecipeBuilder` 与 `MachineRecipe` 在本类里完全不会出现。所有"配方逻辑"都被压缩到 `serverTick` 内的 [`MachineIoPlan`](../API/JavaAPI#machineioplan) 调用里。
+纯Tick测试机器 **没有配方**：`MachineRecipeBuilder` 与 `MachineRecipe` 在本类里完全不会出现。所有"配方逻辑"都被压缩到 `serverTick` 内的 [`MachineIoPlan`](../API/JavaAPI#machineioplan) 调用里。
 
 如果想给一台 `TickBehavior` 机器加"配方"，唯一的办法是：
 
 1. 在 `serverTick` 里手动 `simulate()` 校验输入是否齐；
 2. 用 `commit()` 真正消耗并产出。
 
-这与 `RecipeBehavior` 的"配方数据驱动"完全相反——后者只需在 `MachineRecipeBuilder` 声明输入 / 输出 / duration，MMCR 会自动调度所有生命周期。
+这与 `RecipeBehavior` 的"配方数据驱动"完全相反：后者只需在 `MachineRecipeBuilder` 声明输入 / 输出 / duration，MMCR 会自动调度所有生命周期。
 
 ## 特殊机制：TickBehavior 详解
 
 ### `TickBehavior.Builder` 与 `TickBehaviorContext`
 
-`TickBehavior.Builder` 只有两个方法：`serverTick(...)` 设置回调，`build()` 终结构建。比起 [`RecipeBehavior.Builder`](../API/JavaAPI#recipebehavior) 的 7 个钩子，`TickBehavior.Builder` 简单得多——这也是为什么 tick 驱动的机器写起来最自由、也最考验写代码的人对输入 / 输出时机的把握。
+`TickBehavior.Builder` 只有两个方法：`serverTick(...)` 设置回调，`build()` 终结构建。比起 [`RecipeBehavior.Builder`](../API/JavaAPI#recipebehavior) 的 7 个钩子，`TickBehavior.Builder` 简单得多，这也是为什么 tick 驱动的机器写起来最自由、也最考验写代码的人对输入 / 输出时机的把握。
 
 `TickBehaviorContext` **继承** `MachineBehaviorContext`，新增 6 个字段（`factoryThreadCount()`、`parallelism()`、`smartInterfaceValue(...)`、`smartInterfaceValues()`、`ioPlan()`、`capabilityTickContext(...)`）。其中 `ioPlan()` 是 tick 驱动机器最常用的方法——它是所有"模拟输入 / 输出 / 能量 / commit"的入口。`MachineBehaviorContext` 已经能让你读 `level()` / `controllerPos()` / `screenText()` 等，这一部分在 `TickBehaviorContext` 里继承可见。`MachineIoView` 是只读视图（见 [`MachineIoView`](../API/JavaAPI#machineioview)），`ioView().itemAmount(Ingredient)` / `itemOutputCapacity(ItemStack)` 是常用查询。
 
@@ -301,7 +301,7 @@ public static void registerStructures(MMCRMachineStructuresEvent event) {
 | 节流 | `RecipeBehavior.preServerTick` | `MachineBehaviorContext.isDue(...)` |
 | 屏幕文本来源 | `OPERATION` scope（MMCR 自动写）+ `CONTROLLER` scope（手写） | 全靠 `CONTROLLER` scope + 手写 |
 
-**高炉 是"数据驱动"路线**——把配方写完，剩下的让 MMCR 自己跑；**纯Tick测试机器 是"代码驱动"路线**——把每 tick 的逻辑写进 lambda 里。后者灵活度更高，能做配方机器做不了的事（范围搜实体、自定义定时逻辑），但代价是必须自己处理所有边界（节流、能量校验、输出容量校验）。
+**高炉 是"数据驱动"路线**，把配方写完，剩下的让 MMCR 自己跑；**纯Tick测试机器 是"代码驱动"路线**，把每 tick 的逻辑写进 lambda 里。后者灵活度更高，能做配方机器做不了的事（范围搜实体、自定义定时逻辑），但代价是必须自己处理所有边界（节流、能量校验、输出容量校验）。
 
 ## 何时用 PURE_TICK vs RECIPE_TICK
 
@@ -313,7 +313,7 @@ public static void registerStructures(MMCRMachineStructuresEvent event) {
 | 配方存在但每 tick 的具体动作完全自定 | `RecipeBehavior.recipeTick` | 配方生命周期已经接管，能拿到当前 tick / 总 tick |
 | 自定义复杂合成的节奏（多阶段、跨配方共享需求修改） | `RecipeBehavior` | 仍需要配方数据来定义"做什么"，但每个阶段需要插入自定义回调 |
 
-纯Tick测试机器 的 serverTick 同时涵盖了**节流、能量校验、副作用（闪电）、物品 IO**——这是 tick 驱动的典型组合。[配方Tick测试机器](../JavaAPI/配方Tick测试机器) 则是另一条路线：有配方，但每个生命周期阶段都要插入自定义逻辑。
+纯Tick测试机器 的 serverTick 同时涵盖了**节流、能量校验、副作用（闪电）、物品 IO**，这是 tick 驱动的典型组合。[配方Tick测试机器](../JavaAPI/配方Tick测试机器) 则是另一条路线：有配方，但每个生命周期阶段都要插入自定义逻辑。
 
 ## 小结
 

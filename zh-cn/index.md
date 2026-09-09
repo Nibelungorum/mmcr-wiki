@@ -39,7 +39,7 @@ features:
 
 <div class="home-intro">
   <br>
-  <div id="desc"> MMCR 是面向现代 NeoForge 和高版本 Minecraft 的非官方 MMCE(模块化机器社区版) 延续项目</div>
+  <div id="desc"> MMCR 是面向现代 NeoForge 和高版本 Minecraft 的非官方 MMCE，即模块化机器社区版的延续项目</div>
   <br>
   <div id="desc"> 开源社区 现代的API设计 高性能 可扩展性</div>
 </div>

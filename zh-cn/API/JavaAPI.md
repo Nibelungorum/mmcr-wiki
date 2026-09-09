@@ -1937,7 +1937,7 @@ public final class RecipeBehavior implements MachineBehavior {
 
 #### `defaults() → RecipeBehavior`
 
-返回所有钩子均为空实现的默认 `RecipeBehavior`。`MachineBuilder` 在未显式声明 `recipeBehavior(...)` 时使用此默认值（即数据驱动配方行为）。
+返回所有钩子均为空实现的默认 `RecipeBehavior`。`MachineBuilder` 在未显式声明 `recipeBehavior(...)` 时使用此默认值，即数据驱动配方行为。
 
 #### `builder() → Builder`
 
@@ -3990,8 +3990,8 @@ public sealed interface ComponentPredicate permits ComponentPredicate.Exact, Com
 | 方法 | 含义 |
 | --- | --- |
 | `exact(JsonElement value)` | 精确匹配某个 JSON 值（值比较时按 JSON 等价）。`value.deepCopy()` 在构造时被复制。 |
-| `map(Map<String, ComponentPredicate> values)` | 匹配 map 类型数据组件——map 中每个键都对应一个子谓词，全部满足才算匹配。 |
-| `list(List<ComponentPredicate> values)` | 匹配 list 类型数据组件——list 中所有元素都要满足。 |
+| `map(Map<String, ComponentPredicate> values)` | 匹配 map 类型数据组件，map 中每个键都对应一个子谓词，全部满足才算匹配。 |
+| `list(List<ComponentPredicate> values)` | 匹配 list 类型数据组件，list 中所有元素都要满足。 |
 | `range(double min, double max)` | 匹配数值范围（含端点）。 |
 | `text(String value, TextMode mode)` | 匹配文本，参见 `TextMode`。 |
 
@@ -4064,7 +4064,7 @@ public record DataComponentPredicateSet(Map<Identifier, ComponentPredicate> valu
 
 | 返回 | 含义 |
 | --- | --- |
-| `true` | 集合中存在非 `Exact` 谓词——只能在输入端使用。 |
+| `true` | 集合中存在非 `Exact` 谓词，只能在输入端使用。 |
 | `false` | 全部是 `Exact`，输入 / 输出端均可使用。 |
 
 #### 示例
@@ -4436,8 +4436,8 @@ reg.unregister();
 
 | 常量 | 含义 |
 | --- | --- |
-| `CONTROLLER` | 控制器范围——只要控制器存在就一直保留。 |
-| `OPERATION` | 单次操作范围——随当前配方操作状态自动失效（开始 / 结束 / 失败时由 MMCR 清空）。 |
+| `CONTROLLER` | 控制器范围，只要控制器存在就一直保留。 |
+| `OPERATION` | 单次操作范围，随当前配方操作状态自动失效（开始 / 结束 / 失败时由 MMCR 清空）。 |
 
 #### 示例
 
@@ -4978,7 +4978,7 @@ public record MachineReference(Identifier type, long hash) {
 | 字段 | 类型 | 含义 |
 | --- | --- | --- |
 | `type` | `Identifier` | 机器 ID（如 `Identifier.fromNamespaceAndPath("my_mod", "producer")`）。`null` → `NullPointerException("type")`。 |
-| `hash` | `long` | 实例稳定哈希——成型后生成，跨重启保持。 |
+| `hash` | `long` | 实例稳定哈希，成型后生成，跨重启保持。 |
 
 ##### `bridgeValue() → Object`
 
@@ -5379,8 +5379,8 @@ public final class RecipeModifier {
 
 | 常量 | 含义 |
 | --- | --- |
-| `INPUT` | 输入方向——消耗方向。 |
-| `OUTPUT` | 输出方向——产出方向。 |
+| `INPUT` | 输入方向，消耗方向。 |
+| `OUTPUT` | 输出方向，产出方向。 |
 
 :::warning 注意事项
 

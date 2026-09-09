@@ -48,7 +48,7 @@ MMCREvents.startup(event => {
 - `builder.recipeFamily`: 绑定一种配方系列，表示该机器使用该类配方。你可以让多种机器共享一种配方系列，这个阶段不涉及注册，并不会引起运行时问题。
 - `builder.register`: 提交注册。
 
-这是最最简单的一个示例，实际上，如果你只是想修个机器出来看看，不需要国际化键名，也不需要配方，可以把它简化为:
+这是最简单的机器注册示例。如果只想快速搭建一台机械、不需要国际化键名也不需要配方，可以把它简化为：
 
 ```js
 MMCREvents.startup(event => {
@@ -100,7 +100,7 @@ MMCREvents.server(event => {
     event.createStructure("my_mod:my_first_machine")
 ```
 
-可以看到这是一个不全的js脚本语段，其作用是: **监听 `MMCREvents.server` 事件，创建api对象，向事件注册`my_mod:my_first_machine`这台机器的结构**。通俗地来说，这是一个模版开头，你只需要修改其中出现的机器注册名。
+可以看到这是一个不完整的 JS 脚本片段，其作用是：**监听 `MMCREvents.server` 事件，创建 api 对象，向事件注册 `my_mod:my_first_machine` 这台机器的结构**。这是一个模板开头，只需修改其中出现的机器注册名。
 
 随后，在脚本末尾加入以下内容:
 
@@ -115,7 +115,7 @@ MMCREvents.server(event => {
 
 ![](/kubejs/5.png)
 
-接下来，把原有的`.set('C',xxxx)`修改为`.controller('C')`，在正常情况下，导出时声明为控制器的方块，所占的一定是字符C，所以无脑改就可以了:
+接下来，把原有的 `.set('C', xxxx)` 修改为 `.controller('C')`。导出时声明为控制器的方块一定占用字符 `C`，直接替换即可：
 
 ![](/kubejs/6.png)
 
@@ -142,7 +142,7 @@ MMCREvents.server(event => {
 
 ![](/kubejs/7.png)
 
-注意，**千万不可以**让`.set('C',xxxx)`和`.controller('C')`同时存在。
+注意：**不要**让 `.set('C', xxxx)` 和 `.controller('C')` 同时存在。
 
 随后，你可以在启动游戏之前先在`kubejs`目录的`assets`的任意命名空间内新建一个i18n翻译键文件，然后为你的机械创建一些翻译键。其中，控制器方块的物品翻译键和方块翻译键都固定为`item/block.mmcr.xxxxx_controller`的格式。
 
@@ -247,7 +247,7 @@ ServerEvents.recipes(event => {
 
 ![](/kubejs/13.png)
 
-为你的多方块机械放上输入输出接口，输入能源与材料，你的第一台 MMCR 多方块结构机械就大功告成了:
+为你的多方块机械放上输入输出接口，输入能源与材料，你的第一台 MMCR 多方块结构机械即可投入使用：
 
 ![](/kubejs/14.png)
 

@@ -9,7 +9,7 @@ order: 15
 
 ## 概览
 
-配方Tick测试机器 是一台使用 [`RecipeBehavior`](../API/JavaAPI#recipebehavior) 的配方机器——它注册 3 条配方，但在配方生命周期的 5 个阶段都插入了自定义钩子：
+配方Tick测试机器 是一台使用 [`RecipeBehavior`](../API/JavaAPI#recipebehavior) 的配方机器，它注册 3 条配方，但在配方生命周期的 5 个阶段都插入了自定义钩子：
 
 - `idleStart` / `idleEnd`：进入 / 离开 idle 时显示提示；
 - `beforeStart`：配方启动前给范围内生物加力量效果，并把"32 金锭"的需求改写成"1 金锭"；
@@ -64,7 +64,7 @@ public static void registerDefinitions(MMCRMachineDefinationsEvent event) {
 }
 ```
 
-[`ControllerScreenText.appendAfter(...)`](../API/JavaAPI#controllerscreentext) 把 `IN_LINE` 插到 `sp_line_1`（MMCR 自动生成的内部分隔行）之后——屏幕上按 `BEFORE_LINE → IN_LINE → AFTER_LINE` 排列，是"模板行 → 内容行"分段展示的典型用法。
+[`ControllerScreenText.appendAfter(...)`](../API/JavaAPI#controllerscreentext) 把 `IN_LINE` 插到 `sp_line_1`（MMCR 自动生成的内部分隔行）之后，屏幕上按 `BEFORE_LINE → IN_LINE → AFTER_LINE` 排列，是"模板行 → 内容行"分段展示的典型用法。
 
 接下来是机器定义与 `RecipeBehavior` 链式配置：
 
@@ -114,20 +114,20 @@ event.registerMachine(machine);
 })
 ```
 
-这里的 `ctx` 是 [`MachineBehaviorContext`](../API/JavaAPI#machinebehaviorcontext)，没有 `currentTick()` / `recipe()` 这类"配方上下文"方法。写入 [`ControllerScreenTextScope.OPERATION`](../API/JavaAPI#controllerscreentextscope)——`OPERATION` scope 与 `CONTROLLER` scope 的关键区别：
+这里的 `ctx` 是 [`MachineBehaviorContext`](../API/JavaAPI#machinebehaviorcontext)，没有 `currentTick()` / `recipe()` 这类"配方上下文"方法。写入 [`ControllerScreenTextScope.OPERATION`](../API/JavaAPI#controllerscreentextscope)：`OPERATION` scope 与 `CONTROLLER` scope 的关键区别：
 
 | scope | 内容来源 | 重置时机 |
 | --- | --- | --- |
 | `CONTROLLER` | Mod 完全控制 | 由 Mod 自己管理 |
 | `OPERATION` | MMCR 自动 + Mod 追加 | 每个配方生命周期自动重置 |
 
-`idleStart` 写入 `OPERATION` scope 的内容，会在配方开始时被 MMCR 清掉——配合 `beforeStart` 里"清掉 idle 行"的写法，屏幕上不会同时出现"idle 提示"与"运行中提示"。
+`idleStart` 写入 `OPERATION` scope 的内容，会在配方开始时被 MMCR 清掉，配合 `beforeStart` 里"清掉 idle 行"的写法，屏幕上不会同时出现"idle 提示"与"运行中提示"。
 
 `idleEnd` 是空实现：MMCR 已经在配方开始时清掉 idle 行，无需在 `idleEnd` 再手动 `remove(...)`。
 
 ### `beforeStart`：配方启动前的钩子（核心）
 
-`beforeStart` 是 配方Tick测试机器 里最有意思的一段——做了两件事：清屏幕、加效果、改需求。
+`beforeStart` 是 配方Tick测试机器 里最有意思的一段，做了两件事：清屏幕、加效果、改需求。
 
 ```java
 .beforeStart(ctx -> {
@@ -180,11 +180,11 @@ event.registerMachine(machine);
 
 上面这段做了三件事：
 
-1. 把 `idleStart` 写入的两行清掉——避免同时显示"idle 提示"与"运行中提示"。
+1. 把 `idleStart` 写入的两行清掉，避免同时显示"idle 提示"与"运行中提示"。
 2. 给范围内所有 `LivingEntity` 加 10000 tick 的力量 II 效果。
-3. **修改配方需求**：遍历 `ctx.requirements()`，如果某条 `ItemRequirement` 是"32 个金锭"，就替换成 1 个金锭；其他需求保持原样。这正是"配方Tick测试机器"名字的由来——根据当前状态调整配方内容，让原本要求 32 金锭的配方变成 1 金锭就能跑。
+3. **修改配方需求**：遍历 `ctx.requirements()`，如果某条 `ItemRequirement` 是"32 个金锭"，就替换成 1 个金锭；其他需求保持原样。这正是"配方Tick测试机器"名字的由来：根据当前状态调整配方内容，让原本要求 32 金锭的配方变成 1 金锭就能跑。
 
-> 关键观察：配方数据里写的是 32 金锭，但实际只消耗 1 金锭——这就是 `RecipeStartContext.setRequirements(...)` 的力量：**配方数据 + 运行时调整，二者分离**。
+> 关键观察：配方数据里写的是 32 金锭，但实际只消耗 1 金锭，这就是 `RecipeStartContext.setRequirements(...)` 的力量：**配方数据 + 运行时调整，二者分离**。
 
 `ctx.requirements()` 返回的是 `List<MachineRequirement>` 不可变副本，修改它不会影响底层 `MachineRecipe`；必须通过 `setRequirements(...)` 替换，MMCR 才会在 `beforeStart` 结束时统一应用。
 
@@ -211,9 +211,9 @@ event.registerMachine(machine);
 | `ctx.setRequirements(...)` / `setOutputs(...)` | ✓ | ✗（只读副本） |
 | `ctx.cancel()` | ✓ | ✗ |
 
-也就是说，`recipeTick` **不能修改配方需求 / 输出**——它只能读取 `currentTick()` 并基于此写屏幕文本 / 施加效果 / 调用其他游戏机制。如果想修改需求，应该在 `beforeStart` 里做；如果想在完成前改输出，应该在 `beforeFinish` 里做。这样区分是因为"配方执行中"如果改需求 / 输出，会破坏 MMCR 的并行执行——所以 [`RecipeTickContext`](../API/JavaAPI#recipetickcontext) 的需求 / 输出字段是只读副本。
+也就是说，`recipeTick` **不能修改配方需求 / 输出**，它只能读取 `currentTick()` 并基于此写屏幕文本 / 施加效果 / 调用其他游戏机制。如果想修改需求，应该在 `beforeStart` 里做；如果想在完成前改输出，应该在 `beforeFinish` 里做。这样区分是因为"配方执行中"如果改需求 / 输出，会破坏 MMCR 的并行执行，所以 [`RecipeTickContext`](../API/JavaAPI#recipetickcontext) 的需求 / 输出字段是只读副本。
 
-[`ControllerScreenText.appendAfter(...)`](../API/JavaAPI#controllerscreentext) 把这条"雷霆大猪咪"插到 `in_line` 之后——与 `registerDefinitions` 里的 `IN_LINE` 形成呼应：注册时在 `sp_line_1` 后插入 `IN_LINE`，运行时在 `IN_LINE` 后再追加运行信息。
+[`ControllerScreenText.appendAfter(...)`](../API/JavaAPI#controllerscreentext) 把这条"雷霆大猪咪"插到 `in_line` 之后，与 `registerDefinitions` 里的 `IN_LINE` 形成呼应：注册时在 `sp_line_1` 后插入 `IN_LINE`，运行时在 `IN_LINE` 后再追加运行信息。
 
 ### `beforeFinish`：配方提交输出前的钩子
 
@@ -231,13 +231,13 @@ event.registerMachine(machine);
 })
 ```
 
-[`RecipeFinishContext`](../API/JavaAPI#recipefinishcontext) 提供 `ctx.machineContext()` / `ctx.setOutputs(...)` / `ctx.discardOutputs()` / `ctx.cancel()`。配方Tick测试机器 在 `beforeFinish` 里只施加夜视效果，没修改输出——但已经足够演示 `RecipeFinishContext` 的"读取机器上下文"路径。
+[`RecipeFinishContext`](../API/JavaAPI#recipefinishcontext) 提供 `ctx.machineContext()` / `ctx.setOutputs(...)` / `ctx.discardOutputs()` / `ctx.cancel()`。配方Tick测试机器 在 `beforeFinish` 里只施加夜视效果，没修改输出，但已经足够演示 `RecipeFinishContext` 的"读取机器上下文"路径。
 
-把 `beforeStart`（力量 II）与 `beforeFinish`（夜视）拼起来看：机器在配方开始前给玩家加力量，配方完成时给玩家加夜视——这是个完整的"启动 → 完成"循环。
+把 `beforeStart`（力量 II）与 `beforeFinish`（夜视）拼起来看：机器在配方开始前给玩家加力量，配方完成时给玩家加夜视，这是个完整的"启动 → 完成"循环。
 
 ## 多方块结构
 
-配方Tick测试机器 的结构和 [纯Tick测试机器](../JavaAPI/纯Tick测试机器) 几乎一模一样——3×3×3 外壳 + 同样的 A 位置接口集合，唯一区别是 A 位置不接受 `factoryController()`（配方Tick测试机器 也没声明 `.factory(...)`）：
+配方Tick测试机器 的结构和 [纯Tick测试机器](../JavaAPI/纯Tick测试机器) 几乎一模一样：3×3×3 外壳 + 同样的 A 位置接口集合，唯一区别是 A 位置不接受 `factoryController()`（配方Tick测试机器 也没声明 `.factory(...)`）：
 
 ```java
 public static void registerStructures(MMCRMachineStructuresEvent event) {
@@ -330,11 +330,11 @@ public static void register(MMCRMachineRecipesEvent event) {
 
 三者都通过 `ctx.machineContext()` 拿到 [`MachineBehaviorContext`](../API/JavaAPI#machinebehaviorcontext)，可读 `level()` / `controllerPos()` / `screenText()` / `gameTime()` / `machineId()`。
 
-> [`MachineIoPlan`](../API/JavaAPI#machineioplan) 只在 [`TickBehavior`](../API/JavaAPI#tickbehavior) 的 `serverTick` 里有意义；[`RecipeBehavior`](../API/JavaAPI#recipebehavior) 的 `recipeTick` 等钩子**不需要手动调**——配方机器的 IO 由 MMCR 自动根据配方字段管理。
+> [`MachineIoPlan`](../API/JavaAPI#machineioplan) 只在 [`TickBehavior`](../API/JavaAPI#tickbehavior) 的 `serverTick` 里有意义；[`RecipeBehavior`](../API/JavaAPI#recipebehavior) 的 `recipeTick` 等钩子**不需要手动调**，配方机器的 IO 由 MMCR 自动根据配方字段管理。
 
-`idleStart` / `idleEnd` / `preServerTick` / `postServerTick` 四个钩子的签名都是 `MachineCallback`，接收 [`MachineBehaviorContext`](../API/JavaAPI#machinebehaviorcontext)。它们在意的是"机器在干什么"而不是"配方在干什么"。**这 4 个钩子只在 `recipeBehavior(...)` 上下文里可用**——[`MachineBuilder.tickBehavior(...)`](../API/JavaAPI#machinebuilder) 之后再调用 `preServerTick` / `postServerTick` 会抛 `IllegalStateException`。
+`idleStart` / `idleEnd` / `preServerTick` / `postServerTick` 四个钩子的签名都是 `MachineCallback`，接收 [`MachineBehaviorContext`](../API/JavaAPI#machinebehaviorcontext)。它们在意的是"机器在干什么"而不是"配方在干什么"。**这 4 个钩子只在 `recipeBehavior(...)` 上下文里可用**，[`MachineBuilder.tickBehavior(...)`](../API/JavaAPI#machinebuilder) 之后再调用 `preServerTick` / `postServerTick` 会抛 `IllegalStateException`。
 
-5 个钩子抛出的异常都会被 MMCR 捕获并记录，机器进入失败状态。`beforeStart` 里如果 `setRequirements(...)` 抛了 `IllegalArgumentException`（比如把 32 金锭替换成 0 个，违反 `count >= 1` 的约束），机器同样会失败——修改需求时务必保证新参数满足 `MachineRequirement` 的构造约束。
+5 个钩子抛出的异常都会被 MMCR 捕获并记录，机器进入失败状态。`beforeStart` 里如果 `setRequirements(...)` 抛了 `IllegalArgumentException`（比如把 32 金锭替换成 0 个，违反 `count >= 1` 的约束），机器同样会失败，修改需求时务必保证新参数满足 `MachineRequirement` 的构造约束。
 
 ## 与 高炉、纯Tick测试机器 的对比
 
@@ -349,7 +349,7 @@ public static void register(MMCRMachineRecipesEvent event) {
 | IO 入口 | 配方字段 | `MachineIoPlan.addInput(...)` / `addOutput(...)` | 配方字段 |
 | 屏幕文本 | `OPERATION`（MMCR 自动）+ `CONTROLLER`（手写） | 全靠 `CONTROLLER` + 手写 | `CONTROLLER` + `OPERATION` 都手写 |
 
-**高炉 是"配方数据驱动、生命周期透明"**——配方写完就完事；**纯Tick测试机器 是"代码驱动、无配方"**——所有逻辑写进 `serverTick`；**配方Tick测试机器 是"配方 + 每阶段自定义"**——既有配方数据驱动，又在每个钩子里插入自己的逻辑。
+**高炉 是"配方数据驱动、生命周期透明"**，配方写完就完事；**纯Tick测试机器 是"代码驱动、无配方"**，所有逻辑写进 `serverTick`；**配方Tick测试机器 是"配方 + 每阶段自定义"**，既有配方数据驱动，又在每个钩子里插入自己的逻辑。
 
 ## 何时用 RECIPE_TICK vs PURE_TICK
 

@@ -5,7 +5,7 @@ order: 13
 
 # 配方Tick示例 — KubeJS 配方 tick 机器
 
-本文是 KubeJS 进阶示例的第四篇。我们逐段拆解 [`A_Recipe_Tick_Machine.js`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/main/example/startup_scripts/advance/A_Recipe_Tick_Machine.js) 与 [对应的结构脚本](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/main/example/server_scripts/structure/advance/A_Recipe_Tick_Machine.js)。本机器**有配方**，但在配方生命周期的 5 个阶段（`idleStart` / `idleEnd` / `beforeStart` / `recipeTick` / `beforeFinish`）都插入自定义回调——是 [配方Tick测试机器](../JavaAPI/配方Tick测试机器) 的脚本版实现。
+本文是 KubeJS 进阶示例的第四篇。我们逐段拆解 [`A_Recipe_Tick_Machine.js`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/main/example/startup_scripts/advance/A_Recipe_Tick_Machine.js) 与 [对应的结构脚本](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/main/example/server_scripts/structure/advance/A_Recipe_Tick_Machine.js)。本机器**有配方**，但在配方生命周期的 5 个阶段（`idleStart` / `idleEnd` / `beforeStart` / `recipeTick` / `beforeFinish`）都插入自定义回调。本机器是 [配方Tick测试机器](../JavaAPI/配方Tick测试机器) 的脚本版实现。
 
 它跟 [纯Tick机器示例](./纯Tick机器示例) 是同组对比：两者都"按 tick 自定义"，但 纯Tick机器示例 完全没有配方，本机器走 [`recipeBehavior`](../API/KubeJS#recipebehaviorconsumer-machinebehaviorbuilderjs-builder--machinebuilderjs)，在 5 个钩子上插入回调。本教程会重点展开 [`MachineBehaviorBuilderJS`](../API/KubeJS#machinebehaviorbuilderjs) 的链式调用，区分 PURE_TICK vs RECIPE_TICK，并讲清"配方需求改写"的特殊机制。
 
@@ -26,7 +26,7 @@ order: 13
 | [纯Tick机器示例](./纯Tick机器示例) | `tickBehavior` | `TICK` | 无（用 `MachineIoPlan` 自驱） |
 | **配方Tick示例** | `recipeBehavior` | `RECIPE` | 3 条 + 5 个钩子 |
 
-本机器**注册了 3 条配方**——但与 KubeJS 端的事件式配方注册不同，本机器**没有 `server_scripts/recipe/...` 文件**。KubeJS 端 `event.custom({ type: 'mmcr:machine_recipe', ... })` 也可以写，但本机器的 3 条配方是通过**程序化配方构建器** + `MMCREvents.server` 事务注册的。具体写法见下文"配方详解"一节。
+本机器**注册了 3 条配方**，但与 KubeJS 端的事件式配方注册不同，本机器**没有 `server_scripts/recipe/...` 文件**。KubeJS 端 `event.custom({ type: 'mmcr:machine_recipe', ... })` 也可以写，但本机器的 3 条配方是通过**程序化配方构建器** + `MMCREvents.server` 事务注册的。具体写法见下文"配方详解"一节。
 
 ## 本教程涉及的文件
 
@@ -115,7 +115,7 @@ MMCREvents.startup(event => {
 链式调用：
 
 - `.displayNameKey(...)` / `.recipeFamily(...)` / `.appearance("minecraft:green_terracotta")`：和 [高炉](./高炉) 同一种约定。
-- [`.recipeBehavior(behavior => behavior.xxx(...))`](../API/KubeJS#recipebehaviorconsumer-machinebehaviorbuilderjs-builder--machinebuilderjs) 把行为切到 `recipeBehavior`。**与 [`.tickBehavior(...)`](../API/KubeJS#tickbehaviorconsumer-machinebehaviorbuilderjs-builder--machinebuilderjs) 互斥**——一旦调用了其中一个，另一个会抛 `IllegalStateException`。
+- [`.recipeBehavior(behavior => behavior.xxx(...))`](../API/KubeJS#recipebehaviorconsumer-machinebehaviorbuilderjs-builder--machinebuilderjs) 把行为切到 `recipeBehavior`。**与 [`.tickBehavior(...)`](../API/KubeJS#tickbehaviorconsumer-machinebehaviorbuilderjs-builder--machinebuilderjs) 互斥**。一旦调用了其中一个，另一个会抛 `IllegalStateException`。
 
 [`MachineBehaviorBuilderJS`](../API/KubeJS#machinebehaviorbuilderjs) 提供 5 个钩子，本机器全用上：
 
@@ -155,7 +155,7 @@ MMCREvents.server(event => {
 })
 ```
 
-3×3×3 壳 + 同样的 A 位置接口集合。和 [纯Tick机器示例](./纯Tick机器示例) 的唯一区别是 A 位置**不**接受 [`api.factoryController()`](../API/KubeJS#factorycontroller--blockpredicate)——本机器没有声明 `.factory(...)`。注释 `this is all parallel controller` 说明 `parallelControllers()` 是"所有并行控制器"的并集。
+3×3×3 壳 + 同样的 A 位置接口集合。和 [纯Tick机器示例](./纯Tick机器示例) 的唯一区别是 A 位置**不**接受 [`api.factoryController()`](../API/KubeJS#factorycontroller--blockpredicate)，本机器没有声明 `.factory(...)`。注释 `this is all parallel controller` 说明 `parallelControllers()` 是"所有并行控制器"的并集。
 
 ## 钩子详解
 
@@ -180,25 +180,25 @@ MMCREvents.server(event => {
 })
 ```
 
-这里的 `ctx` 是 [`MachineBehaviorContext`](../API/KubeJS)，没有 `currentTick()` / `recipe()` 这类"配方上下文"方法。写入 [`api.screenScope().OPERATION`](../API/KubeJS#screenscope--screenscopevalues) 作用域——`OPERATION` 与 `controller` 的关键区别：
+这里的 `ctx` 是 [`MachineBehaviorContext`](../API/KubeJS)，没有 `currentTick()` / `recipe()` 这类"配方上下文"方法。写入 [`api.screenScope().OPERATION`](../API/KubeJS#screenscope--screenscopevalues) 作用域。`OPERATION` 与 `controller` 的关键区别：
 
 | scope | 内容来源 | 重置时机 |
 | --- | --- | --- |
 | `controller` | Mod 完全控制 | 由 Mod 自己管理 |
 | `OPERATION` | MMCR 自动 + Mod 追加 | 每个配方生命周期自动重置 |
 
-`idleStart` 写入 `OPERATION` scope 的内容，会在配方开始时被 MMCR 清掉——配合 `beforeStart` 里"清掉 idle 行"的写法，屏幕上不会同时出现"idle 提示"与"运行中提示"。
+`idleStart` 写入 `OPERATION` scope 的内容，会在配方开始时被 MMCR 清掉，配合 `beforeStart` 里"清掉 idle 行"的写法，屏幕上不会同时出现"idle 提示"与"运行中提示"。
 
 [`idleEnd`](../API/KubeJS#idleendconsumer-machinebehaviorcontext-callback--machinebehaviorbuilderjs) 是空实现：MMCR 已经在配方开始时清掉 idle 行，无需在 `idleEnd` 再手动 `remove(...)`。
 
 源码里两行 idle 文本：
 
-- `display_when_idle_empty_line` → `Text.literal(" ")`（一个空格占位行）；
+- `display_when_idle_empty_line` → `Text.literal(" ")`（一个空格占位行）。
 - `display_when_idle` → [`Text.translatable("gui.mmcr_kubejs.display_when_idle")`](https://kubejs.com/wiki/tutorials/text-component) 让客户端按玩家语言显示翻译。
 
-### `beforeStart`：配方启动前的钩子（核心）
+### `beforeStart`：配方启动前的钩子
 
-`beforeStart` 是本机器里最有意思的一段——做了三件事：清屏幕、加效果、改需求。
+`beforeStart` 是本机器最核心的一段，做了三件事：清屏幕、加效果、改需求。
 
 ```javascript
 .beforeStart(ctx => {
@@ -292,19 +292,19 @@ MMCREvents.server(event => {
 
 > here ctx is different from idleStart ctx, you should use ctx.machineContext().screenText() to get the text lines
 
-也就是说，`idleStart` 的 `ctx` 直接是 `MachineBehaviorContext`，调 `ctx.screenText()`；`beforeStart` 的 `ctx` 是 `RecipeStartContext`，要 `ctx.machineContext().screenText()`——多一层间接。这一区别对 [`MachineBehaviorBuilderJS`](../API/KubeJS#machinebehaviorbuilderjs) 的所有钩子都成立：**只有 `idleStart` / `idleEnd` / `preServerTick` / `postServerTick` 直接拿 `MachineBehaviorContext`**。
+也就是说，`idleStart` 的 `ctx` 直接是 `MachineBehaviorContext`，调 `ctx.screenText()`。`beforeStart` 的 `ctx` 是 `RecipeStartContext`，要 `ctx.machineContext().screenText()`，多一层间接。这一区别对 [`MachineBehaviorBuilderJS`](../API/KubeJS#machinebehaviorbuilderjs) 的所有钩子都成立：**只有 `idleStart` / `idleEnd` / `preServerTick` / `postServerTick` 直接拿 `MachineBehaviorContext`**。
 
 上面这段做了三件事：
 
-1. **清 idle 行**：把 `idleStart` 写入的两行 `remove(...)`——避免同时显示"idle 提示"与"运行中提示"。
+1. **清 idle 行**：把 `idleStart` 写入的两行 `remove(...)`，避免同时显示"idle 提示"与"运行中提示"。
 2. **加效果**：给范围内所有 `LivingEntity` 加 10000 tick 的力量 II 效果。源码用 KubeJS 提供的 `entity.potionEffects.add(...)` 封装，比 Java 的 `entity.addEffect(new MobEffectInstance(...))` 简洁。
-3. **修改配方需求**：遍历 `ctx.requirements()`，如果某条 [`ItemRequirement`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/main/src/main/java/cn/howxu/mmcr/api/recipe/requirement/ItemRequirement.java) 是"32 个金锭且唯一匹配 `minecraft:gold_ingot`"的需求，就替换成"1 个金锭"；其他需求保持原样。这就是 "配方Tick测试机器" 名字的由来——根据当前状态调整配方内容，让原本要求 32 金锭的配方变成 1 金锭就能跑。
+3. **修改配方需求**：遍历 `ctx.requirements()`，如果某条 [`ItemRequirement`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/main/src/main/java/cn/howxu/mmcr/api/recipe/requirement/ItemRequirement.java) 是"32 个金锭且唯一匹配 `minecraft:gold_ingot`"的需求，就替换成"1 个金锭"，其他需求保持原样。这就是 "配方Tick测试机器" 名字的由来，根据当前状态调整配方内容，让原本要求 32 金锭的配方变成 1 金锭就能跑。
 
 源码注释 *I suggest to use Java API if you want more complex tick* 是提示：复杂的需求改写逻辑写脚本会比较啰嗦，Java 端 [`MachineRecipeDefinition.modifiers`](../API/JavaAPI#machinerecipedefinition) 提供更紧凑的写法。
 
-> 关键观察：配方数据里写的是 32 金锭，但实际只消耗 1 金锭——这就是 `RecipeStartContext.setRequirements(...)` 的力量：**配方数据 + 运行时调整，二者分离**。
+> 关键观察：配方数据里写的是 32 金锭，但实际只消耗 1 金锭。这就是 `RecipeStartContext.setRequirements(...)` 的力量：**配方数据 + 运行时调整，二者分离**。
 
-`ctx.requirements()` 返回的是 `List<MachineRequirement>` 不可变副本，修改它不会影响底层 `MachineRecipe`；必须通过 `setRequirements(...)` 替换，MMCR 才会在 `beforeStart` 结束时统一应用。
+`ctx.requirements()` 返回的是 `List<MachineRequirement>` 不可变副本，修改它不会影响底层 `MachineRecipe`。必须通过 `setRequirements(...)` 替换，MMCR 才会在 `beforeStart` 结束时统一应用。
 
 ### `recipeTick`：配方每 tick 触发
 
@@ -335,9 +335,9 @@ MMCREvents.server(event => {
 | `ctx.setRequirements(...)` / `setOutputs(...)` | ✓ | ✗（只读副本） |
 | `ctx.cancel()` | ✓ | ✗ |
 
-也就是说，`recipeTick` **不能修改配方需求 / 输出**——它只能读取 `currentTick()` 并基于此写屏幕文本 / 施加效果 / 调用其他游戏机制。如果想修改需求，应该在 `beforeStart` 里做；如果想在完成前改输出，应该在 `beforeFinish` 里做。这样区分是因为"配方执行中"如果改需求 / 输出，会破坏 MMCR 的并行执行——所以 `recipeTick` 的需求 / 输出字段是只读副本。
+也就是说，`recipeTick` **不能修改配方需求 / 输出**，它只能读取 `currentTick()` 并基于此写屏幕文本 / 施加效果 / 调用其他游戏机制。如果想修改需求，应该在 `beforeStart` 里做。如果想在完成前改输出，应该在 `beforeFinish` 里做。这样区分是因为"配方执行中"如果改需求 / 输出，会破坏 MMCR 的并行执行，所以 `recipeTick` 的需求 / 输出字段是只读副本。
 
-[`ControllerScreenText.appendAfter(...)`](../API/KubeJS#appendafterstring-scope-string-lineid-string-afterlineid-component-text--void) 把这条"雷霆大猪咪"插到 `in_line` 之后——与下文"静态屏幕文本"里的 `IN_LINE` 形成呼应：注册时在 `sp_line_1` 后插入 `IN_LINE`，运行时在 `IN_LINE` 后再追加运行信息。
+[`ControllerScreenText.appendAfter(...)`](../API/KubeJS#appendafterstring-scope-string-lineid-string-afterlineid-component-text--void) 把这条"雷霆大猪咪"插到 `in_line` 之后，与下文"静态屏幕文本"里的 `IN_LINE` 形成呼应：注册时在 `sp_line_1` 后插入 `IN_LINE`，运行时在 `IN_LINE` 后再追加运行信息。
 
 ### `beforeFinish`：配方提交输出前的钩子
 
@@ -368,9 +368,9 @@ MMCREvents.server(event => {
 })
 ```
 
-[`RecipeFinishContext`](../API/KubeJS#recipefinishcontext) 提供 `ctx.machineContext()` / `ctx.setOutputs(...)` / `ctx.discardOutputs(...)` / `ctx.cancel()`。本机器在 `beforeFinish` 里只施加夜视效果，没修改输出——但已经足够演示 `RecipeFinishContext` 的"读取机器上下文"路径。
+[`RecipeFinishContext`](../API/KubeJS#recipefinishcontext) 提供 `ctx.machineContext()` / `ctx.setOutputs(...)` / `ctx.discardOutputs(...)` / `ctx.cancel()`。本机器在 `beforeFinish` 里只施加夜视效果，没修改输出，但已经足够演示 `RecipeFinishContext` 的"读取机器上下文"路径。
 
-把 `beforeStart`（力量 II）与 `beforeFinish`（夜视）拼起来看：机器在配方开始前给玩家加力量，配方完成时给玩家加夜视——这是个完整的"启动 → 完成"循环。
+把 `beforeStart`（力量 II）与 `beforeFinish`（夜视）拼起来看：机器在配方开始前给玩家加力量，配方完成时给玩家加夜视。这是一个完整的"启动 → 完成"循环。
 
 ## 静态屏幕文本
 
@@ -408,16 +408,16 @@ event.registerControllerScreenText("mmcr_kubejs:kubejs_recipe_ticker", text => {
 
 最终屏幕上按 `before_line → sp_line_1 → in_line → after_line` 排列，是"模板行 → 内容行"分段展示的典型用法。`recipeTick` 里再在 `in_line` 后追加"雷霆大猪咪"信息，运行时屏幕就是 `before_line → sp_line_1 → in_line → 雷霆大猪咪 → after_line`。
 
-注释 *means it's a static text line* 解释 `"controller"` scope 的语义——静态行每次客户端 tick 都会重新执行，**独立于配方生命周期**。
+注释 *means it's a static text line* 解释 `"controller"` scope 的语义。静态行每次客户端 tick 都会重新执行，**独立于配方生命周期**。
 
 ## 配方详解
 
 **本机器在 KubeJS 端不写 `server_scripts/recipe/A_Recipe_Tick_Machine.js`**。那 3 条配方在哪？
 
-实际上，源仓库的 `startup_scripts/advance/A_Recipe_Tick_Machine.js` **也没有写配方注册**——本机器的所有"配方逻辑"都在 `recipeBehavior` 的 5 个钩子里。如果你需要给本机器添加配方，应该：
+实际上，源仓库的 `startup_scripts/advance/A_Recipe_Tick_Machine.js` **也没有写配方注册**，本机器的所有"配方逻辑"都在 `recipeBehavior` 的 5 个钩子里。如果你需要给本机器添加配方，应该：
 
-- 方式 A：**数据驱动**——在 `server_scripts/recipe/A_Recipe_Tick_Machine.js` 里用 `ServerEvents.recipes(...)` + `event.custom({ type: 'mmcr:machine_recipe', ... })` 写 JSON。详见 [高炉](./高炉) 的"配方"章节。
-- 方式 B：**编程式构建器**——`new (Java.loadClass("cn.howxu.mmcr.compat.kubejs.MachineRecipeBuilderJS"))(recipeId).machine(machineId).itemInput(...).itemOutput(...).energyPerTick(...).tickTime(...).build()`。详见 [`MachineRecipeBuilderJS`](../API/KubeJS#machinerecipebuilderjs)。
+- 方式 A：**数据驱动**，在 `server_scripts/recipe/A_Recipe_Tick_Machine.js` 里用 `ServerEvents.recipes(...)` + `event.custom({ type: 'mmcr:machine_recipe', ... })` 写 JSON。详见 [高炉](./高炉) 的"配方"章节。
+- 方式 B：**编程式构建器**，`new (Java.loadClass("cn.howxu.mmcr.compat.kubejs.MachineRecipeBuilderJS"))(recipeId).machine(machineId).itemInput(...).itemOutput(...).energyPerTick(...).tickTime(...).build()`。详见 [`MachineRecipeBuilderJS`](../API/KubeJS#machinerecipebuilderjs)。
 
 Java 端对应 [配方Tick测试机器](../JavaAPI/配方Tick测试机器) 的 3 条配方：
 
@@ -442,8 +442,8 @@ var recipe = MachineRecipeBuilder
 
 注意 `recipe_3` 与 `beforeStart` 钩子的联动：
 
-- 配方数据说 32 金锭；
-- `beforeStart` 把"32 金锭且只匹配金锭"的需求替换成 1 金锭；
+- 配方数据说 32 金锭。
+- `beforeStart` 把"32 金锭且只匹配金锭"的需求替换成 1 金锭。
 - 玩家实际只需在输入总线放 1 个金锭就能触发配方。
 
 要在 KubeJS 端等价注册这 3 条，可以写一个 `server_scripts/recipe/A_Recipe_Tick_Machine.js`：
@@ -485,11 +485,11 @@ ServerEvents.recipes(event => {
 
 > 配方回调中的 `ctx.machineContext()` 返回 `MachineBehaviorContext`，可访问 `dataStorage`、`screenText`、`jadeText`、`level`、`controllerPos()` 等运行时状态。
 
-源码里 `idleStart` 用 `ctx.screenText()`、`beforeStart` 用 `ctx.machineContext().screenText()`——这两条规则必须严格遵守，写反会抛 `IllegalStateException`。
+源码里 `idleStart` 用 `ctx.screenText()`、`beforeStart` 用 `ctx.machineContext().screenText()`，这两条规则必须严格遵守，写反会抛 `IllegalStateException`。
 
 ### `ctx.requirements()` 的不可变副本语义
 
-`ctx.requirements()` 返回**不可变副本**——只能读取，不能 `add()` / `remove()`。要修改需求，必须构造一个 `ArrayList` 把想要保留 / 替换的需求放进去，再调用 `ctx.setRequirements(list)` 提交。源码里这个模式被反复强调：
+`ctx.requirements()` 返回**不可变副本**，只能读取，不能 `add()` / `remove()`。要修改需求，必须构造一个 `ArrayList` 把想要保留 / 替换的需求放进去，再调用 `ctx.setRequirements(list)` 提交。源码里这个模式被反复强调：
 
 ```javascript
 const nextRequirements = new ArrayList()
@@ -497,14 +497,14 @@ const nextRequirements = new ArrayList()
 if (changed) ctx.setRequirements(nextRequirements)
 ```
 
-如果 `changed === false`（没有改任何需求），源码**不调用** `ctx.setRequirements`——这是正确做法，调用空 set 反而可能影响并行执行的状态机。
+如果 `changed === false`（没有改任何需求），源码**不调用** `ctx.setRequirements`，这是正确做法，调用空 set 反而可能影响并行执行的状态机。
 
 ### 配方数据 + 运行时调整
 
 `beforeStart` 的需求改写是本教程最关键的能力：**配方数据 + 运行时调整，二者分离**。
 
-- 配方数据稳定，便于 JEI 显示与数据包分发；
-- `beforeStart` 根据当前世界状态（玩家数、库存、变量）调整；
+- 配方数据稳定，便于 JEI 显示与数据包分发。
+- `beforeStart` 根据当前世界状态（玩家数、库存、变量）调整。
 - 实际跑配方时用调整后的需求做 IO。
 
 ### 修改需求时务必满足构造约束
@@ -526,7 +526,7 @@ if (changed) ctx.setRequirements(nextRequirements)
 
 ## 与其他教程的对比
 
-- vs [高炉](./高炉)：高炉 走 `RecipeBehavior.defaults()`——空钩子，本机器用 5 个钩子做完整配方生命周期控制。
+- vs [高炉](./高炉)：高炉 走 `RecipeBehavior.defaults()`，空钩子，本机器用 5 个钩子做完整配方生命周期控制。
 - vs [纯Tick机器示例](./纯Tick机器示例)：同组对比，详见下表。
 - vs [数据存储测试机器](./数据存储测试机器) / [算力-网络交互示例](./算力-网络交互示例)：那两台走 `tickBehavior`，本机器走 `recipeBehavior`。前者没有配方，后者依赖配方生命周期。
 
@@ -544,7 +544,7 @@ if (changed) ctx.setRequirements(nextRequirements)
 | 屏幕文本 | `controller` + `OPERATION` 都手写 | `controller` 静态 + `OPERATION` 运行时追加 |
 | 状态保存 | 仅 tick 闭包内 | `DataStorage` 可选 |
 
-**纯Tick机器示例 是"代码驱动、无配方"——所有逻辑写进 `serverTick`**；**配方Tick示例 是"配方 + 每阶段自定义"——既有配方数据驱动，又在每个钩子里插入自己的逻辑**。
+**纯Tick机器示例 是"代码驱动、无配方"，所有逻辑写进 `serverTick`**；**配方Tick示例 是"配方 + 每阶段自定义"，既有配方数据驱动，又在每个钩子里插入自己的逻辑**。
 
 - vs Java 端 [配方Tick测试机器](../JavaAPI/配方Tick测试机器)：**逻辑等价**，实现差异如下：
 
@@ -560,7 +560,7 @@ if (changed) ctx.setRequirements(nextRequirements)
   | `Component.translatable("gui.mmcr.before_line")` | `Text.translatable("gui.mmcr_kubejs.display_when_idle")` |
   | `MachineRecipeBuilder.recipe(...).inputItem(...).outputItem(...).inputEnergy(...).duration(...).build()` | `event.custom({ type: 'mmcr:machine_recipe', machine: ..., tick_time: ..., requirements: [...] }).id(...)` |
 
-  KubeJS 端通过 `Java.loadClass` 拿 [`ItemRequirement`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/main/src/main/java/cn/howxu/mmcr/api/recipe/requirement/ItemRequirement.java) 后用 `new ItemRequirement(...)` 构造——构造语法与 Java 端完全一致；JS 的 lambda 与 Java 的 lambda 语法差异是仅有的"翻译成本"。
+  KubeJS 端通过 `Java.loadClass` 拿 [`ItemRequirement`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/main/src/main/java/cn/howxu/mmcr/api/recipe/requirement/ItemRequirement.java) 后用 `new ItemRequirement(...)` 构造，构造语法与 Java 端完全一致。JS 的 lambda 与 Java 的 lambda 语法差异是仅有的"翻译成本"。
 
 ## 何时用 RECIPE_TICK vs PURE_TICK
 
@@ -572,7 +572,7 @@ if (changed) ctx.setRequirements(nextRequirements)
 | 配方存在但每 tick 的具体动作完全自定 | `recipeBehavior.recipeTick` | 配方生命周期已经接管，能拿到当前 tick / 总 tick |
 | 自定义复杂合成的节奏（多阶段、跨配方共享需求修改） | `recipeBehavior` | 仍需要配方数据来定义"做什么"，但每个阶段需要插入自定义回调 |
 
-本机器是"`recipeBehavior` 5 个钩子全用上"的完整样本——对应 [纯Tick测试机器 的"何时用 PURE_TICK vs RECIPE_TICK"](../JavaAPI/纯Tick测试机器#何时用-pure_tick-vs-recipe_tick) 章节的第二种用法。
+本机器是"`recipeBehavior` 5 个钩子全用上"的完整样本，对应 [纯Tick测试机器 的"何时用 PURE_TICK vs RECIPE_TICK"](../JavaAPI/纯Tick测试机器#何时用-pure_tick-vs-recipe_tick) 章节的第二种用法。
 
 ## 延伸阅读
 

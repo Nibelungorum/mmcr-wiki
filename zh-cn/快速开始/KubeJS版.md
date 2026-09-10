@@ -32,7 +32,6 @@ MMCREvents.startup(event => {
         event
         .createMachine("my_mod:my_first_machine")
         .displayNameKey("machine.my_mod.my_first_machine")
-        .recipeFamily("my_mod:my_first_machine")
         .register()
 })
 ```
@@ -41,14 +40,13 @@ MMCREvents.startup(event => {
 
 简单解释一下出现的字段和函数:
 
-- `MMCREvents`: 这是 MMCR 定义的KubeJS事件。
-- `MMCREvents.startup`: 这是 MMCR 定义的KubeJS事件阶段。
+- `MMCREvents`: 这是 MMCR 定义的 KubeJS 事件。
+- `MMCREvents.startup`: 这是 MMCR 定义的 KubeJS 事件阶段。
 - `event.createMachine`: 以`命名空间:注册名`为注册键创建一个多方块机器，其返回一个`MachineBuilder`对象，并可以据此进行链式调用注册。
 - `builder.displayNameKey`: 设置该结构的本地化键名。对于i18n的设置是相当宽松的，我建议使用`machine.命名空间ID.机器注册名称`，当然你也可以直接使用任何i18n可译名称。
-- `builder.recipeFamily`: 绑定一种配方系列，表示该机器使用该类配方。你可以让多种机器共享一种配方系列，这个阶段不涉及注册，并不会引起运行时问题。
 - `builder.register`: 提交注册。
 
-这是最简单的机器注册示例。如果只想快速搭建一台机械、不需要国际化键名也不需要配方，可以把它简化为：
+这是最简单的机器注册示例。如果只想快速搭建一台机械、不需要国际化键名和其它任何东西，可以把它简化为：
 
 ```js
 MMCREvents.startup(event => {
@@ -66,7 +64,7 @@ MMCREvents.startup(event => {
 
 接下来沿用上一章节导出的**机器结构**和上一阶段使用的**机器注册名**`"my_mod:my_first_machine"`。
 
-这里提供一种非常简便的方法，可以跳过低性能的文本复制粘贴: 直接把导出的结构文件代码移动到`server_scripts`目录下，然后将其后缀由`.txt`修改为`.js`:
+作为作者，我在这里提供一种取巧的，简便的方法，可以跳过低性能的文本复制粘贴: 直接把导出的结构文件代码移动到`server_scripts`目录下，然后将其后缀由`.txt`修改为`.js`:
 
 ![](/kubejs/2.png)
 
@@ -133,7 +131,7 @@ MMCREvents.server(event => {
 .set(xxx)
 .set(xxx)
 ...
-.controller('C')
+.controller('一个字符')
 .build()
 })
 ```
@@ -144,7 +142,9 @@ MMCREvents.server(event => {
 
 注意：**不要**让 `.set('C', xxxx)` 和 `.controller('C')` 同时存在。
 
-随后，你可以在启动游戏之前先在`kubejs`目录的`assets`的任意命名空间内新建一个i18n翻译键文件，然后为你的机械创建一些翻译键。其中，控制器方块的物品翻译键和方块翻译键都固定为`item/block.mmcr.xxxxx_controller`的格式。
+随后，你可以在启动游戏之前先在`kubejs`目录的`assets`的任意命名空间内新建一个i18n翻译键文件，然后为你的机械创建一些翻译键。
+
+其中，控制器方块的物品翻译键和方块翻译键都固定为`item/block.mmcr.xxxxx_controller`的格式。
 
 (位于.minecraft/kubejs/assets/kubejs/lang/zh_cn.json):
 ```json
@@ -237,13 +237,13 @@ ServerEvents.recipes(event => {
 如果你有使用KubeJS的经验，不难看出，这就是符合原版策略的有一点点特殊的数据格式。其中各字段为:
 
 - `type`: 必须为'mmcr:machine_recipe'。
-- `machine`：你的机器注册名（机器 ID）。MMCR 会用它去查找对应的机器定义，必须和 `MMCREvents.startup` 里 `createMachine()` 的字符串保持一致。注意：它跟 `builder.recipeFamily` 设置的 `recipeFamily` 并不是同一个东西，后者为机器自身的一个标签，只在 `MachineRegistration` 里用来给机器分类，并不会用来匹配配方文件。
+- `machine`：你的机器注册名（机器 ID）。MMCR 会用它去查找对应的机器定义，必须和 `MMCREvents.startup` 里 `createMachine()` 的字符串保持一致。
 - `tick_time`: 配方运行总耗时，以tick为单位。
 - `requirements`: MMCR 的配方系统，在此处只是创建简单配方，无需深入了解。你只需要知道它声明了输入和输出。
 
 随后通过`type`，`io`等`requirement`字段，我们创建了一个耗时10秒，输入为1铁锭，输出为10铁粒，每tick耗能10FE的配方。
 
-运行`/reload`，在无ERROR的情况下，你就可以在 JEI 合成表里看到它了:
+运行`/reload`命令，在无ERROR的情况下，你就可以在 JEI 合成表里看到它了:
 
 ![](/kubejs/13.png)
 

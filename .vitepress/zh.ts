@@ -48,7 +48,7 @@ function nav(): DefaultTheme.NavItem[] {
   return [
     { text: '首页', link: '/zh-cn/' },
     { text: '快速开始', link: '/zh-cn/快速开始/开始' },
-    { text: '全部示例', link: '/zh-cn/KubeJS/开始' },
+    { text: '全部示例', link: '/zh-cn/KubeJS/高炉' },
     { text: 'API 参考', link: '/zh-cn/API/开始' },
   ]
 }

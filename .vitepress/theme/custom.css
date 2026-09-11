@@ -15,8 +15,46 @@
   --vp-sidebar-width: 220px;
 }
 
-#desc{
-  white-space: pre-line;
+.home-intro {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 12px 24px 20px;
+  text-align: center;
+  color: var(--vp-c-text-2);
+  font-size: 15px;
+  line-height: 1.8;
+}
+
+.home-intro p {
+  margin: 0;
+}
+
+.home-intro p + p {
+  margin-top: 6px;
+}
+
+.VPHome {
+  margin-bottom: 0 !important;
+}
+
+.VPHero {
+  padding-top: calc(var(--vp-nav-height) + 56px) !important;
+  padding-bottom: 24px !important;
+}
+
+.VPFeatures {
+  padding-bottom: 0 !important;
+}
+
+.VPFooter {
+  border-top: none !important;
+  padding: 12px 24px !important;
+}
+
+.VPFooter .message,
+.VPFooter .copyright {
+  font-size: 12px !important;
+  line-height: 18px !important;
 }
 
 .dark {

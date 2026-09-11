@@ -6,7 +6,7 @@ titleTemplate: 高度自由可配置的多方块结构机械
 
 hero:
   name: MMCR
-  text: 按你的方式组装机器
+  text: Build Your Machine
   tagline: 为现代 Minecraft 构建可配置的多方块结构机械
   image:
     src: /logo.png
@@ -38,8 +38,6 @@ features:
 ---
 
 <div class="home-intro">
-  <br>
-  <div id="desc"> MMCR 是面向现代 NeoForge 和高版本 Minecraft 的非官方 MMCE，即模块化机器社区版的延续项目</div>
-  <br>
-  <div id="desc"> 开源社区 现代的API设计 高性能 可扩展性</div>
+  <p>MMCR 是面向现代NeoForge和高版本Minecraft的非官方模块化机器社区版的延续项目</p>
+  <p>开源社区 · 现代的 API 设计 · 高性能 · 可扩展性</p>
 </div>

@@ -3420,6 +3420,143 @@ const behavior = behaviorBuilder.build()
 - `RecipeTickContext` 不提供 `ioPlan`；只有 `TickBehaviorContext` 暴露 IO 计划。
 - 配方回调中的 `ctx.machineContext()` 返回 `MachineBehaviorContext`，可访问 `dataStorage`、`screenText`、`jadeText`、`level`、`controllerPos()` 等运行时状态。
 :::
+### `MachineIoPlan`
+
+> `cn.howxu.mmcr.api.publicapi.machine.MachineIoPlan` 是 `TickBehaviorContext.ioPlan()` 返回的 IO 计划入口。在 `tickBehavior(behavior => behavior.serverTick(ctx => ...))` 回调内通过 `ctx.ioPlan()` 取得；用于在每个服务端 tick 声明要消费/产出的 `MachineRequirement`，先 `simulate()` 预演再 `commit()`。每 `MachineBehaviorBuilderJS` 实例每次 tick 都返回新的 plan，多次调用之间状态不共享。
+
+**字段**
+
+无公共字段；所有数据通过方法访问。
+
+**方法**
+
+#### `addInput(MachineRequirement requirement) → MachineIoPlan`
+
+- **参数表**：`requirement`（`MachineRequirement`）— 方向为输入的需求（`requirement.io() == INPUT`），通常来自 `api.itemInputRequirement(...)` / `api.fluidInputRequirement(...)` / `api.energyRequirement(...)`。
+- **返回**：当前 plan，支持链式调用。
+- **抛出**：`IllegalArgumentException`：`requirement.io()` 不为 `INPUT`。
+- **默认值**：无。
+- **示例**：
+
+```javascript
+const plan = ctx.ioPlan()
+    .addInput(api.itemInputRequirement("minecraft:iron_ingot", 1))
+```
+
+#### `addOutput(MachineRequirement requirement, OutputPolicy policy) → MachineIoPlan`
+
+- **参数表**：`requirement`（`MachineRequirement`）— 方向为输出的需求；`policy`（`OutputPolicy`）— 通过 `api.outputPolicy().REQUIRE_FULL` 或 `api.outputPolicy().ALLOW_PARTIAL` 取值。
+- **返回**：当前 plan，支持链式调用。
+- **抛出**：`IllegalArgumentException`：`requirement.io()` 不为 `OUTPUT`；`NullPointerException`：`policy` 为 `null`。
+- **默认值**：无。
+- **示例**：
+
+```javascript
+const plan = ctx.ioPlan()
+    .addOutput(api.itemOutputRequirement("minecraft:iron_nugget", 10, 1.0),
+               api.outputPolicy().ALLOW_PARTIAL)
+```
+
+#### `add(MachineRequirement requirement) → MachineIoPlan`
+
+- **参数表**：`requirement`（`MachineRequirement`）— 按 `requirement.io()` 自动路由到 `addInput(...)` 或 `addOutput(requirement, REQUIRE_FULL)`。
+- **返回**：当前 plan。
+- **抛出**：与对应路径一致（输入错配抛 `IllegalArgumentException`，输出策略为隐式 `REQUIRE_FULL`）。
+- **默认值**：无。
+- **示例**：
+
+```javascript
+const plan = ctx.ioPlan().add(api.energyRequirement(api.recipeIO().INPUT, 32))
+```
+
+#### `requirements() → List<MachineRequirement>`
+
+- **参数表**：无。
+- **返回**：当前已添加的全部需求（按插入顺序）。模拟前需要的所有需求必须先加入。
+- **抛出**：无。
+- **默认值**：空列表。
+- **示例**：
+
+```javascript
+const all = plan.requirements()
+```
+
+#### `simulate() → Simulation`
+
+- **参数表**：无。
+- **返回**：`Simulation` 记录；包含 `inputsSatisfied`、`energySatisfied`、`outputs`（`List<OutputSimulation>`）、`failure`（失败原因；`null` 表示模拟通过）。`commit(...)` 前可重复调用以预览效果，每次都会重算。
+- **抛出**：`IllegalStateException`：plan 已被 `commit(...)` 消耗。
+- **默认值**：未调用时结果为空。
+- **示例**：
+
+```javascript
+const sim = plan.simulate()
+if (sim.inputsSatisfied() && sim.energySatisfied()) {
+    plan.commit()
+}
+```
+
+#### `commit() → CommitResult`
+
+- **参数表**：无。
+- **返回**：`CommitResult`；`successful` 为 `true` 表示成功，`failure` 描述失败原因。
+- **抛出**：`IllegalStateException`：plan 已被 `commit(...)` 消耗。
+- **默认值**：等价于 `commit(ignored => {})`。
+- **示例**：
+
+```javascript
+const result = plan.commit()
+if (!result.successful()) {
+    console.log("commit failed:", result.failure())
+}
+```
+
+#### `commit(Consumer<TransactionContext> transactionWrites) → CommitResult`
+
+- **参数表**：`transactionWrites`（`Consumer<TransactionContext>`）— 事务回调；运行在 NeoForge transfer 事务上下文中。回调收到的是 NeoForge 的 `TransactionContext`；要写入数据存储请用 `DataStorage.Transaction.view(transaction)` 包装成公共事务再传给 `DataStorage.set(...)`，失败回滚时事务写入会被撤销。
+- **返回**：`CommitResult`。
+- **抛出**：`IllegalStateException`：plan 已被 `commit(...)` 消耗；`NullPointerException`：`transactionWrites` 为 `null`。
+- **默认值**：无。
+- **示例**：
+
+```javascript
+plan.commit(transaction => {
+    const DataStorage = Java.loadClass("cn.howxu.mmcr.api.publicapi.data.DataStorage")
+    const storage = DataStorage.view(ctx.dataStorage())
+    if (storage == null) return
+    const publicTransaction = DataStorage.Transaction.view(transaction)
+    storage.set("energy", /* DataValue.of(...) */ null, publicTransaction)
+    if (energyShort) transaction.getSnapshotLedger().abort()
+})
+```
+
+#### `outputSimulations() → List<OutputSimulation>` / `inputsSatisfied() → boolean` / `energySatisfied() → boolean`
+
+- **参数表**：无。
+- **返回**：便捷访问器；若尚未 `simulate()` 则自动调用一次，再返回对应字段。
+- **抛出**：与 `simulate()` 一致。
+- **默认值**：无。
+- **示例**：
+
+```javascript
+if (plan.inputsSatisfied() && plan.energySatisfied()) {
+    plan.commit()
+}
+```
+
+**嵌套记录**
+
+- `Simulation` — `simulate()` 的返回值。字段：`inputsSatisfied`（`boolean`）、`energySatisfied`（`boolean`）、`outputs`（`List<OutputSimulation>`）、`failure`（`@Nullable ExecutionStatus`）。
+- `CommitResult` — `commit(...)` 的返回值。字段：`successful`（`boolean`）、`failure`（`@Nullable ExecutionStatus`）。
+
+:::warning 注意事项
+
+- `MachineIoPlan` 是一次性的，`commit(...)` 后不可再用；多次调用 `commit(...)` 会返回 `successful=false`，`simulate()` / `inputsSatisfied()` / `energySatisfied()` / `outputSimulations()` 在已 commit 的 plan 上调用会抛 `IllegalStateException`。
+- `addInput(...)` / `addOutput(...)` 会重置已缓存的 `Simulation`，不需要手动调用 `simulate()` 来清空。
+- `OutputPolicy.ALLOW_PARTIAL` 允许输出在容量受限时部分完成；`REQUIRE_FULL` 要求输出全部能放下，否则视为 commit 失败。
+- `TransactionContext` 仅在 `commit(callback)` 的回调中可用——回调返回后事务上下文随之关闭，回调外访问会抛异常。
+- 非事务 `DataStorage.set(...)`（不带 `transaction`）一旦调用立即生效，`MachineIoPlan` 失败回滚时不会被撤销；要纳入回滚必须使用事务版本。
+:::
 ## 9. 等级与等级类型
 
 ### `LevelTypeBuilderJS`

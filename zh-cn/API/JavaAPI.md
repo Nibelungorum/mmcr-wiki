@@ -13,7 +13,7 @@ title: JavaAPI
 - `cn.howxu.mmcr.api.publicapi` — 顶层接口与运行时入口（`MachineApi`、`RecipeApi`、`ReadableNumber`、`ApiRegistrationException`、`ApiRuntime`、`MachineDefinitionProvider` 等）。
 - `cn.howxu.mmcr.api.publicapi.event` — 事件总线事件。
 - `cn.howxu.mmcr.api.publicapi.machine` — 机器相关类型。
-- `cn.howxu.mmcr.api.publicapi.recipe` — 配方相关类型。
+- `cn.howxu.mmcr.api.publicapi.recipe` — 配方相关类型（含 `MachineRecipeBuilder` 的 `recipePool(Identifier)` 与 `LevelRequirement`）。
 - `cn.howxu.mmcr.api.publicapi.recipe.component` — 配方组件谓词（`ComponentPredicate`、`DataComponentPredicateSet`）。
 - `cn.howxu.mmcr.api.publicapi.recipe.modifier` — 配方修饰符操作名（`RecipeModifier.IOType`、`RecipeModifier.Operation`）。
 - `cn.howxu.mmcr.api.publicapi.recipe.requirement` — 配方需求项边界接口（`MachineRequirement`、`CustomRequirement`）。
@@ -242,6 +242,36 @@ public final class MachineBuilder {
 
 自定义配方行为（`idleStart`、`recipeTick`、`beforeFinish` 等钩子）。
 
+#### `recipePool(Identifier recipePoolId)`
+
+声明机器所属的配方池。同一配方池内的机器在 JEI 与重载流水线中按 ID 分组。
+
+| 参数 | 类型 | 含义 |
+| --- | --- | --- |
+| `recipePoolId` | `Identifier` | 配方池 ID。若不调用，`MachineDefinition` 构造时回退到机器 ID。 |
+
+抛出：
+
+- `NullPointerException`：`recipePoolId` 为 `null`（由 `Objects.requireNonNull` 抛出）。
+
+源码：
+
+```java
+// cn.howxu.mmcr.api.publicapi.machine.MachineBuilder
+public MachineBuilder recipePool(Identifier recipePoolId) {
+    this.recipePoolId = Objects.requireNonNull(recipePoolId, "recipePoolId");
+    return this;
+}
+```
+
+示例：
+
+```java
+event.registerMachine(MY_MACHINE, builder -> builder
+        .displayNameKey("machine.my_mod.my_machine")
+        .recipePool(Identifier.fromNamespaceAndPath("my_mod", "shared_pool")));
+```
+
 #### `tickBehavior(Consumer<TickBehavior.Builder> builder)`
 
 声明机器不使用配方，而是按 tick 由自定义逻辑驱动。与 `recipeBehavior(...)` 互斥；调用 `tickBehavior(...)` 后再调用 `recipeBehavior(...)` 会抛 `IllegalStateException`。
@@ -355,6 +385,7 @@ public final class MachineBuilder {
 ```java
 public record MachineDefinition(
         Identifier id,
+        Identifier recipePoolId,
         String displayNameKey,
         ControllerSpec controller,
         AppearanceSpec appearance,
@@ -385,6 +416,7 @@ public record MachineDefinition(
 | 字段 | 类型 | 含义 |
 | --- | --- | --- |
 | `id` | `Identifier` | 机器注册 ID。 |
+| `recipePoolId` | `Identifier` | 配方池 ID；构造时若仍为 `null` 回退为机器 ID。 |
 | `displayNameKey` | `String` | 本地化键名。如果未指定则回退到 `machine.<命名空间>.<注册名>`。 |
 | `controller` | `ControllerSpec` | 控制器规格。 |
 | `appearance` | `AppearanceSpec` | 外观规格。 |

@@ -7,7 +7,7 @@ titleTemplate: 高度自由可配置的多方块结构机械
 hero:
   name: MMCR
   text: Build Your Machine
-  tagline: 为现代 Minecraft 构建可配置的多方块结构机械
+  tagline: 为现代Minecraft构建可配置的多方块结构机械
   image:
     src: /logo.png
     alt: MMCR 图标

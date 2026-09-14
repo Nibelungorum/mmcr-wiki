@@ -5292,20 +5292,22 @@ public interface RequestFailed {
 
 `RequestFailed.fail(...)` 的失败原因枚举。完整文件路径 `cn.howxu/mmcr/api/publicapi/network/RequestFailureReason.java`。
 
-#### 枚举值
+#### 枚举常量
 
-| 常量 | 含义 |
+枚举常量（按源码声明顺序）：
+
+| 常量 | 触发条件（按命名推断 / 源码注释） |
 | --- | --- |
-| `SOURCE_INTERFACE_MISSING` | 发送方网络接口缺失。 |
-| `TARGET_INTERFACE_MISSING` | 目标方网络接口缺失。 |
-| `TARGET_CHUNK_UNLOADED` | 目标方所在 chunk 未加载。 |
-| `CONNECTION_MISSING` | 物理连接缺失（接口方块之间未连）。 |
-| `SOURCE_STRUCTURE_INVALID` | 发送方结构失效。 |
-| `TARGET_STRUCTURE_INVALID` | 目标方结构失效。 |
-| `HASH_MISMATCH` | 控制器实例哈希不匹配（成型中途结构变化）。 |
-| `ALLOWLIST_REJECTED` | 网络白名单拒绝。 |
-| `TARGET_HANDLER_MISSING` | 目标方未注册对应请求 ID 的处理器。 |
-| `UNREACHABLE` | 通用不可达兜底原因。 |
+| `SOURCE_INTERFACE_MISSING` | 发起方机器在请求时找不到网络接口。 |
+| `TARGET_INTERFACE_MISSING` | 目标接口已被销毁或未成型。 |
+| `TARGET_CHUNK_UNLOADED` | 目标机器所在区块未加载。 |
+| `CONNECTION_MISSING` | 发起与目标接口之间没有建立连接。 |
+| `SOURCE_STRUCTURE_INVALID` | 发起方结构快照失效。 |
+| `TARGET_STRUCTURE_INVALID` | 目标结构快照失效。 |
+| `HASH_MISMATCH` | 控制器哈希校验失败。 |
+| `ALLOWLIST_REJECTED` | 目标接口的白名单拒绝了该请求。 |
+| `TARGET_HANDLER_MISSING` | 目标机器未注册对应 `requestId` 的处理器。 |
+| `UNREACHABLE` | 拓扑不可达（多种边界条件的兜底分支）。 |
 
 :::warning 注意事项
 

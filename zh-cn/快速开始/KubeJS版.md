@@ -207,7 +207,7 @@ MMCREvents.server(event => {
 ServerEvents.recipes(event => {
     event.custom({
         type: 'mmcr:machine_recipe',
-        machine: 'my_mod:my_first_machine',
+        recipe_pool: 'my_mod:my_first_machine',
         tick_time: 200,
         requirements: [
             {

@@ -2747,7 +2747,7 @@ stage.pattern("X").set("X", "minecraft:iron_block").controller("X")
 ServerEvents.recipes(event => {
     event.custom({
         type: "mmcr:machine_recipe",
-        machine: "example:press",
+        recipe_pool: "example:press",
         tick_time: 200,
         requirements: [
             { type: "minecraft:item", io: "input", item: "minecraft:iron_ingot", count: 1 },
@@ -2764,7 +2764,7 @@ ServerEvents.recipes(event => {
 ServerEvents.recipes(event => {
     event.custom({
         type: "mmcr:machine_recipe",
-        machine: "example:press",
+        recipe_pool: "example:press",
         tick_time: 200,
         requirements: [
             { type: "minecraft:item", io: "input", item: "minecraft:iron_ingot", count: 1 },
@@ -2826,16 +2826,16 @@ ServerEvents.recipes(event => {
 const builder = new MachineRecipeBuilderJS("example:press_recipe").id("example:press_recipe_2")
 ```
 
-##### `machine(String id) → MachineRecipeBuilderJS`
+##### `recipePool(String id) → MachineRecipeBuilderJS`
 
-- **参数表**：`id`（`String`）— 机器注册 ID。
+- **参数表**：`id`（`String`）— 配方池 ID；`Identifier.parse(...)` 解析失败会抛 `IllegalArgumentException`；若配方池 ID 未在 `MachineRegistry` 注册会抛 `IllegalArgumentException("Recipe pool not found: " + id)`。
 - **返回**：当前构建器。
-- **抛出**：`IllegalArgumentException`：机器未注册或 ID 解析失败。
-- **默认值**：未设置时 `createObject()` 会抛 `IllegalStateException`。
+- **抛出**：`IllegalArgumentException`：配方池未注册或 ID 解析失败。
+- **默认值**：未设置时 `createObject()` 会抛 `IllegalStateException("recipePool() not called")`。
 - **示例**：
 
 ```javascript
-builder.machine("example:press")
+builder.recipePool("example:press")
 ```
 
 ##### `tickTime(int tickTime) → MachineRecipeBuilderJS`

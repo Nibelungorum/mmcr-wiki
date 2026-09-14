@@ -21,7 +21,7 @@ order: 13
 | `MMCR.getAPI()` | [链接](../API/KubeJS#getapi--kubejsapi) |
 | `event.createMachine(...)` | [链接](../API/KubeJS#createmachinestring-id--machinebuilderjs) |
 | `MachineBuilderJS.displayNameKey(...)` | [链接](../API/KubeJS#displaynamekeystring-key--machinebuilderjs) |
-| `MachineBuilderJS.recipeFamily(...)` | [链接](../API/KubeJS#recipefamilystring-recipefamilyid--machinebuilderjs) |
+| `MachineBuilderJS.recipePool(...)` | [链接](../API/KubeJS#recipefamilystring-recipefamilyid--machinebuilderjs) |
 | `MachineBuilderJS.appearance(...)` | [链接](../API/KubeJS#appearancestring-machinebasicblock--machinebuilderjs) |
 | `MachineBuilderJS.recipeBehavior(...)` | [链接](../API/KubeJS#recipebehaviorconsumer-machinebehaviorbuilderjs-builder--machinebuilderjs) |
 | `MachineBehaviorBuilderJS.idleStart(...)` | [链接](../API/KubeJS#idlestartconsumer-machinebehaviorcontext-callback--machinebehaviorbuilderjs) |
@@ -68,7 +68,7 @@ MMCREvents.startup(event => {
     const machine = event
         .createMachine("mmcr_kubejs:kubejs_recipe_ticker")
         .displayNameKey("machine.mmcr_kubejs.kubejs_recipe_ticker")
-        .recipeFamily("mmcr_kubejs:kubejs_recipe_ticker")
+        .recipePool("mmcr_kubejs:kubejs_recipe_ticker")
         .appearance("minecraft:green_terracotta")
         // Here you can set some recipe tick hook
         .recipeBehavior(behavior => behavior
@@ -85,7 +85,7 @@ MMCREvents.startup(event => {
 
 链式调用：
 
-- `.displayNameKey(...)` / `.recipeFamily(...)` / `.appearance("minecraft:green_terracotta")`：老演员了。
+- `.displayNameKey(...)` / `.recipePool(...)` / `.appearance("minecraft:green_terracotta")`：配方池 ID。
 - [`.recipeBehavior(behavior => behavior.xxx(...))`](../API/KubeJS#recipebehaviorconsumer-machinebehaviorbuilderjs-builder--machinebuilderjs) 注入点
 
 [`MachineBehaviorBuilderJS`](../API/KubeJS#machinebehaviorbuilderjs) 提供 5 个Hook：

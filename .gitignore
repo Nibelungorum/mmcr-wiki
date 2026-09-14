@@ -3,4 +3,5 @@
 node_modules/
 .vitepress/dist/
 .vitepress/cache/
+.worktrees/
 docs/*

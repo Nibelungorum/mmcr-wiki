@@ -25,7 +25,7 @@ order: 12
 | `MMCR.getAPI()` | [链接](../API/KubeJS#getapi--kubejsapi) |
 | `event.createMachine(...)` | [链接](../API/KubeJS#createmachinestring-id--machinebuilderjs) |
 | `MachineBuilderJS.displayNameKey(...)` | [链接](../API/KubeJS#displaynamekeystring-key--machinebuilderjs) |
-| `MachineBuilderJS.recipeFamily(...)` | [链接](../API/KubeJS#recipefamilystring-recipefamilyid--machinebuilderjs) |
+| `MachineBuilderJS.recipePool(...)` | [链接](../API/KubeJS#recipepoolstring-recipepoolid--machinebuilderjs) |
 | `MachineBuilderJS.appearance(...)` | [链接](../API/KubeJS#appearancestring-machinebasicblock--machinebuilderjs) |
 | `MachineBuilderJS.allowMultithreading()` | [链接](../API/KubeJS#allowmultithreading--machinebuilderjs) |
 | `MachineBuilderJS.allowParallelism()` | [链接](../API/KubeJS#allowparallelism--machinebuilderjs) |
@@ -62,7 +62,7 @@ MMCREvents.startup(event => {
     const machine = event
         .createMachine("mmcr_kubejs:kubejs_pure_tick_machine")
         .displayNameKey("machine.mmcr_kubejs.kubejs_pure_tick_machine")
-        .recipeFamily("mmcr_kubejs:kubejs_pure_tick_machine") // This will set the JEI recipe page type
+        .recipePool("mmcr_kubejs:kubejs_pure_tick_machine") // This will set the JEI recipe page type
         .appearance("minecraft:green_terracotta");
 
     const api = MMCR.getAPI()
@@ -74,7 +74,7 @@ MMCREvents.startup(event => {
 链式调用：
 
 - `.displayNameKey(...)`：本地化键。
-- `.recipeFamily(...)`：老演员了。
+- `.recipePool(...)`：配方池 ID。
 - `.appearance("minecraft:green_terracotta")`：外观。
 
 能力开关：

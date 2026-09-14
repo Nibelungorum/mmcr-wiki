@@ -1039,7 +1039,7 @@ structure.modifier("M", use)
 
 - **参数表**：`typeId`（`String`）— 等级类型 ID；`levelId`（`String`）— 具体等级 ID。
 - **返回**：绑定类型和等级的配方等级要求。
-- **抛出**：`IllegalArgumentException`：类型未注册、等级未注册或等级属于另一个类型。
+- **抛出**：`IllegalArgumentException`：类型未注册、等级未注册或等级属于另一个类型。若 `typeId` / `levelId` 解析为非法 `Identifier` 字符串（无法用 `:` 拆出命名空间与路径），`Identifier.parse(...)` 抛 `IllegalArgumentException`。
 - **默认值**：无。
 - **示例**：
 
@@ -1301,16 +1301,16 @@ const machine = event.createMachine("example:press").localizedName("machine.exam
 
 该方法标记为 `@Deprecated(forRemoval = true)`，新脚本应使用 `displayNameKey`。
 
-##### `recipeFamily(String recipeFamilyId) → MachineBuilderJS`
+##### `recipePool(String recipePoolId) → MachineBuilderJS`
 
-- **参数表**：`recipeFamilyId`（`String`）— 配方系列 ID；它是分类/显示用途的机器属性，不是配方匹配用的机器 ID。
+- **参数表**：`recipePoolId`（`String`）— 配方池 ID；非法 ID 字符串会抛 `IllegalArgumentException`。
 - **返回**：当前构建器。
-- **抛出**：`IllegalArgumentException`：ID 无法解析。
+- **抛出**：`IllegalArgumentException`：`Identifier.parse(...)` 失败。
 - **默认值**：机器自身 ID。
 - **示例**：
 
 ```javascript
-machine.recipeFamily("example:press")
+machine.recipePool("example:press")
 ```
 
 ##### `expandableStructure() → MachineBuilderJS`

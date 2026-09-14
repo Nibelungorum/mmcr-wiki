@@ -13,7 +13,7 @@ title: JavaAPI
 - `cn.howxu.mmcr.api.publicapi` — 顶层接口与运行时入口（`MachineApi`、`RecipeApi`、`ReadableNumber`、`ApiRegistrationException`、`ApiRuntime`、`MachineDefinitionProvider` 等）。
 - `cn.howxu.mmcr.api.publicapi.event` — 事件总线事件。
 - `cn.howxu.mmcr.api.publicapi.machine` — 机器相关类型。
-- `cn.howxu.mmcr.api.publicapi.recipe` — 配方相关类型。
+- `cn.howxu.mmcr.api.publicapi.recipe` — 配方相关类型（含 `MachineRecipeBuilder` 的 `recipePool(Identifier)` 与 `LevelRequirement`）。
 - `cn.howxu.mmcr.api.publicapi.recipe.component` — 配方组件谓词（`ComponentPredicate`、`DataComponentPredicateSet`）。
 - `cn.howxu.mmcr.api.publicapi.recipe.modifier` — 配方修饰符操作名（`RecipeModifier.IOType`、`RecipeModifier.Operation`）。
 - `cn.howxu.mmcr.api.publicapi.recipe.requirement` — 配方需求项边界接口（`MachineRequirement`、`CustomRequirement`）。
@@ -242,6 +242,36 @@ public final class MachineBuilder {
 
 自定义配方行为（`idleStart`、`recipeTick`、`beforeFinish` 等钩子）。
 
+#### `recipePool(Identifier recipePoolId)`
+
+声明机器所属的配方池。同一配方池内的机器在 JEI 与重载流水线中按 ID 分组。
+
+| 参数 | 类型 | 含义 |
+| --- | --- | --- |
+| `recipePoolId` | `Identifier` | 配方池 ID。若不调用，`MachineDefinition` 构造时回退到机器 ID。 |
+
+抛出：
+
+- `NullPointerException`：`recipePoolId` 为 `null`（由 `Objects.requireNonNull` 抛出）。
+
+源码：
+
+```java
+// cn.howxu.mmcr.api.publicapi.machine.MachineBuilder
+public MachineBuilder recipePool(Identifier recipePoolId) {
+    this.recipePoolId = Objects.requireNonNull(recipePoolId, "recipePoolId");
+    return this;
+}
+```
+
+示例：
+
+```java
+event.registerMachine(MY_MACHINE, builder -> builder
+        .displayNameKey("machine.my_mod.my_machine")
+        .recipePool(Identifier.fromNamespaceAndPath("my_mod", "shared_pool")));
+```
+
 #### `tickBehavior(Consumer<TickBehavior.Builder> builder)`
 
 声明机器不使用配方，而是按 tick 由自定义逻辑驱动。与 `recipeBehavior(...)` 互斥；调用 `tickBehavior(...)` 后再调用 `recipeBehavior(...)` 会抛 `IllegalStateException`。
@@ -355,6 +385,7 @@ public final class MachineBuilder {
 ```java
 public record MachineDefinition(
         Identifier id,
+        Identifier recipePoolId,
         String displayNameKey,
         ControllerSpec controller,
         AppearanceSpec appearance,
@@ -385,6 +416,7 @@ public record MachineDefinition(
 | 字段 | 类型 | 含义 |
 | --- | --- | --- |
 | `id` | `Identifier` | 机器注册 ID。 |
+| `recipePoolId` | `Identifier` | 配方池 ID；构造时若仍为 `null` 回退为机器 ID。 |
 | `displayNameKey` | `String` | 本地化键名。如果未指定则回退到 `machine.<命名空间>.<注册名>`。 |
 | `controller` | `ControllerSpec` | 控制器规格。 |
 | `appearance` | `AppearanceSpec` | 外观规格。 |
@@ -3100,26 +3132,43 @@ LevelModifier bonus = new LevelModifier(1.0D, 1.0D, 2.0D, 4, 1);      // 2x 输�
 :::
 ### `LevelRequirement`
 
-完整类名：`cn.howxu.mmcr.api.publicapi.machine.LevelRequirement`
+完整类名：`cn.howxu.mmcr.api.publicapi.recipe.LevelRequirement`
 
 不可变的配方等级要求。通过 `MachineRecipeBuilder.levelRequirement(...)` 创建。
 
 #### 记录签名
 
 ```java
-public record LevelRequirement(Identifier typeId, Identifier levelId);
+public record LevelRequirement(RecipeIo io, Identifier typeId, Identifier levelId)
+        implements RecipeRequirement {
+    public LevelRequirement(Identifier typeId, Identifier levelId) {
+        this(RecipeIo.INPUT, typeId, levelId);
+    }
+    public LevelRequirement {
+        Objects.requireNonNull(io, "io");
+        if (io != RecipeIo.INPUT) {
+            throw new IllegalArgumentException("Level requirements must use input direction");
+        }
+        Objects.requireNonNull(typeId, "typeId");
+        Objects.requireNonNull(levelId, "levelId");
+    }
+}
 ```
 
 #### 字段
 
 | 字段 | 类型 | 含义 |
 | --- | --- | --- |
+| `io` | `RecipeIo` | 流向；构造时强制为 `RecipeIo.INPUT`，三参数构造器以外的入口抛 `IllegalArgumentException`。 |
 | `typeId` | `Identifier` | 等级类型 ID。 |
 | `levelId` | `Identifier` | 该类型下具体等级 ID。 |
 
-构造约束：
+构造约束（紧凑构造器）：
 
+- `io != RecipeIo.INPUT` → `IllegalArgumentException("Level requirements must use input direction")`。
 - `typeId` / `levelId` 为 `null` → `NullPointerException`。
+
+等级要求是配方级的输入方向校验，**不参与物理输入槽匹配**（即不消耗物品、不占用槽位，仅在配方匹配阶段验证玩家的机器是否达到该等级）。
 
 #### 示例
 
@@ -5243,20 +5292,22 @@ public interface RequestFailed {
 
 `RequestFailed.fail(...)` 的失败原因枚举。完整文件路径 `cn.howxu/mmcr/api/publicapi/network/RequestFailureReason.java`。
 
-#### 枚举值
+#### 枚举常量
 
-| 常量 | 含义 |
+枚举常量（按源码声明顺序）：
+
+| 常量 | 触发条件（按命名推断 / 源码注释） |
 | --- | --- |
-| `SOURCE_INTERFACE_MISSING` | 发送方网络接口缺失。 |
-| `TARGET_INTERFACE_MISSING` | 目标方网络接口缺失。 |
-| `TARGET_CHUNK_UNLOADED` | 目标方所在 chunk 未加载。 |
-| `CONNECTION_MISSING` | 物理连接缺失（接口方块之间未连）。 |
-| `SOURCE_STRUCTURE_INVALID` | 发送方结构失效。 |
-| `TARGET_STRUCTURE_INVALID` | 目标方结构失效。 |
-| `HASH_MISMATCH` | 控制器实例哈希不匹配（成型中途结构变化）。 |
-| `ALLOWLIST_REJECTED` | 网络白名单拒绝。 |
-| `TARGET_HANDLER_MISSING` | 目标方未注册对应请求 ID 的处理器。 |
-| `UNREACHABLE` | 通用不可达兜底原因。 |
+| `SOURCE_INTERFACE_MISSING` | 发起方机器在请求时找不到网络接口。 |
+| `TARGET_INTERFACE_MISSING` | 目标接口已被销毁或未成型。 |
+| `TARGET_CHUNK_UNLOADED` | 目标机器所在区块未加载。 |
+| `CONNECTION_MISSING` | 发起与目标接口之间没有建立连接。 |
+| `SOURCE_STRUCTURE_INVALID` | 发起方结构快照失效。 |
+| `TARGET_STRUCTURE_INVALID` | 目标结构快照失效。 |
+| `HASH_MISMATCH` | 控制器哈希校验失败。 |
+| `ALLOWLIST_REJECTED` | 目标接口的白名单拒绝了该请求。 |
+| `TARGET_HANDLER_MISSING` | 目标机器未注册对应 `requestId` 的处理器。 |
+| `UNREACHABLE` | 拓扑不可达（多种边界条件的兜底分支）。 |
 
 :::warning 注意事项
 

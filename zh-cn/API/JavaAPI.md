@@ -3132,26 +3132,43 @@ LevelModifier bonus = new LevelModifier(1.0D, 1.0D, 2.0D, 4, 1);      // 2x 输�
 :::
 ### `LevelRequirement`
 
-完整类名：`cn.howxu.mmcr.api.publicapi.machine.LevelRequirement`
+完整类名：`cn.howxu.mmcr.api.publicapi.recipe.LevelRequirement`
 
 不可变的配方等级要求。通过 `MachineRecipeBuilder.levelRequirement(...)` 创建。
 
 #### 记录签名
 
 ```java
-public record LevelRequirement(Identifier typeId, Identifier levelId);
+public record LevelRequirement(RecipeIo io, Identifier typeId, Identifier levelId)
+        implements RecipeRequirement {
+    public LevelRequirement(Identifier typeId, Identifier levelId) {
+        this(RecipeIo.INPUT, typeId, levelId);
+    }
+    public LevelRequirement {
+        Objects.requireNonNull(io, "io");
+        if (io != RecipeIo.INPUT) {
+            throw new IllegalArgumentException("Level requirements must use input direction");
+        }
+        Objects.requireNonNull(typeId, "typeId");
+        Objects.requireNonNull(levelId, "levelId");
+    }
+}
 ```
 
 #### 字段
 
 | 字段 | 类型 | 含义 |
 | --- | --- | --- |
+| `io` | `RecipeIo` | 流向；构造时强制为 `RecipeIo.INPUT`，三参数构造器以外的入口抛 `IllegalArgumentException`。 |
 | `typeId` | `Identifier` | 等级类型 ID。 |
 | `levelId` | `Identifier` | 该类型下具体等级 ID。 |
 
-构造约束：
+构造约束（紧凑构造器）：
 
+- `io != RecipeIo.INPUT` → `IllegalArgumentException("Level requirements must use input direction")`。
 - `typeId` / `levelId` 为 `null` → `NullPointerException`。
+
+等级要求是配方级的输入方向校验，**不参与物理输入槽匹配**（即不消耗物品、不占用槽位，仅在配方匹配阶段验证玩家的机器是否达到该等级）。
 
 #### 示例
 

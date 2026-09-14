@@ -484,7 +484,7 @@ cd /home/howxu/Projects/mmcr-wiki
 npm run docs:build 2>&1 | tail -40
 ```
 
-预期：`vitepress build ...` 成功；如出现 dead link 且仅指向外部 wiki（GitHub 上的旧链接），保留临时 `ignoreDeadLinks` 配置；如出现内部锚点断链，回到 Task 2-6 修复。
+预期：`vitepress build ...` 成功；如出现 dead link，记录具体链接；若属于 wiki 内部锚点断链，回到 Task 2-6 修复；若属于外部 GitHub 旧链接（不在本仓库范围），由人类决定是否改 `.vitepress/config.mts`，agent 不自行修改。
 
 - [ ] **Step 2: 全量 grep 核对**
 

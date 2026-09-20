@@ -376,7 +376,7 @@ plan.commit()
 
 `serverTick` 内部并不会真的"按并行度循环执行"。如果想做"按并行度循环"的逻辑，要在 [`recipeBehavior`](../API/KubeJS#recipebehaviorconsumer-machinebehaviorbuilderjs-builder--machinebuilderjs) 和 [`recipeTick`](../API/KubeJS#recipetickconsumer-recipetickcontext-callback--machinebehaviorbuilderjs)注入自定义tick。
 
-## 何时用 PURE_TICK vs RECIPE_TICK
+## PURE_TICK 和 RECIPE_TICK
 
 | 场景 | 推荐 | 原因 |
 | --- | --- | --- |

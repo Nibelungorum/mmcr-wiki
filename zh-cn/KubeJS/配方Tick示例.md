@@ -5,7 +5,9 @@ order: 13
 
 # 配方Tick示例 — KubeJS 配方 tick 机器
 
-本文是 KubeJS 进阶示例的第四篇。我们逐段拆解 [`A_Recipe_Tick_Machine.js`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/main/example/startup_scripts/advance/A_Recipe_Tick_Machine.js) 与 [对应的结构脚本](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/main/example/server_scripts/structure/advance/A_Recipe_Tick_Machine.js)。本机器**有配方**，但在配方生命周期的 5 个阶段（`idleStart` / `idleEnd` / `beforeStart` / `recipeTick` / `beforeFinish`）都插入自定义回调。
+本文是 KubeJS 进阶示例的第四篇。我们逐段拆解 [`A_Recipe_Tick_Machine.js`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/main/example/startup_scripts/advance/A_Recipe_Tick_Machine.js) 与 [对应的结构脚本](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/main/example/server_scripts/structure/advance/A_Recipe_Tick_Machine.js)。
+
+本机器**有配方**，但在配方生命周期的 5 个阶段（`idleStart` / `idleEnd` / `beforeStart` / `recipeTick` / `beforeFinish`）都插入自定义回调。
 
 ## 涉及的文件
 

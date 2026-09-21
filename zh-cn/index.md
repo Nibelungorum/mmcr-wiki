@@ -17,7 +17,7 @@ hero:
       link: /zh-cn/快速开始/开始
     - theme: alt
       text: 全部示例
-      link: /zh-cn/示例/开始
+      link: /zh-cn/KubeJS/高炉
     - theme: alt
       text: 查看源码
       link: https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed
@@ -30,7 +30,7 @@ features:
     details: 大量现代的 API 设计和高度的可配置性，数据驱动的机器配方
     icon: 🔧
   - title: 模组集成
-    details: 集成 KubeJS 等脚本驱动，JEI 和 Jade 支持，以及更多的模组扩展
+    details: 集成知名模组扩展，用KubeJS写脚本，用AE2写自动化
     icon: 🔌
   - title: 高性能
     details: 超多优化策略，极致的服务端和客户端表现，性能即一切

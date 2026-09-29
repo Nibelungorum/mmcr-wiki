@@ -261,7 +261,8 @@ public static void registerStructures(MMCRMachineStructuresEvent event) {
 ```java
 public static void register(MMCRMachineRecipesEvent event) {
     var recipe = MachineRecipeBuilder
-            .recipe(RECIPE_TICKER.withSuffix("_recipe_1"), RECIPE_TICKER)
+            .recipe(RECIPE_TICKER.withSuffix("_recipe_1"))
+            .recipePool(RECIPE_TICKER)
             .inputItem(Items.COAL, 10000)
             .inputItem(Items.DIAMOND, 8)
             .outputItem(Items.GOLD_INGOT, 9)
@@ -271,7 +272,8 @@ public static void register(MMCRMachineRecipesEvent event) {
     event.registerRecipe(recipe);
 
     recipe = MachineRecipeBuilder
-            .recipe(RECIPE_TICKER.withSuffix("_recipe_2"), RECIPE_TICKER)
+            .recipe(RECIPE_TICKER.withSuffix("_recipe_2"))
+            .recipePool(RECIPE_TICKER)
             .inputItem(Items.DIAMOND, 114514)
             .inputItem(Items.IRON_INGOT, 8)
             .outputItem(Items.COAL, 18)
@@ -281,7 +283,8 @@ public static void register(MMCRMachineRecipesEvent event) {
     event.registerRecipe(recipe);
 
     recipe = MachineRecipeBuilder
-            .recipe(RECIPE_TICKER.withSuffix("_recipe_3"), RECIPE_TICKER)
+            .recipe(RECIPE_TICKER.withSuffix("_recipe_3"))
+            .recipePool(RECIPE_TICKER)
             .inputItem(Items.GOLD_INGOT, 32)
             .inputItem(Items.STICK, 8)
             .outputItem(Items.DIAMOND, 3)

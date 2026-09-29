@@ -62,7 +62,7 @@ const minInt = MMCR.getValues().INT_MIN
 
 ### `MMCRValues`
 
-> `cn.howxu.mmcr.compat.kubejs.MMCRValues` 提供脚本中常用的 Java 整数边界值。
+> `cn.howxu.mmcr.compat.kubejs.MMCRValues` 提供脚本中常用的 Java `int` / `long` 边界值。
 
 **字段**
 
@@ -70,6 +70,8 @@ const minInt = MMCR.getValues().INT_MIN
 |------|------|------|
 | `INT_MAX` | `int` | `2147483647`，`Integer.MAX_VALUE`。 |
 | `INT_MIN` | `int` | `-2147483648`，`Integer.MIN_VALUE`。 |
+| `LONG_MAX` | `long` | `9223372036854775807`，`Long.MAX_VALUE`。 |
+| `LONG_MIN` | `long` | `-9223372036854775808`，`Long.MIN_VALUE`。 |
 
 **方法**
 
@@ -80,16 +82,18 @@ const minInt = MMCR.getValues().INT_MIN
 ```javascript
 const upper = MMCR.getValues().INT_MAX
 const lower = MMCR.getValues().INT_MIN
+const longUpper = MMCR.getValues().LONG_MAX
+const longLower = MMCR.getValues().LONG_MIN
 ```
 
 :::warning 注意事项
 
-- 这些值是 Java `int` 边界，不是 `long` 或任意精度整数边界。
-- 大于 `int` 的数值应在脚本中使用 Java `BigInteger` 或其他适合的数值类型，并通过 `dataValue` 时确认目标 API 是否支持该类型。
+- `INT_MAX` / `INT_MIN` 是 Java `int` 边界；`LONG_MAX` / `LONG_MIN` 是 Java `long` 边界。
+- 需要任意精度整数运算时使用 Java `BigInteger`；把大数传给 API 前确认参数类型与范围。
 :::
 ### `MMCREvents`
 
-> `cn.howxu.mmcr.compat.kubejs.MMCREvents` 是 MMCR 声明脚本事件组，包含启动期和服务期两个事件。
+> `cn.howxu.mmcr.compat.kubejs.MMCREvents` 是 MMCR 脚本事件组，包含启动期、服务期和客户端事件。
 
 **字段**
 
@@ -97,6 +101,7 @@ const lower = MMCR.getValues().INT_MIN
 |------|------|------|
 | `STARTUP_ID` | `String` | `"mmcr.startup"`。 |
 | `SERVER_ID` | `String` | `"mmcr.server"`。 |
+| `CLIENT_ID` | `String` | `"mmcr.client"`。 |
 | `GROUP` | `EventGroup` | 名为 `mmcr` 的 KubeJS 事件组。 |
 
 **监听语法**
@@ -109,9 +114,13 @@ MMCREvents.startup(event => {
 MMCREvents.server(event => {
     event.createStructure("example:machine").pattern("C").set("C", "minecraft:iron_block").controller("C").build()
 })
+
+MMCREvents.client(event => {
+    event.addRecipePoolInfo("example:press", "jei.example.press.info")
+})
 ```
 
-`mmcr` 事件组通过 `EventGroupWrapper` 暴露在 KubeJS 全局，键 `startup` 与 `server` 直接对应两个 `EventHandler`；`MMCREvents.startup(handler)` 与 `MMCREvents.server(handler)` 等价于调用对应 `EventHandler.call(cx, scope, thisObj, [handler])`。`KubeEvent` 子类会自动作为参数 `event` 传入。
+`mmcr` 事件组通过 `EventGroupWrapper` 暴露在 KubeJS 全局，键 `startup`、`server` 与 `client` 对应三个 `EventHandler`；`KubeEvent` 子类会自动作为参数 `event` 传入。
 
 #### `group() → EventGroup`
 
@@ -153,10 +162,17 @@ MMCREvents.server(event => {
 })
 ```
 
+#### `postClient(RecipeInformationEventJS event) → void`
+
+- **参数表**：`event`（`RecipeInformationEventJS`）— 客户端配方信息事件对象。
+- **返回**：无。
+- **默认值**：由插件在客户端脚本加载后调用。
+- **示例**：脚本应订阅 `MMCREvents.client(...)`，不要手动调用该生命周期方法。
+
 #### `events() → Map<String, String>`
 
 - **参数表**：无。
-- **返回**：包含 `mmcr.startup` 和 `mmcr.server` 两个事件 ID 的有序映射。
+- **返回**：包含 `mmcr.startup`、`mmcr.server` 和 `mmcr.client` 三个事件 ID 的有序映射。
 - **抛出**：无。
 - **默认值**：每次调用创建新的 `LinkedHashMap`。
 - **示例**：
@@ -169,9 +185,37 @@ const ids = MMCREvents.events()
 
 - `MMCREvents.startup` 的回调运行在 `ScriptType.STARTUP`，机器定义、等级类型、等级、修饰符和控制器屏幕文本注册应放在这里。
 - `MMCREvents.server` 的回调运行在 `ScriptType.SERVER` 的 KubeJS 内容事务内，结构的 `build()` 必须在这个窗口中执行。
-- `postStartup()`、`postServer()` 和 `group()` 是 Java 侧事件组生命周期方法；普通脚本只应使用事件组的监听入口。
+- `MMCREvents.client` 用于注册 JEI 客户端配方信息；未加载 JEI 时注册会被忽略并只记录一次警告。
+- `postStartup()`、`postServer()`、`postClient()` 和 `group()` 是 Java 侧事件组生命周期方法；普通脚本只应使用事件组的监听入口。
 - 事件组同时以插件注册的 `mmcr` 名称存在；为了兼容和可读性，机器定义脚本优先使用 `MMCREvents` 别名。
 :::
+
+### `RecipeInformationEventJS`
+
+> `cn.howxu.mmcr.compat.kubejs.RecipeInformationEventJS` 是 `MMCREvents.client` 的客户端事件对象，用于给 JEI 配方池页或单条配方添加本地化说明。
+
+#### `addRecipePoolInfo(String poolId, String translationKey, Object... arguments) → void`
+
+为指定配方池页添加翻译文本；`poolId` 必须是有效资源 ID，翻译键应在语言文件中提供，参数会传给 `Component.translatable(...)`。
+
+```javascript
+MMCREvents.client(event => {
+    event.addRecipePoolInfo("example:press", "jei.example.press.info", 10)
+})
+```
+
+#### `addRecipeInfo(String recipeId, String translationKey, Object... arguments) → void`
+
+为指定配方添加翻译文本。资源 ID 为空白或格式非法时抛 `IllegalArgumentException`。
+
+```javascript
+MMCREvents.client(event => {
+    event.addRecipeInfo("example:press_recipe", "jei.example.press_recipe.info", "extra")
+})
+```
+
+未加载 JEI 时，这两个方法忽略注册并只输出一次警告。
+
 ## 2. 启动期回调
 
 ### `MMCRStartupEventJS`
@@ -250,7 +294,7 @@ MMCREvents.startup(event => {
 - **参数表**：`id`（`String`）— 具体机器等级注册 ID。
 - **返回**：绑定该 ID 的 `MachineLevelBuilderJS`。
 - **抛出**：`IllegalArgumentException`：ID 格式非法；缺少 `type()` 或 `state()` 会在构建/注册时抛 `IllegalStateException`。
-- **默认值**：优先级为 `0`，修饰器为恒等修饰器。
+- **默认值**：优先级为 `0`，修饰符定义为 `ModifierDefinition.EMPTY`。
 - **示例**：
 
 ```javascript
@@ -306,12 +350,39 @@ MMCREvents.startup(event => {
 })
 ```
 
+#### `addRecipePoolWorkstation(String recipePoolId, String itemId) → void`
+
+把指定物品注册为 JEI 中某个 MMCR 配方池页的工作台。两个 ID 都必须是有效资源 ID。
+
+```javascript
+MMCREvents.startup(event => {
+    event.addRecipePoolWorkstation("example:press", "minecraft:blast_furnace")
+})
+```
+
+#### `addRecipePoolWorkstation(String recipePoolId, ItemStack workstation) → void`
+
+以物品栈注册配方池工作台；空物品栈会被拒绝，注册时物品数量归一为 1。
+
+#### `addMachineWorkstation(String machineId, String recipeTypeId) → void`
+
+把 MMCR 机器控制器注册为指定 JEI 配方类型的工作台。`recipeTypeId` 需指向已注册的 JEI 配方类型。
+
+```javascript
+MMCREvents.startup(event => {
+    event.addMachineWorkstation("example:press", "minecraft:smelting")
+})
+```
+
+`addMachineWorkStation(...)`（`Station` 中的 `S` 大写）是兼容别名，新脚本建议使用 `addMachineWorkstation(...)`。
+
 :::warning 注意事项
 
 - 启动窗口由插件在 `beforeScriptsLoaded` 中打开，在 `afterScriptsLoaded` 中发布事件并完成提交；脚本结束后不能通过 `/reload` 重新打开机器注册窗口。
 - 等级类型应先于具体等级注册；结构脚本只能引用已经存在的等级类型。
 - `registerControllerScreenText` 只能在启动事件上调用，服务期事件没有该方法。
 - `registerModifier` 和 `registerModifierItem` 虽然位于启动回调 API 中，最终由机器结构注册快照统一校验。
+- JEI 工作台注册在启动期收集，并在 JEI 注册工作台时应用。
 :::
 ## 3. 服务期回调
 
@@ -724,6 +795,25 @@ structure.set("E", api.anyOfEnergyInput())
 structure.set("E", api.anyOfEnergyOutput())
 ```
 
+##### 合并端口谓词
+
+以下方法分别返回同族输入和输出端口的并集；需要 Mekanism 的端口族在 Mekanism 未加载时匹配不到方块。
+
+| 方法 | 匹配范围 |
+| --- | --- |
+| `anyOfItemPorts()` | 所有物品输入与输出端口。 |
+| `anyOfFluidPorts()` | 所有流体输入与输出端口。 |
+| `anyOfEnergyPorts()` | 所有能量输入与输出端口。 |
+| `anyOfChemicalPorts()` | Mekanism 化学品输入与输出端口。 |
+| `anyOfRadioactiveChemicalPorts()` | Mekanism 放射性化学品输入与输出端口。 |
+| `anyOfHeatPorts()` | Mekanism 热量输入与输出端口。 |
+| `ports()` | 所有内置端口；Mekanism 可用时也包含化学品与热量端口。 |
+
+```javascript
+structure.set("P", api.anyOfItemPorts())
+structure.set("A", api.ports())
+```
+
 ##### `anyOfUpgradeBus() → BlockPredicate`
 
 - **参数表**：无。
@@ -832,9 +922,9 @@ const tiers = api.portTierRequirements([
 
 #### 配方输入输出
 
-##### `itemInput(String itemId, int count, float consumeChance) → MachineIngredient`
+##### `itemInput(String itemId, long count, float consumeChance) → MachineIngredient`
 
-- **参数表**：`itemId`（`String`）— 物品 ID；`count`（`int`）— 输入数量；`consumeChance`（`float`）— 每次消耗该输入的概率。
+- **参数表**：`itemId`（`String`）— 物品 ID；`count`（`long`）— 输入数量；`consumeChance`（`float`）— 每次消耗该输入的概率。另有 `int` 重载。
 - **返回**：物品 `MachineIngredient`；输入方向固定为 `INPUT`。
 - **抛出**：`IllegalArgumentException`：物品未知；物品 ID 无效。负数量会在配方构建校验时被拒绝，概率最终限制在 `0` 到 `1`。
 - **默认值**：无；组件谓词为空。
@@ -844,9 +934,9 @@ const tiers = api.portTierRequirements([
 const ingredient = api.itemInput("minecraft:iron_ingot", 1, 1.0)
 ```
 
-##### `tagInput(String tagId, int count, float consumeChance) → MachineIngredient`
+##### `tagInput(String tagId, long count, float consumeChance) → MachineIngredient`
 
-- **参数表**：`tagId`（`String`）— 物品标签 ID；`count`（`int`）— 数量；`consumeChance`（`float`）— 消耗概率。
+- **参数表**：`tagId`（`String`）— 物品标签 ID；`count`（`long`）— 数量；`consumeChance`（`float`）— 消耗概率。另有 `int` 重载。
 - **返回**：由物品标签构造的物品输入。
 - **抛出**：`IllegalArgumentException`：标签 ID 无效、标签不存在或数量最终非法；`IllegalStateException`：当前物品注册表不可用。
 - **默认值**：组件谓词为空。
@@ -856,9 +946,9 @@ const ingredient = api.itemInput("minecraft:iron_ingot", 1, 1.0)
 const ingredient = api.tagInput("c:ingots/iron", 1, 1.0)
 ```
 
-##### `fluidInput(String fluidId, int amount) → MachineIngredient`
+##### `fluidInput(String fluidId, long amount) → MachineIngredient`
 
-- **参数表**：`fluidId`（`String`）— 流体 ID；`amount`（`int`）— 流体数量。
+- **参数表**：`fluidId`（`String`）— 流体 ID；`amount`（`long`）— 流体数量。另有 `int` 重载。
 - **返回**：流体输入 `MachineIngredient`。
 - **抛出**：`IllegalArgumentException`：流体 ID 无效或未注册。
 - **默认值**：无。
@@ -868,9 +958,9 @@ const ingredient = api.tagInput("c:ingots/iron", 1, 1.0)
 const water = api.fluidInput("minecraft:water", 1000)
 ```
 
-##### `fluidStack(String fluidId, int amount) → FluidStack`
+##### `fluidStack(String fluidId, long amount) → FluidStack`
 
-- **参数表**：`fluidId`（`String`）— 流体 ID；`amount`（`int`）— 栈数量。
+- **参数表**：`fluidId`（`String`）— 流体 ID；`amount`（`long`）— 栈数量。另有 `int` 重载。
 - **返回**：NeoForge `FluidStack`，可传给编程式配方构建器的流体输出列表。
 - **抛出**：`IllegalArgumentException`：流体 ID 无效或未注册。
 - **默认值**：无。
@@ -880,9 +970,9 @@ const water = api.fluidInput("minecraft:water", 1000)
 const output = api.fluidStack("minecraft:lava", 250)
 ```
 
-##### `energyInput(int fePerTick) → MachineIngredient`
+##### `energyInput(long fePerTick) → MachineIngredient`
 
-- **参数表**：`fePerTick`（`int`）— 每 tick 输入的 FE 数量。
+- **参数表**：`fePerTick`（`long`）— 每 tick 输入的 FE 数量。
 - **返回**：能量输入 `MachineIngredient`。
 - **抛出**：负数会在配方构建校验时被拒绝。
 - **默认值**：无。
@@ -892,9 +982,9 @@ const output = api.fluidStack("minecraft:lava", 250)
 const energy = api.energyInput(32)
 ```
 
-##### `energyOutput(int fePerTick) → MachineIngredient`
+##### `energyOutput(long fePerTick) → MachineIngredient`
 
-- **参数表**：`fePerTick`（`int`）— 每 tick 输出的 FE 数量。
+- **参数表**：`fePerTick`（`long`）— 每 tick 输出的 FE 数量。
 - **返回**：方向为 `OUTPUT` 的能量 `MachineIngredient`。
 - **抛出**：负数会在配方构建校验时被拒绝。
 - **默认值**：无。
@@ -904,9 +994,9 @@ const energy = api.energyInput(32)
 const energy = api.energyOutput(8)
 ```
 
-##### `energyRequirement(RecipeIo io, int fePerTick) → MachineRequirement`
+##### `energyRequirement(RecipeIo io, long fePerTick) → MachineRequirement`
 
-- **参数表**：`io`（`RecipeIo`）— 使用 `api.recipeIO().INPUT` 或 `OUTPUT`；`fePerTick`（`int`）— 每 tick FE 数量。
+- **参数表**：`io`（`RecipeIo`）— 使用 `api.recipeIO().INPUT` 或 `OUTPUT`；`fePerTick`（`long`）— 每 tick FE 数量。
 - **返回**：可加入 `MachineIoPlan` 或编程式配方 `requirements` 的能量需求。
 - **抛出**：下游需求构造器可能因负数量抛异常；`io` 不是 `OUTPUT` 时源码按输入处理。
 - **默认值**：`io == null` 时也会按输入方向处理，这是源码分支的结果，不建议依赖。
@@ -929,9 +1019,9 @@ const payload = { type: "neoforge:energy", io: "input", fe_per_tick: 12 }
 const custom = api.customRecipeIo("neoforge:energy", api.recipeIO().INPUT, payload)
 ```
 
-##### `itemOutputRequirement(String itemId, int count, float chance) → MachineRequirement`
+##### `itemOutputRequirement(String itemId, long count, float chance) → MachineRequirement`
 
-- **参数表**：`itemId`（`String`）— 物品 ID；`count`（`int`）— 输出数量；`chance`（`float`）— 输出概率。
+- **参数表**：`itemId`（`String`）— 物品 ID；`count`（`long`）— 输出数量；`chance`（`float`）— 输出概率。另有 `int` 重载。
 - **返回**：方向为输出的物品需求。
 - **抛出**：`IllegalArgumentException`：物品未知；负数量由需求/配方校验拒绝。
 - **默认值**：无；数据组件谓词为空。
@@ -941,9 +1031,9 @@ const custom = api.customRecipeIo("neoforge:energy", api.recipeIO().INPUT, paylo
 const output = api.itemOutputRequirement("minecraft:iron_nugget", 10, 1.0)
 ```
 
-##### `itemOutputRequirementWithComponents(String itemId, int count, JsonElement components, float chance) → MachineRequirement`
+##### `itemOutputRequirementWithComponents(String itemId, long count, JsonElement components, float chance) → MachineRequirement`
 
-- **参数表**：`itemId`（`String`）— 物品 ID；`count`（`int`）— 输出数量；`components`（`JsonElement`）— `DataComponentPredicateSet` codec 的 JSON；`chance`（`float`）— 输出概率。
+- **参数表**：`itemId`（`String`）— 物品 ID；`count`（`long`）— 输出数量；`components`（`JsonElement`）— `DataComponentPredicateSet` codec 的 JSON；`chance`（`float`）— 输出概率。另有 `int` 重载。
 - **返回**：带数据组件匹配条件的物品输出需求。
 - **抛出**：`IllegalArgumentException` 或 codec 异常：物品未知、组件 JSON 无法解析或数量非法。
 - **默认值**：组件必须显式传入；概率由输出模型规范化。
@@ -958,9 +1048,9 @@ const output = api.itemOutputRequirementWithComponents(
 )
 ```
 
-##### `itemInputRequirement(String itemId, int count) → MachineRequirement`
+##### `itemInputRequirement(String itemId, long count) → MachineRequirement`
 
-- **参数表**：`itemId`（`String`）— 物品 ID；`count`（`int`）— 输入数量。
+- **参数表**：`itemId`（`String`）— 物品 ID；`count`（`long`）— 输入数量。另有 `int` 重载。
 - **返回**：方向为输入的物品需求，消耗概率为 `1`。
 - **抛出**：`IllegalArgumentException`：物品未知或数量在后续配方校验中非法。
 - **默认值**：无组件谓词，完全消耗。
@@ -970,9 +1060,9 @@ const output = api.itemOutputRequirementWithComponents(
 const input = api.itemInputRequirement("minecraft:iron_ingot", 1)
 ```
 
-##### `fluidInputRequirement(String fluidId, int amount) → MachineRequirement`
+##### `fluidInputRequirement(String fluidId, long amount) → MachineRequirement`
 
-- **参数表**：`fluidId`（`String`）— 流体 ID；`amount`（`int`）— 输入量。
+- **参数表**：`fluidId`（`String`）— 流体 ID；`amount`（`long`）— 输入量。另有 `int` 重载。
 - **返回**：方向为输入的流体需求。
 - **抛出**：`IllegalArgumentException`：流体未知；负数量会在配方校验中拒绝。
 - **默认值**：无。
@@ -982,9 +1072,9 @@ const input = api.itemInputRequirement("minecraft:iron_ingot", 1)
 const input = api.fluidInputRequirement("minecraft:water", 1000)
 ```
 
-##### `fluidOutputRequirement(String fluidId, int amount, float chance) → MachineRequirement`
+##### `fluidOutputRequirement(String fluidId, long amount, float chance) → MachineRequirement`
 
-- **参数表**：`fluidId`（`String`）— 流体 ID；`amount`（`int`）— 输出量；`chance`（`float`）— 输出概率。
+- **参数表**：`fluidId`（`String`）— 流体 ID；`amount`（`long`）— 输出量；`chance`（`float`）— 输出概率。另有 `int` 重载。
 - **返回**：方向为输出的流体需求。
 - **抛出**：`IllegalArgumentException`：流体未知；数量和概率由流体需求/配方校验处理。
 - **默认值**：无。
@@ -996,23 +1086,36 @@ const output = api.fluidOutputRequirement("minecraft:lava", 250, 0.5)
 
 #### 修饰符与等级
 
-##### `modifier(String target, String io, float value, String operation, boolean chance) → RecipeModifier`
+##### `modifier(String target, String scope, double value, String operation, boolean chance) → MachineModifier.Numeric`
 
-- **参数表**：`target`（`String`）— 目标字段，如 `duration`、`energy` 或 `item`；`io`（`String`）— `input` 或 `output`；`value`（`float`）— 修饰数值；`operation`（`String`）— `add`、`multiply`、`subtract` 或 `divide`；`chance`（`boolean`）— 是否作用于输出概率。
-- **返回**：配方修饰器。
-- **抛出**：`IllegalArgumentException`：IO 或操作字符串不是允许值。
-- **默认值**：没有隐式默认；`target` 可为空字符串表示不限定目标。
+- **参数表**：`target`（`String`）— `duration`、`energy`、`output`、`parallelism`、`factory_threads` 或 `recipe_threads`；`scope`（`String`）— 该目标对应的 `input`、`output`、`machine` 或 `recipe` 作用域；`value`（`double`）— 修饰数值；`operation`（`String`）— `add`、`multiply`、`subtract` 或 `divide`；`chance`（`boolean`）— 是否作用于输出概率。
+- **返回**：数值型机器修饰项。
+- **抛出**：`IllegalArgumentException`：目标与作用域不匹配、操作未知、数值非有限，或目标不支持 `chance`。
+- **默认值**：无；`target` 和 `scope` 必须提供。
 - **示例**：
 
 ```javascript
 const modifier = api.modifier("duration", "input", 0.5, "multiply", false)
 ```
 
-##### `modifierDefinition(List<RecipeModifier> modifiers) → ModifierDefinition`
+数值目标与作用域对应关系：`duration` / `energy` 使用 `input`；`output` 使用 `output`；`parallelism` / `factory_threads` 使用 `machine`；`recipe_threads` 使用 `recipe`。`parallelized` 是布尔目标，使用下方的布尔重载。
 
-- **参数表**：`modifiers`（`List<RecipeModifier>`）— 修饰器列表。
+##### `modifier(String target, String scope, boolean value) → MachineModifier.Parallelized`
+
+- **参数表**：`target` 必须是 `parallelized`，`scope` 必须是 `recipe`；`value`（`boolean`）— 是否启用配方并行。
+- **返回**：布尔型并行设置修饰项。
+- **抛出**：`IllegalArgumentException`：目标或作用域不是 `parallelized` / `recipe`。
+- **示例**：
+
+```javascript
+const parallelized = api.modifier("parallelized", "recipe", true)
+```
+
+##### `modifierDefinition(List<MachineModifier> modifiers) → ModifierDefinition`
+
+- **参数表**：`modifiers`（`List<MachineModifier>`）— 数值修饰和 / 或并行设置修饰列表。
 - **返回**：可传给 `registerModifier` 的不可变 `ModifierDefinition`。
-- **抛出**：列表元素为无效修饰器时由记录构造器抛异常。
+- **抛出**：列表为 `null` 时按空列表处理；列表中的 `null` 元素会被拒绝。
 - **默认值**：`null` 列表在公共记录中按空列表处理；脚本应显式传数组。
 - **示例**：
 
@@ -1045,6 +1148,17 @@ structure.modifier("M", use)
 
 ```javascript
 const requirement = api.levelRequirement("example:coil", "example:coil_iron")
+```
+
+##### `stageRequirement(int minStage) → StageRequirement`
+
+- **参数表**：`minStage`（`int`）— 最低结构阶段，范围为 1 到 64。
+- **返回**：输入方向的结构阶段需求，可传给 `MachineRecipeBuilderJS.addRequirement(...)`。
+- **抛出**：`IllegalArgumentException`：`minStage` 小于 1 或大于 64。
+- **示例**：
+
+```javascript
+const requirement = api.stageRequirement(2)
 ```
 
 ##### `levelSlot(String typeId) → LevelSlot`
@@ -1254,6 +1368,8 @@ const energy = state.asMap()
 | `controllerSideTexture` | `Identifier` | 自动默认 | 控制器侧面纹理。 |
 | `controllerTopTexture` | `Identifier` | 自动默认 | 控制器顶面纹理。 |
 | `controllerBottomTexture` | `Identifier` | 自动默认 | 控制器底面纹理。 |
+| `controllerIdleOverlayTexture` | `Identifier` | 未设置 | 控制器空闲状态覆盖纹理。 |
+| `controllerActiveOverlayTexture` | `Identifier` | 未设置 | 控制器运行状态覆盖纹理。 |
 | `allowVerticalFacing` | `boolean` | `false` | 是否允许控制器竖直朝向。 |
 | `fullyRotationallySymmetric` | `boolean` | `false` | 是否完全旋转对称。 |
 | `requireVerticalFacing` | `boolean` | `false` | 是否强制竖直朝向。 |
@@ -1301,17 +1417,19 @@ const machine = event.createMachine("example:press").localizedName("machine.exam
 
 该方法标记为 `@Deprecated(forRemoval = true)`，新脚本应使用 `displayNameKey`。
 
-##### `recipePool(String recipePoolId) → MachineBuilderJS`
+##### `recipePool(String... recipePoolIds) → MachineBuilderJS`
 
-- **参数表**：`recipePoolId`（`String`）— 配方池 ID；非法 ID 字符串会抛 `IllegalArgumentException`。
+- **参数表**：`recipePoolIds`（`String...`）— 有序配方池 ID 列表，至少一个，不能重复。
 - **返回**：当前构建器。
-- **抛出**：`IllegalArgumentException`：`Identifier.parse(...)` 失败。
+- **抛出**：`IllegalArgumentException`：未提供 ID、ID 无效或列表中有重复 ID。
 - **默认值**：机器自身 ID。
 - **示例**：
 
 ```javascript
-machine.recipePool("example:press")
+machine.recipePool("example:press", "example:secondary_press")
 ```
+
+列表顺序会保留并决定该机器的配方池选择顺序。机器可属于多个配方池，但每条配方仍只设置一个 `recipe_pool`。
 
 ##### `expandableStructure() → MachineBuilderJS`
 
@@ -1578,6 +1696,30 @@ machine.controllerTopTexture("example:block/controller_top")
 
 ```javascript
 machine.controllerBottomTexture("example:block/controller_bottom")
+```
+
+##### `controllerIdleOverlayTexture(String texture) → MachineBuilderJS`
+
+- **参数表**：`texture`（`String`）— 控制器空闲状态的覆盖纹理资源 ID。
+- **返回**：当前构建器。
+- **抛出**：`IllegalArgumentException`：ID 无法解析。
+- **默认值**：不绘制空闲覆盖纹理。
+- **示例**：
+
+```javascript
+machine.controllerIdleOverlayTexture("example:block/controller_idle_overlay")
+```
+
+##### `controllerActiveOverlayTexture(String texture) → MachineBuilderJS`
+
+- **参数表**：`texture`（`String`）— 控制器运行状态的覆盖纹理资源 ID。
+- **返回**：当前构建器。
+- **抛出**：`IllegalArgumentException`：ID 无法解析。
+- **默认值**：不绘制运行覆盖纹理。
+- **示例**：
+
+```javascript
+machine.controllerActiveOverlayTexture("example:block/controller_active_overlay")
 ```
 
 ##### `allowVerticalFacing() → MachineBuilderJS`
@@ -1891,6 +2033,11 @@ machine.shareSmartInterface()
 machine.shareSmartInterface(true)
 ```
 
+:::warning 当前实现注意
+
+统一机器修饰符后，`itemInputByInterface(...)`、`itemInputChanceByInterface(...)`、`fluidInputByInterface(...)` 和 `fluidInputChanceByInterface(...)` 仍存在于构建器上，但当前目标校验不接受 `item` / `fluid` 的输入作用域，调用会抛 `IllegalArgumentException`。`durationByInterface(...)`、`energyByInterface(...)` 与输出侧变体使用受支持的目标。
+:::
+
 ##### `durationByInterface(String type, float min, float max, float atMin, float atMax) → MachineBuilderJS`
 
 - **参数表**：`type`（`String`）— 智能接口类型；`min`/`max`（`float`）— 生效区间；`atMin`/`atMax`（`float`）— 区间端点对应的时长修饰值。
@@ -1945,13 +2092,7 @@ machine.energyByInterface("mode", 1, 3, 1, 2, Operation.MULTIPLY)
 
 - **参数表**：`type`、`min`、`max`、`atMin`、`atMax`— 智能接口区间及物品输入数量修饰值。
 - **返回**：当前构建器；目标为物品输入数量，操作固定为乘法。
-- **抛出**：范围或类型非法时在最终构建阶段抛异常。
-- **默认值**：不影响输入概率。
-- **示例**：
-
-```javascript
-machine.itemInputByInterface("batch", 1, 4, 1, 4)
-```
+- **抛出**：当前统一修饰符目标校验不支持 `item` / `input`，调用时抛 `IllegalArgumentException`。
 
 ##### `itemOutputByInterface(String type, float min, float max, float atMin, float atMax) → MachineBuilderJS`
 
@@ -1969,26 +2110,13 @@ machine.itemOutputByInterface("batch", 1, 4, 1, 4)
 
 - **参数表**：`type`、`min`、`max`、`atMin`、`atMax`— 物品输入概率修饰参数。
 - **返回**：当前构建器；默认操作为乘法，且只作用于输入概率。
-- **抛出**：范围或类型非法时抛异常。
-- **默认值**：操作为 `MULTIPLY`。
-- **示例**：
-
-```javascript
-machine.itemInputChanceByInterface("quality", 0, 1, 0.5, 1)
-```
+- **抛出**：当前统一修饰符目标校验不支持 `item` / `input`，调用时抛 `IllegalArgumentException`。
 
 ##### `itemInputChanceByInterface(String type, float min, float max, float atMin, float atMax, RecipeModifier.Operation operation) → MachineBuilderJS`
 
 - **参数表**：前五个参数同上；`operation`（`RecipeModifier.Operation`）— 概率运算方式。
 - **返回**：当前构建器。
-- **抛出**：操作、范围或类型非法时抛异常。
-- **默认值**：无额外默认。
-- **示例**：
-
-```javascript
-const Operation = Java.loadClass("cn.howxu.mmcr.api.publicapi.recipe.modifier.RecipeModifier$Operation")
-machine.itemInputChanceByInterface("quality", 0, 1, 0.5, 1, Operation.ADD)
-```
+- **抛出**：操作或范围非法时抛异常；该输入目标当前还会因统一修饰符目标校验抛 `IllegalArgumentException`。
 
 ##### `itemOutputChanceByInterface(String type, float min, float max, float atMin, float atMax) → MachineBuilderJS`
 
@@ -2019,13 +2147,7 @@ machine.itemOutputChanceByInterface("quality", 0, 1, 0.5, 1, Operation.MULTIPLY)
 
 - **参数表**：`type`、`min`、`max`、`atMin`、`atMax`— 流体输入数量修饰参数。
 - **返回**：当前构建器；操作固定为乘法。
-- **抛出**：范围或类型非法时抛异常。
-- **默认值**：不影响流体输入概率。
-- **示例**：
-
-```javascript
-machine.fluidInputByInterface("pressure", 0, 100, 1, 2)
-```
+- **抛出**：当前统一修饰符目标校验不支持 `fluid` / `input`，调用时抛 `IllegalArgumentException`。
 
 ##### `fluidOutputByInterface(String type, float min, float max, float atMin, float atMax) → MachineBuilderJS`
 
@@ -2043,26 +2165,13 @@ machine.fluidOutputByInterface("pressure", 0, 100, 1, 2)
 
 - **参数表**：`type`、`min`、`max`、`atMin`、`atMax`— 流体输入概率修饰参数。
 - **返回**：当前构建器；默认操作为乘法。
-- **抛出**：范围或类型非法时抛异常。
-- **默认值**：操作为 `MULTIPLY`。
-- **示例**：
-
-```javascript
-machine.fluidInputChanceByInterface("quality", 0, 1, 0.5, 1)
-```
+- **抛出**：当前统一修饰符目标校验不支持 `fluid` / `input`，调用时抛 `IllegalArgumentException`。
 
 ##### `fluidInputChanceByInterface(String type, float min, float max, float atMin, float atMax, RecipeModifier.Operation operation) → MachineBuilderJS`
 
 - **参数表**：前五个参数同上；`operation`（`RecipeModifier.Operation`）— 概率运算方式。
 - **返回**：当前构建器。
-- **抛出**：操作或范围非法时抛异常。
-- **默认值**：无额外默认。
-- **示例**：
-
-```javascript
-const Operation = Java.loadClass("cn.howxu.mmcr.api.publicapi.recipe.modifier.RecipeModifier$Operation")
-machine.fluidInputChanceByInterface("quality", 0, 1, 0.5, 1, Operation.MULTIPLY)
-```
+- **抛出**：操作或范围非法时抛异常；该输入目标当前还会因统一修饰符目标校验抛 `IllegalArgumentException`。
 
 ##### `fluidOutputChanceByInterface(String type, float min, float max, float atMin, float atMax) → MachineBuilderJS`
 
@@ -2091,31 +2200,23 @@ machine.fluidOutputChanceByInterface("quality", 0, 1, 0.5, 1, Operation.ADD)
 
 #### 端口谓词与等级快捷
 
-`MachineBuilderJS` 也提供了与 `MachineStructureBuilderJS` 同名的端口谓词和等级工厂方法，便于在 `set(symbol, value)` 中直接组合字符匹配。
+`MachineBuilderJS` 暴露下列工厂方法，可返回 `BlockPredicate` 或 `PortTierRequirementSpec`，供接受这些类型的结构配置调用使用。
 
 | 方法 | 返回 | 描述 |
 | --- | --- | --- |
-| `anyOfItemInput()` | `BlockPredicate` | 所有物品输入端口并集。 |
-| `anyOfItemOutput()` | `BlockPredicate` | 所有物品输出端口并集。 |
-| `anyOfFluidInput()` | `BlockPredicate` | 所有流体输入端口并集。 |
-| `anyOfFluidOutput()` | `BlockPredicate` | 所有流体输出端口并集。 |
-| `anyOfEnergyInput()` | `BlockPredicate` | 所有能量输入端口并集。 |
-| `anyOfEnergyOutput()` | `BlockPredicate` | 所有能量输出端口并集。 |
-| `parallelControllers()` | `BlockPredicate` | 所有并行控制器并集。 |
-| `smartInterfaceBlock()` | `BlockPredicate` | 内置智能接口。 |
-| `anyOfPort(String...)` | `BlockPredicate` | 指定端口 ID 列表的并集。 |
-| `anyOfPort(Identifier...)` | `BlockPredicate` | 同上，使用 `Identifier` 数组。 |
-| `anyOfPort(publicapi.BlockPredicate...)` | `BlockPredicate` | 使用 Java 公共 API 谓词列表的并集。 |
-| `smartInterface()` | `BlockPredicate` | 内置智能接口谓词。 |
+| `anyOfItemInput()` / `anyOfItemOutput()` | `BlockPredicate` | 物品输入 / 输出端口并集。 |
+| `anyOfFluidInput()` / `anyOfFluidOutput()` | `BlockPredicate` | 流体输入 / 输出端口并集。 |
+| `anyOfEnergyInput()` / `anyOfEnergyOutput()` | `BlockPredicate` | 能量输入 / 输出端口并集。 |
+| `anyOfItemPorts()` / `anyOfFluidPorts()` / `anyOfEnergyPorts()` | `BlockPredicate` | 对应端口族的输入与输出并集。 |
+| `anyOfChemicalPorts()` / `anyOfRadioactiveChemicalPorts()` / `anyOfHeatPorts()` | `BlockPredicate` | Mekanism 化学品、放射性化学品或热量端口并集。 |
+| `anyOfUpgradeBus()` | `BlockPredicate` | 所有升级总线并集。 |
+| `anyOfPort(String...)` / `anyOfPort(Identifier...)` / `anyOfPort(publicapi.BlockPredicate...)` | `BlockPredicate` | 指定端口的并集。 |
+| `parallelControllers()` / `factoryController()` | `BlockPredicate` | 内置并行控制器或工厂控制器。 |
+| `smartInterfaceBlock()` / `smartInterface()` | `BlockPredicate` | 内置智能接口谓词。 |
 | `dataStorage()` | `BlockPredicate` | 内置数据存储谓词。 |
-| `itemInputTier(String)` | `PortTierRequirementSpec` | 物品输入端口的等级规格。 |
-| `itemOutputTier(String)` | `PortTierRequirementSpec` | 物品输出端口的等级规格。 |
-| `fluidInputTier(String)` | `PortTierRequirementSpec` | 流体输入端口的等级规格。 |
-| `fluidOutputTier(String)` | `PortTierRequirementSpec` | 流体输出端口的等级规格。 |
-| `energyInputTier(String)` | `PortTierRequirementSpec` | 能量输入端口的等级规格。 |
-| `energyOutputTier(String)` | `PortTierRequirementSpec` | 能量输出端口的等级规格。 |
+| `itemInputTier(String)` 等 6 个端口等级工厂 | `PortTierRequirementSpec` | 按端口族构造最低等级需求。 |
 
-这些方法都不需要额外参数，等级/端口 ID 必须指向已注册端口；端口 ID 不存在时 `PortTierRequirementSpec.from` 会抛 `IllegalArgumentException`。
+Mekanism 化学品、放射性化学品与热量端口谓词在 Mekanism 未加载时匹配不到方块。
 
 #### 终结
 
@@ -2497,6 +2598,12 @@ structure.extension(stage => stage.pattern("Y").set("Y", "minecraft:iron_block")
 | `anyOfFluidOutput()` | `BlockPredicate` | 所有流体输出端口并集。 |
 | `anyOfEnergyInput()` | `BlockPredicate` | 所有能量输入端口并集。 |
 | `anyOfEnergyOutput()` | `BlockPredicate` | 所有能量输出端口并集。 |
+| `anyOfItemPorts()` | `BlockPredicate` | 所有物品输入与输出端口并集。 |
+| `anyOfFluidPorts()` | `BlockPredicate` | 所有流体输入与输出端口并集。 |
+| `anyOfEnergyPorts()` | `BlockPredicate` | 所有能量输入与输出端口并集。 |
+| `anyOfChemicalPorts()` | `BlockPredicate` | Mekanism 化学品输入与输出端口并集。 |
+| `anyOfRadioactiveChemicalPorts()` | `BlockPredicate` | Mekanism 放射性化学品输入与输出端口并集。 |
+| `anyOfHeatPorts()` | `BlockPredicate` | Mekanism 热量输入与输出端口并集。 |
 | `anyOfUpgradeBus()` | `BlockPredicate` | 所有升级总线并集。 |
 | `anyOfPort(String...)` | `BlockPredicate` | 指定端口 ID 列表的并集。 |
 | `anyOfPort(Identifier...)` | `BlockPredicate` | 同上，使用 `Identifier` 数组。 |
@@ -2511,6 +2618,8 @@ structure.extension(stage => stage.pattern("Y").set("Y", "minecraft:iron_block")
 | `fluidOutputTier(String)` | `PortTierRequirementSpec` | 流体输出端口的等级规格。 |
 | `energyInputTier(String)` | `PortTierRequirementSpec` | 能量输入端口的等级规格。 |
 | `energyOutputTier(String)` | `PortTierRequirementSpec` | 能量输出端口的等级规格。 |
+
+Mekanism 化学品、放射性化学品与热量端口谓词在 Mekanism 未加载时匹配不到方块。
 
 #### 终结
 
@@ -2667,7 +2776,21 @@ mainStructure(stage => stage.dynamicPattern(myDynamicPattern))
 
 #### 端口谓词与等级快捷
 
-阶段构建器同样暴露与顶层构建器同名的 14 个端口谓词与 6 个等级工厂方法；返回与 `MachineStructureBuilderJS` 中的同名方法一致。
+阶段构建器提供端口并集、内置控制器谓词和端口等级工厂：
+
+| 方法 | 返回 | 描述 |
+| --- | --- | --- |
+| `anyOfItemInput()` / `anyOfItemOutput()` | `BlockPredicate` | 物品输入 / 输出端口并集。 |
+| `anyOfFluidInput()` / `anyOfFluidOutput()` | `BlockPredicate` | 流体输入 / 输出端口并集。 |
+| `anyOfEnergyInput()` / `anyOfEnergyOutput()` | `BlockPredicate` | 能量输入 / 输出端口并集。 |
+| `anyOfItemPorts()` / `anyOfFluidPorts()` / `anyOfEnergyPorts()` | `BlockPredicate` | 对应端口族的输入与输出并集。 |
+| `anyOfChemicalPorts()` / `anyOfRadioactiveChemicalPorts()` / `anyOfHeatPorts()` | `BlockPredicate` | Mekanism 化学品、放射性化学品或热量端口并集。 |
+| `anyOfUpgradeBus()` | `BlockPredicate` | 所有升级总线并集。 |
+| `anyOfPort(String...)` / `anyOfPort(Identifier...)` / `anyOfPort(publicapi.BlockPredicate...)` | `BlockPredicate` | 指定端口的并集。 |
+| `factoryController()` / `parallelControllers()` / `smartInterface()` | `BlockPredicate` | 内置控制器或智能接口谓词。 |
+| `itemInputTier(String)` 等 6 个端口等级工厂 | `PortTierRequirementSpec` | 按端口族构造最低等级需求。 |
+
+Mekanism 化学品、放射性化学品与热量端口谓词在 Mekanism 未加载时匹配不到方块。
 
 #### `build() → MachineStructureDefinition.Declaration`
 
@@ -2698,13 +2821,12 @@ stage.pattern("X").set("X", "minecraft:iron_block").controller("X")
 
 | 名称 | 类型 | 描述 |
 |------|------|------|
-| `JSON_ELEMENT` | `RecipeComponent<JsonElement>` | 通用 JSON 元素组件，作为 `requirements`/`outputs`/`modifiers`/`level_requirements` 的列表项类型。 |
-| `MACHINE` | `RecipeKey<String>` | `machine` 字段，期望 `namespace:path` 格式。 |
+| `JSON_ELEMENT` | `RecipeComponent<JsonElement>` | 通用 JSON 元素组件，作为 `requirements`/`outputs`/`modifiers` 的列表项类型。 |
+| `RECIPE_POOL` | `RecipeKey<String>` | `recipe_pool` 字段，指定配方所属的配方池。 |
 | `TICK_TIME` | `RecipeKey<Integer>` | `tick_time` 字段，非负整数。 |
 | `OUTPUTS` | `RecipeKey<List<JsonElement>>` | `outputs` 字段，列表项是 JSON 元素；与 `requirements` 共享同类型。 |
 | `MODIFIERS` | `RecipeKey<List<JsonElement>>` | `modifiers` 字段，列表项是 JSON 元素；被 `exclude()` 标记为不在结果中包含。 |
 | `REQUIREMENTS` | `RecipeKey<List<JsonElement>>` | `requirements` 字段，包含在结果中。 |
-| `LEVEL_REQUIREMENTS` | `RecipeKey<List<JsonElement>>` | `level_requirements` 字段，被 `exclude()` 标记。 |
 | `MAX_THREADS` | `RecipeKey<Integer>` | `max_threads` 字段，默认 `1`。 |
 | `PARALLELIZED` | `RecipeKey<Boolean>` | `parallelized` 字段，默认 `false`。 |
 | `CANCEL_IF_PER_TICK_FAILS` | `RecipeKey<Boolean>` | `cancelIfPerTickFails` 字段，默认 `false`。 |
@@ -2733,7 +2855,15 @@ stage.pattern("X").set("X", "minecraft:iron_block").controller("X")
 | `smartInterfaceOutput(type, value)` | `(String, float)` | 追加一条输出型智能接口需求。 |
 | `custom(typeId, io, payload)` | `(String, String, JsonElement)` | 通过 `RecipeApi.custom(...)` 校验并把 codec 编码后的需求或输出追加到对应数组。`io` 取 `input` 或 `output`。 |
 | `requiredHost(hostId)` | `(String)` | 把宿主机器 ID 追加到 `required_host_ids`。 |
-| `requiresLevel(typeId, levelId)` | `(String, String)` | 校验等级与类型匹配，并把 `{type, level}` 追加到 `level_requirements`。 |
+| `requiresLevel(typeId, levelId)` | `(String, String)` | 校验等级与类型匹配，并把等级需求追加到 `requirements`。 |
+
+`requirements` 也可直接写入阶段需求：
+
+```javascript
+{ type: "mmcr:stage", io: "input", min_stage: 2 }
+```
+
+`min_stage` 的有效范围为 1 到 64；`io` 省略时默认为 `input`。
 
 :::warning 注意事项
 
@@ -2786,22 +2916,21 @@ ServerEvents.recipes(event => {
 
 | 名称 | 类型 | 默认值 | 描述 |
 |------|------|------|------|
-| `machineId` | `Identifier` | `null` | 目标机器 ID，必须在注册后已存在。 |
+| `recipePoolId` | `Identifier` | `null` | 目标配方池 ID，必须在注册后已存在。 |
 | `tickTime` | `int` | `40` | 配方总耗时（tick）。 |
 | `inputs` | `List<MachineIngredient>` | 空 | 编程式输入集合。 |
 | `outputs` | `List<ItemStack>` | 空 | 编程式物品输出集合。 |
 | `outputChances` | `List<Float>` | 空 | 与 `outputs` 一一对应的概率。 |
 | `fluidOutputs` | `List<FluidStack>` | 空 | 编程式流体输出集合。 |
-| `conditions` | `List<RecipeModifier>` | 空 | 配方修饰器。 |
+| `conditions` | `List<MachineModifier>` | 空 | 配方修饰器列表；内部转换为配方修饰器。 |
 | `priority` | `int` | `0` | 配方优先级。 |
 | `maxThreads` | `int` | `1` | 最大线程数。 |
 | `parallelized` | `boolean` | `false` | 是否可使用并行控制器。 |
 | `deriveRequirements` | `boolean` | `true` | 是否根据 `inputs/outputs/fluidOutputs` 自动派生需求。 |
-| `energyPerTick` | `int` | `0` | 每 tick 能量。 |
+| `energyPerTick` | `long` | `0` | 每 tick 能量。 |
 | `cancelIfPerTickFails` | `boolean` | `false` | 每 tick 失败时是否取消配方。 |
-| `levelRequirements` | `List<LevelRequirement>` | 空 | 等级要求。 |
 | `requiredHostIds` | `Set<Identifier>` | 空 | 宿主要求。 |
-| `requirements` | `List<MachineRequirement>` | 空 | 编程式需求集合。 |
+| `requirements` | `List<MachineRequirement>` | 空 | 编程式需求集合，包含等级与阶段需求。 |
 | `customOutputs` | `List<MachineOutput>` | 空 | 编程式自定义输出集合。 |
 | `allowPartialOutputs` | `boolean` | `false` | 是否允许部分输出。 |
 | `id` | `Identifier` | 构造时设置 | 配方 ID。 |
@@ -2812,7 +2941,7 @@ ServerEvents.recipes(event => {
 
 **方法**
 
-#### 标识与机器
+#### 标识与配方池
 
 ##### `id(String id) → MachineRecipeBuilderJS`
 
@@ -2837,6 +2966,8 @@ const builder = new MachineRecipeBuilderJS("example:press_recipe").id("example:p
 ```javascript
 builder.recipePool("example:press")
 ```
+
+配方构建器每条配方只接受一个配方池 ID；机器定义上的 `MachineBuilderJS.recipePool(...)` 则可以声明多个配方池。
 
 ##### `tickTime(int tickTime) → MachineRecipeBuilderJS`
 
@@ -2910,22 +3041,23 @@ builder.parallelized(true)
 builder.deriveRequirements(false)
 ```
 
-##### `conditions(List<RecipeModifier> conditions) → MachineRecipeBuilderJS`
+##### `conditions(List<MachineModifier> conditions) → MachineRecipeBuilderJS`
 
-- **参数表**：`conditions`（`List<RecipeModifier>`）— 配方修饰器列表。
+- **参数表**：`conditions`（`List<MachineModifier>`）— 由 `api.modifier(...)` 创建的机器修饰器列表。
 - **返回**：当前构建器；替换已有条件。
 - **抛出**：无额外异常。
 - **默认值**：空列表。
 - **示例**：
 
 ```javascript
-const api = MMCR.getAPI()
-builder.conditions([api.modifier("duration", "input", 0.5, "multiply", false)])
+builder.conditions([
+    api.modifier("duration", "input", 0.5, "multiply", false)
+])
 ```
 
-##### `energyPerTick(int energyPerTick) → MachineRecipeBuilderJS`
+##### `energyPerTick(long energyPerTick) → MachineRecipeBuilderJS`
 
-- **参数表**：`energyPerTick`（`int`）— 每 tick 消耗的 FE。
+- **参数表**：`energyPerTick`（`long`）— 每 tick 消耗的 FE。
 - **返回**：当前构建器；自动加一条能量输入需求到派生需求。
 - **抛出**：负数会在 `createObject()` 阶段抛 `IllegalArgumentException`。
 - **默认值**：`0`。
@@ -2997,9 +3129,9 @@ builder.inputs([api.itemInput("minecraft:iron_ingot", 1, 1.0)])
 builder.addInput(api.fluidInput("minecraft:water", 1000))
 ```
 
-##### `itemInput(String itemId, int count) → MachineRecipeBuilderJS`
+##### `itemInput(String itemId, long count) → MachineRecipeBuilderJS`
 
-- **参数表**：`itemId`（`String`）— 物品 ID；`count`（`int`）— 数量。
+- **参数表**：`itemId`（`String`）— 物品 ID；`count`（`long`）— 数量。另有 `int` 重载。
 - **返回**：当前构建器；消耗概率为 `1`，组件谓词为空。
 - **抛出**：物品未知或 `count < 0` 时抛 `IllegalArgumentException`。
 - **默认值**：无。
@@ -3009,9 +3141,9 @@ builder.addInput(api.fluidInput("minecraft:water", 1000))
 builder.itemInput("minecraft:iron_ingot", 1)
 ```
 
-##### `tagInput(String tagId, int count) → MachineRecipeBuilderJS`
+##### `tagInput(String tagId, long count) → MachineRecipeBuilderJS`
 
-- **参数表**：`tagId`（`String`）— 物品标签 ID；`count`（`int`）— 数量。
+- **参数表**：`tagId`（`String`）— 物品标签 ID；`count`（`long`）— 数量。另有 `int` 重载。
 - **返回**：当前构建器。
 - **抛出**：标签 ID 非法或标签解析失败时抛 `IllegalArgumentException`。
 - **默认值**：无。
@@ -3021,9 +3153,9 @@ builder.itemInput("minecraft:iron_ingot", 1)
 builder.tagInput("c:ingots/iron", 1)
 ```
 
-##### `itemInputWithComponents(String itemId, int count, JsonElement components) → MachineRecipeBuilderJS`
+##### `itemInputWithComponents(String itemId, long count, JsonElement components) → MachineRecipeBuilderJS`
 
-- **参数表**：`itemId`（`String`）— 物品 ID；`count`（`int`）— 数量；`components`（`JsonElement`）— 数据组件谓词 JSON。
+- **参数表**：`itemId`（`String`）— 物品 ID；`count`（`long`）— 数量；`components`（`JsonElement`）— 数据组件谓词 JSON。另有 `int` 重载。
 - **返回**：当前构建器；消耗概率为 `1`。
 - **抛出**：物品未知或 `components` 无法解析时抛异常。
 - **默认值**：无。
@@ -3033,9 +3165,9 @@ builder.tagInput("c:ingots/iron", 1)
 builder.itemInputWithComponents("minecraft:diamond_sword", 1, { "minecraft:custom_name": { text: "Marked" } })
 ```
 
-##### `itemInputWithComponents(String itemId, int count, JsonElement components, float consumeChance) → MachineRecipeBuilderJS`
+##### `itemInputWithComponents(String itemId, long count, JsonElement components, float consumeChance) → MachineRecipeBuilderJS`
 
-- **参数表**：前三个参数同上；`consumeChance`（`float`）— 每次消耗概率。
+- **参数表**：前三个参数同上；`consumeChance`（`float`）— 每次消耗概率。另有 `int` 重载。
 - **返回**：当前构建器。
 - **抛出**：与上同。
 - **默认值**：无。
@@ -3045,9 +3177,9 @@ builder.itemInputWithComponents("minecraft:diamond_sword", 1, { "minecraft:custo
 builder.itemInputWithComponents("minecraft:diamond_sword", 1, { "minecraft:enchantments": { "minecraft:sharpness": 4 } }, 0.75)
 ```
 
-##### `tagInputWithComponents(String tagId, int count, JsonElement components, float consumeChance) → MachineRecipeBuilderJS`
+##### `tagInputWithComponents(String tagId, long count, JsonElement components, float consumeChance) → MachineRecipeBuilderJS`
 
-- **参数表**：`tagId`（`String`）— 标签 ID；`count`（`int`）— 数量；`components`（`JsonElement`）— 数据组件谓词；`consumeChance`（`float`）— 消耗概率。
+- **参数表**：`tagId`（`String`）— 标签 ID；`count`（`long`）— 数量；`components`（`JsonElement`）— 数据组件谓词；`consumeChance`（`float`）— 消耗概率。另有 `int` 重载。
 - **返回**：当前构建器。
 - **抛出**：标签或组件 JSON 解析失败时抛异常。
 - **默认值**：无。
@@ -3057,9 +3189,9 @@ builder.itemInputWithComponents("minecraft:diamond_sword", 1, { "minecraft:encha
 builder.tagInputWithComponents("c:tools", 1, {}, 0.5)
 ```
 
-##### `notConsumableItemInput(String itemId, int count) → MachineRecipeBuilderJS`
+##### `notConsumableItemInput(String itemId, long count) → MachineRecipeBuilderJS`
 
-- **参数表**：`itemId`（`String`）— 物品 ID；`count`（`int`）— 数量。
+- **参数表**：`itemId`（`String`）— 物品 ID；`count`（`long`）— 数量。另有 `int` 重载。
 - **返回**：当前构建器；消耗概率为 `0`。
 - **抛出**：物品未知或数量非法。
 - **默认值**：无。
@@ -3069,9 +3201,9 @@ builder.tagInputWithComponents("c:tools", 1, {}, 0.5)
 builder.notConsumableItemInput("minecraft:iron_ingot", 1)
 ```
 
-##### `chancedItemInput(String itemId, int count, float consumeChance) → MachineRecipeBuilderJS`
+##### `chancedItemInput(String itemId, long count, float consumeChance) → MachineRecipeBuilderJS`
 
-- **参数表**：`itemId`（`String`）— 物品 ID；`count`（`int`）— 数量；`consumeChance`（`float`）— 消耗概率。
+- **参数表**：`itemId`（`String`）— 物品 ID；`count`（`long`）— 数量；`consumeChance`（`float`）— 消耗概率。另有 `int` 重载。
 - **返回**：当前构建器。
 - **抛出**：物品未知或数量非法。
 - **默认值**：无。
@@ -3079,6 +3211,28 @@ builder.notConsumableItemInput("minecraft:iron_ingot", 1)
 
 ```javascript
 builder.chancedItemInput("minecraft:gravel", 1, 0.5)
+```
+
+##### `fluidInput(String fluidId, long amount) → MachineRecipeBuilderJS`
+
+- **参数表**：`fluidId`（`String`）— 流体 ID；`amount`（`long`）— 输入量。另有 `int` 重载。
+- **返回**：当前构建器；消耗概率为 `1`。
+- **抛出**：流体 ID 非法或未注册、数量非法时抛异常。
+- **示例**：
+
+```javascript
+builder.fluidInput("minecraft:water", 1000)
+```
+
+##### `fluidInput(String fluidId, long amount, double consumeChance) → MachineRecipeBuilderJS`
+
+- **参数表**：`fluidId`（`String`）— 流体 ID；`amount`（`long`）— 输入量；`consumeChance`（`double`）— 消耗概率。另有 `int` 数量重载。
+- **返回**：当前构建器。
+- **抛出**：流体 ID 无效、数量非法或消耗概率不在允许范围时抛异常。
+- **示例**：
+
+```javascript
+builder.fluidInput("minecraft:water", 1000, 0.5)
 ```
 
 #### 输出
@@ -3119,9 +3273,9 @@ builder.addOutput(Item.of("minecraft:iron_nugget", 10), 0.5)
 builder.fluidOutputs([api.fluidStack("minecraft:water", 1000)])
 ```
 
-##### `itemOutput(String itemId, int count) → MachineRecipeBuilderJS`
+##### `itemOutput(String itemId, long count) → MachineRecipeBuilderJS`
 
-- **参数表**：`itemId`（`String`）— 物品 ID；`count`（`int`）— 数量。
+- **参数表**：`itemId`（`String`）— 物品 ID；`count`（`long`）— 数量。另有 `int` 重载。
 - **返回**：当前构建器；概率为 `1`。
 - **抛出**：物品未知或数量非法。
 - **默认值**：无。
@@ -3131,9 +3285,9 @@ builder.fluidOutputs([api.fluidStack("minecraft:water", 1000)])
 builder.itemOutput("minecraft:iron_nugget", 10)
 ```
 
-##### `chancedItemOutput(String itemId, int count, float chance) → MachineRecipeBuilderJS`
+##### `chancedItemOutput(String itemId, long count, float chance) → MachineRecipeBuilderJS`
 
-- **参数表**：`itemId`（`String`）— 物品 ID；`count`（`int`）— 数量；`chance`（`float`）— 概率。
+- **参数表**：`itemId`（`String`）— 物品 ID；`count`（`long`）— 数量；`chance`（`float`）— 概率。另有 `int` 重载。
 - **返回**：当前构建器。
 - **抛出**：物品未知或数量非法。
 - **默认值**：无。
@@ -3143,11 +3297,11 @@ builder.itemOutput("minecraft:iron_nugget", 10)
 builder.chancedItemOutput("minecraft:diamond", 1, 0.25)
 ```
 
-##### `itemOutputWithComponents(String itemId, int count, JsonElement components) → MachineRecipeBuilderJS`
+##### `itemOutputWithComponents(String itemId, long count, JsonElement components) → MachineRecipeBuilderJS`
 
-- **参数表**：`itemId`（`String`）— 物品 ID；`count`（`int`）— 数量；`components`（`JsonElement`）— 完整数据组件 JSON。
+- **参数表**：`itemId`（`String`）— 物品 ID；`count`（`long`）— 数量；`components`（`JsonElement`）— 完整数据组件 JSON。另有 `int` 重载。
 - **返回**：当前构建器；推迟到 `createObject()`/配方事件中再解码。
-- **抛出**：`IllegalArgumentException`：`count < 0`；`IllegalStateException`：未在 `RecipesKubeEvent` 上下文中调用导致无法解码。
+- **抛出**：`IllegalArgumentException`：`count < 1`；`IllegalStateException`：未在 `RecipesKubeEvent` 上下文中调用导致无法解码。
 - **默认值**：无。
 - **示例**：
 
@@ -3246,6 +3400,17 @@ builder.smartInterfaceOutput("mode", 2)
 builder.requiresLevel("example:coil", "example:coil_iron")
 ```
 
+##### `requiresStage(int minStage) → MachineRecipeBuilderJS`
+
+- **参数表**：`minStage`（`int`）— 最低结构阶段，范围为 1 到 64。
+- **返回**：当前构建器。
+- **抛出**：`IllegalArgumentException`：阶段不在 1 到 64 之间。
+- **示例**：
+
+```javascript
+builder.requiresStage(2)
+```
+
 ##### `requiredHost(String hostId) → MachineRecipeBuilderJS`
 
 - **参数表**：`hostId`（`String`）— 宿主机 ID。
@@ -3276,7 +3441,7 @@ builder.requiredHosts("example:host_a", "example:host_b")
 
 - **参数表**：无。
 - **返回**：不可变 `MachineRecipe`。
-- **抛出**：`IllegalStateException`：未调用 `machine()`；`IllegalArgumentException`：`tickTime < 1`、`energyPerTick < 0`、物品/流体数量为负或物品输出数量为负；`IllegalStateException`：组件输出在 `RecipesKubeEvent` 上下文外调用。
+- **抛出**：`IllegalStateException`：未调用 `recipePool()`；`IllegalArgumentException`：`tickTime < 1`、`energyPerTick < 0`、物品/流体数量为负或物品输出数量为负；`IllegalStateException`：组件输出在 `RecipesKubeEvent` 上下文外调用。
 - **默认值**：根据 `deriveRequirements` 派生 `MachineRequirement`。
 - **示例**：
 
@@ -3642,7 +3807,7 @@ event.createLevelType("example:coil").displayNameKey("level.example.coil").regis
 | `typeId` | `Identifier` | `null` | 父等级类型 ID。 |
 | `priority` | `int` | `0` | 等级优先级。 |
 | `state` | `BlockState` | `null` | 等级表示方块。 |
-| `modifier` | `LevelModifier` | `IDENTITY` | 等级修饰器。 |
+| `modifier` | `ModifierDefinition` | `ModifierDefinition.EMPTY` | 等级生效时应用的修饰符集合。 |
 
 **方法**
 
@@ -3682,17 +3847,21 @@ event.createLevel("example:coil_iron").type("example:coil").priority(0)
 event.createLevel("example:coil_iron").state("minecraft:iron_block")
 ```
 
-#### `modifier(Map<String, Object> modifier) → MachineLevelBuilderJS`
+#### `modifier(ModifierDefinition modifier) → MachineLevelBuilderJS`
 
-- **参数表**：`modifier`（`Map<String,Object>`）— 修饰参数；支持 `durationMultiplier`、`energyMultiplier`、`outputMultiplier`、`parallelismBonus`、`factoryThreadBonus`。
+- **参数表**：`modifier`（`ModifierDefinition`）— 通过 `KubeJSApi.modifierDefinition(...)` 创建的机器修饰符集合。
 - **返回**：当前构建器。
-- **抛出**：`IllegalArgumentException`：任何乘数字段 `<= 0`。
-- **默认值**：`LevelModifier.IDENTITY`。
+- **抛出**：`NullPointerException`：`modifier` 为 `null`。
+- **默认值**：`ModifierDefinition.EMPTY`。
 - **示例**：
 
 ```javascript
+const api = event.getAPI()
 event.createLevel("example:coil_iron")
-    .modifier({ durationMultiplier: 0.95, energyMultiplier: 0.95, parallelismBonus: 4 })
+    .modifier(api.modifierDefinition([
+        api.modifier("duration", "input", 0.95, "multiply", false),
+        api.modifier("parallelism", "machine", 4, "add", false)
+    ]))
 ```
 
 #### `createObject() → MachineLevel`
@@ -3700,7 +3869,7 @@ event.createLevel("example:coil_iron")
 - **参数表**：无。
 - **返回**：不可变 `MachineLevel`。
 - **抛出**：`IllegalStateException`：`type` 或 `state` 未设置。
-- **默认值**：`modifier` 为 `IDENTITY`。
+- **默认值**：`modifier` 为 `ModifierDefinition.EMPTY`。
 - **示例**：
 
 ```javascript
@@ -3913,7 +4082,7 @@ MMCREvents.startup(event => {
 
 ### `MachineRecipeSchema`
 
-> `cn.howxu.mmcr.compat.kubejs.MachineRecipeSchema` 是 `mmcr:machine_recipe` 配方的 `RecipeSchema` 定义（详见第 7 节）。类内部维护 `MACHINE`/`TICK_TIME`/`OUTPUTS`/`MODIFIERS`/`REQUIREMENTS`/`LEVEL_REQUIREMENTS`/`MAX_THREADS`/`PARALLELIZED`/`CANCEL_IF_PER_TICK_FAILS`/`ALLOW_PARTIAL_OUTPUTS` 十个 `RecipeKey`，`JSON_ELEMENT` 通用 JSON 组件，以及静态 `SCHEMA` 实例。
+> `cn.howxu.mmcr.compat.kubejs.MachineRecipeSchema` 是 `mmcr:machine_recipe` 配方的 `RecipeSchema` 定义（详见第 7 节）。类内部维护 `RECIPE_POOL`（`recipe_pool`）/`TICK_TIME`/`OUTPUTS`/`MODIFIERS`/`REQUIREMENTS`/`MAX_THREADS`/`PARALLELIZED`/`CANCEL_IF_PER_TICK_FAILS`/`ALLOW_PARTIAL_OUTPUTS` 九个 `RecipeKey`、`JSON_ELEMENT` 通用 JSON 组件，以及静态 `SCHEMA` 实例。
 
 `register(RecipeSchemaRegistry)` 在插件 `registerRecipeSchemas` 阶段被调用，类内部的 `JsonElementComponent` 提供了 JSON 元素与 KubeJS 类型系统之间的桥接。脚本不应直接构造 `MachineRecipeSchema`，只需通过 `event.custom({ type: "mmcr:machine_recipe", ... })` 使用其注册的字段与函数。
 

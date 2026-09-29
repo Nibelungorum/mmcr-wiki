@@ -264,7 +264,8 @@ Java API 不支持运行时热重载接口绑定。修改谓词后必须重新�
 @SubscribeEvent
 public static void registerRecipes(MMCRMachineRecipesEvent event) {
     MachineRecipeDefinition recipe = MachineRecipeBuilder
-            .recipe(MY_FIRST_MACHINE.withSuffix("_recipe_1"), MY_FIRST_MACHINE)
+            .recipe(MY_FIRST_MACHINE.withSuffix("_recipe_1"))
+            .recipePool(MY_FIRST_MACHINE)
             .inputItem(Ingredient.of(Items.IRON_INGOT), 1)
             .outputItem(Items.IRON_NUGGET, 10)
             .iFEt(10)
@@ -279,7 +280,8 @@ public static void registerRecipes(MMCRMachineRecipesEvent event) {
 本示例中调用的接口含义：
 
 - `MMCRMachineRecipesEvent.registerRecipe(MachineRecipeDefinition)`：将配方提交到注册窗口。重复 ID 会抛出 `IllegalStateException`。
-- `MachineRecipeBuilder.recipe(Identifier id, Identifier machineId)`：创建配方构建器，第一个参数为配方 ID，第二个参数为所属机器 ID。
+- `MachineRecipeBuilder.recipe(Identifier id)`：创建配方构建器。
+- `MachineRecipeBuilder.recipePool(Identifier recipePoolId)`：指定配方所属的配方池；机器定义必须声明该配方池。
 - `MachineRecipeBuilder.inputItem(Ingredient, int)`：声明物品输入。
 - `MachineRecipeBuilder.outputItem(Item, int)`：声明物品输出。
 - `MachineRecipeBuilder.inputEnergy(long)`：声明每 tick 消耗的 FE 能量。
@@ -291,7 +293,7 @@ public static void registerRecipes(MMCRMachineRecipesEvent event) {
 | 字段 | 值 | 含义 |
 | --- | --- | --- |
 | `id` | `my_mod:my_first_machine_recipe_1` | 配方注册 ID |
-| `machineId` | `my_mod:my_first_machine` | 所属机器 ID |
+| `recipePoolId` | `my_mod:my_first_machine` | 所属配方池 ID |
 | `inputItem` | `IRON_INGOT × 1` | 消耗 1 个铁锭 |
 | `outputItem` | `IRON_NUGGET × 10` | 产出 10 个铁粒 |
 | `iFEt` | `10 FE/tick` | 每 tick 消耗 10 FE |

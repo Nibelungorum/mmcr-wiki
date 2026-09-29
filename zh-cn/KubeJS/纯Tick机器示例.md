@@ -25,7 +25,7 @@ order: 12
 | `MMCR.getAPI()` | [链接](../API/KubeJS#getapi--kubejsapi) |
 | `event.createMachine(...)` | [链接](../API/KubeJS#createmachinestring-id--machinebuilderjs) |
 | `MachineBuilderJS.displayNameKey(...)` | [链接](../API/KubeJS#displaynamekeystring-key--machinebuilderjs) |
-| `MachineBuilderJS.recipePool(...)` | [链接](../API/KubeJS#recipepoolstring-recipepoolid--machinebuilderjs) |
+| `MachineBuilderJS.recipePool(...)` | [链接](../API/KubeJS#recipepool-string-recipepoolids-%E2%86%92-machinebuilderjs) |
 | `MachineBuilderJS.appearance(...)` | [链接](../API/KubeJS#appearancestring-machinebasicblock--machinebuilderjs) |
 | `MachineBuilderJS.allowMultithreading()` | [链接](../API/KubeJS#allowmultithreading--machinebuilderjs) |
 | `MachineBuilderJS.allowParallelism()` | [链接](../API/KubeJS#allowparallelism--machinebuilderjs) |
@@ -37,9 +37,9 @@ order: 12
 | `KubeJSApi.recipeIO()` | [链接](../API/KubeJS#recipeio--recipeiovalues) |
 | `KubeJSApi.id(...)` | [链接](../API/KubeJS#idstring-id--identifier) |
 | `KubeJSApi.screenScope()` | [链接](../API/KubeJS#screenscope--screenscopevalues) |
-| `KubeJSApi.energyRequirement(...)` | [链接](../API/KubeJS#energyrequirementrecipeio-io-int-fepertick--machinerequirement) |
+| `KubeJSApi.energyRequirement(...)` | [链接](../API/KubeJS#energyrequirement-recipeio-io-long-fepertick-%E2%86%92-machinerequirement) |
 | `KubeJSApi.itemInputRequirement(...)` | [链接](../API/KubeJS#iteminputrequirementstring-itemid-int-count--machinerequirement) |
-| `KubeJSApi.itemOutputRequirement(...)` | [链接](../API/KubeJS#itemoutputrequirementstring-itemid-int-count-float-chance--machinerequirement) |
+| `KubeJSApi.itemOutputRequirement(...)` | [链接](../API/KubeJS#itemoutputrequirement-string-itemid-long-count-float-chance-%E2%86%92-machinerequirement) |
 | `event.registerControllerScreenText(...)` | [链接](../API/KubeJS#registercontrollerscreentextstring-machineid-consumercontrollerscreentexteventjs-handler--void) |
 | `ControllerScreenTextEventJS.append(...)` | [链接](../API/KubeJS#appendstring-scope-string-lineid-component-text--void) |
 | `KubeJSApi.block(...)` / `anyOf(...)` | [链接](../API/KubeJS#blockstring-blockid--blockpredicate) / [链接](../API/KubeJS#anyofblockpredicate-children--blockpredicate) |
@@ -179,7 +179,7 @@ if (!plan_fe.commit().successful()) {
 - `simulate()` 返回 `Simulation`，其中 `energySatisfied()` 告诉调用者能量总线是否有足够的 10 FE。
 - `commit()` 产生消耗。`simulate()` 不会改动物品 / 能量，是一个只读模拟。
 
-[`api.energyRequirement(api.recipeIO().INPUT, 10)`](../API/KubeJS#energyrequirementrecipeio-io-int-fepertick--machinerequirement) 构造"10 FE 输入"需求。
+[`api.energyRequirement(api.recipeIO().INPUT, 10)`](../API/KubeJS#energyrequirement-recipeio-io-long-fepertick-%E2%86%92-machinerequirement) 构造"10 FE 输入"需求。
 
 屏幕文本用 `ctx.screenText().replace(lineId, text)` 替换上一帧同 ID 的内容。这是 KubeJS 端 [`ControllerScreenTextEventJS.replace(...)`](../API/KubeJS#replacestring-lineid-component-text--void)。
 

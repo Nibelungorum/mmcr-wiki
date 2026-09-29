@@ -13,10 +13,12 @@ title: JavaAPI
 - `cn.howxu.mmcr.api.publicapi` — 顶层接口与运行时入口（`MachineApi`、`RecipeApi`、`ReadableNumber`、`ApiRegistrationException`、`ApiRuntime`、`MachineDefinitionProvider` 等）。
 - `cn.howxu.mmcr.api.publicapi.event` — 事件总线事件。
 - `cn.howxu.mmcr.api.publicapi.machine` — 机器相关类型。
-- `cn.howxu.mmcr.api.publicapi.recipe` — 配方相关类型（含 `MachineRecipeBuilder` 的 `recipePool(Identifier)` 与 `LevelRequirement`）。
+- `cn.howxu.mmcr.api.publicapi.recipe` — 配方相关类型（含 `MachineRecipeBuilder.recipePool(Identifier)` 与配方需求）。
 - `cn.howxu.mmcr.api.publicapi.recipe.component` — 配方组件谓词（`ComponentPredicate`、`DataComponentPredicateSet`）。
 - `cn.howxu.mmcr.api.publicapi.recipe.modifier` — 配方修饰符操作名（`RecipeModifier.IOType`、`RecipeModifier.Operation`）。
 - `cn.howxu.mmcr.api.publicapi.recipe.requirement` — 配方需求项边界接口（`MachineRequirement`、`CustomRequirement`）。
+- `cn.howxu.mmcr.api.publicapi.jei` — JEI 工作台注册记录。
+- `cn.howxu.mmcr.api.machine.modifier` — 被 `ModifierDefinition` 引用的机器修饰符值类型。
 - `cn.howxu.mmcr.api.publicapi.data` — 机器数据存储与值包装（`DataStorage`、`DataValue`、`DataValueType`、`DataReservation`、`DataRepository*`）。
 - `cn.howxu.mmcr.api.publicapi.network` — 机器网络通信（`NetworkApi`、`MachineReference`、`NetworkInterfaceReference`、`RequestBody`、`RequestInfo`、`RequestProcess`、`RequestFailed`、`RequestFailureReason`）。
 - `cn.howxu.mmcr.api.publicapi.controller` — 控制器屏幕文本与 Jade。
@@ -176,6 +178,7 @@ public final class MachineBuilder {
     public static MachineBuilder machine(Identifier id);
 
     public MachineBuilder displayNameKey(String displayNameKey);
+    public MachineBuilder recipePool(Identifier... recipePoolIds);
     public MachineBuilder controller(UnaryOperator<ControllerSpec.Builder> builder);
     public MachineBuilder appearance(UnaryOperator<AppearanceSpec.Builder> builder);
     public MachineBuilder factory(UnaryOperator<FactorySpec.Builder> builder);
@@ -242,24 +245,25 @@ public final class MachineBuilder {
 
 自定义配方行为（`idleStart`、`recipeTick`、`beforeFinish` 等钩子）。
 
-#### `recipePool(Identifier recipePoolId)`
+#### `recipePool(Identifier... recipePoolIds)`
 
-声明机器所属的配方池。同一配方池内的机器在 JEI 与重载流水线中按 ID 分组。
+声明机器所属的一个或多个配方池。配方池 ID 按传入顺序保存；未调用时，机器 ID 默认作为唯一配方池。
 
 | 参数 | 类型 | 含义 |
 | --- | --- | --- |
-| `recipePoolId` | `Identifier` | 配方池 ID。若不调用，`MachineDefinition` 构造时回退到机器 ID。 |
+| `recipePoolIds` | `Identifier...` | 有序配方池 ID 列表，至少包含一个 ID，不能重复。 |
 
 抛出：
 
-- `NullPointerException`：`recipePoolId` 为 `null`（由 `Objects.requireNonNull` 抛出）。
+- `IllegalArgumentException`：未传入配方池 ID，或列表中有重复 ID。
+- `NullPointerException`：可变参数数组或其中某个 ID 为 `null`。
 
 源码：
 
 ```java
 // cn.howxu.mmcr.api.publicapi.machine.MachineBuilder
-public MachineBuilder recipePool(Identifier recipePoolId) {
-    this.recipePoolId = Objects.requireNonNull(recipePoolId, "recipePoolId");
+public MachineBuilder recipePool(Identifier... recipePoolIds) {
+    this.recipePoolIds = MachineRegistration.copyRecipePoolIds(id, List.of(recipePoolIds));
     return this;
 }
 ```
@@ -269,8 +273,12 @@ public MachineBuilder recipePool(Identifier recipePoolId) {
 ```java
 event.registerMachine(MY_MACHINE, builder -> builder
         .displayNameKey("machine.my_mod.my_machine")
-        .recipePool(Identifier.fromNamespaceAndPath("my_mod", "shared_pool")));
+        .recipePool(
+                Identifier.fromNamespaceAndPath("my_mod", "shared_pool"),
+                Identifier.fromNamespaceAndPath("my_mod", "alternate_pool")));
 ```
+
+机器可同时属于多个配方池。每条配方仍只指定一个配方池；同一个机器的配方池选择顺序与这里传入的顺序一致。
 
 #### `tickBehavior(Consumer<TickBehavior.Builder> builder)`
 
@@ -385,7 +393,7 @@ event.registerMachine(MY_MACHINE, builder -> builder
 ```java
 public record MachineDefinition(
         Identifier id,
-        Identifier recipePoolId,
+        List<Identifier> recipePoolIds,
         String displayNameKey,
         ControllerSpec controller,
         AppearanceSpec appearance,
@@ -408,7 +416,9 @@ public record MachineDefinition(
         BlockArray pattern,
         MachineBehavior behavior,
         Map<Identifier, RequestProcess> requestProcessors,
-        Map<Identifier, RequestFailed> requestFailures) { ... }
+        Map<Identifier, RequestFailed> requestFailures) {
+    public Identifier recipePoolId();
+}
 ```
 
 #### 字段
@@ -416,7 +426,7 @@ public record MachineDefinition(
 | 字段 | 类型 | 含义 |
 | --- | --- | --- |
 | `id` | `Identifier` | 机器注册 ID。 |
-| `recipePoolId` | `Identifier` | 配方池 ID；构造时若仍为 `null` 回退为机器 ID。 |
+| `recipePoolIds` | `List<Identifier>` | 有序配方池 ID 列表；未指定时使用机器 ID 作为唯一配方池。 |
 | `displayNameKey` | `String` | 本地化键名。如果未指定则回退到 `machine.<命名空间>.<注册名>`。 |
 | `controller` | `ControllerSpec` | 控制器规格。 |
 | `appearance` | `AppearanceSpec` | 外观规格。 |
@@ -440,6 +450,8 @@ public record MachineDefinition(
 | `behavior` | `MachineBehavior` | 机器行为实现（配方行为 / tick 行为）。 |
 | `requestProcessors` | `Map<Identifier, RequestProcess>` | 请求处理器映射。 |
 | `requestFailures` | `Map<Identifier, RequestFailed>` | 请求失败处理器映射。 |
+
+`recipePoolId()` 为兼容单配方池调用方保留的访问器，返回 `recipePoolIds` 中的第一个 ID。
 
 #### 构造约束
 
@@ -470,7 +482,9 @@ public record MachineDefinition(
 public record AppearanceSpec(
         Identifier machineBasicBlock,
         Identifier controllerBaseTexture,
-        Identifier formedPortBaseTexture) {
+        Identifier formedPortBaseTexture,
+        Identifier controllerIdleOverlayTexture,
+        Identifier controllerActiveOverlayTexture) {
     public static Builder builder();
 }
 ```
@@ -489,6 +503,8 @@ public static final class Builder {
     public Builder machineBasicBlock(String machineBasicBlock);
     public Builder controllerBaseTexture(Identifier controllerBaseTexture);
     public Builder formedPortBaseTexture(Identifier formedPortBaseTexture);
+    public Builder controllerIdleOverlayTexture(Identifier controllerIdleOverlayTexture);
+    public Builder controllerActiveOverlayTexture(Identifier controllerActiveOverlayTexture);
 
     public AppearanceSpec build();
 }
@@ -499,11 +515,13 @@ public static final class Builder {
 | `machineBasicBlock(...)` | 设置机器未成型时的基础方块。 |
 | `controllerBaseTexture(...)` | 设置控制器方块的底面纹理 ID。 |
 | `formedPortBaseTexture(...)` | 设置成型后端口方块的底面纹理 ID。 |
+| `controllerIdleOverlayTexture(...)` | 设置控制器空闲状态的覆盖纹理 ID。 |
+| `controllerActiveOverlayTexture(...)` | 设置控制器运行状态的覆盖纹理 ID。 |
 | `build()` | 终结构建，返回不可变的 `AppearanceSpec`。 |
 
 :::warning 注意事项
 
-- 三个字段都是可选的，未设置时为 `null`。MMCR 在内部使用各自的回退值。
+- 五个字段都是可选的，未设置时为 `null`；覆盖纹理不设置时不绘制覆盖层。
 - 字符串 ID 通过 `Identifier.parse(...)` 解析；非法字符串会抛 `IllegalArgumentException`。
 - 外观纹理与基础方块的 ID 必须指向已注册的资源；未注册的 ID 不会立即报错，而是在首次渲染时表现为默认纹理。
 
@@ -959,6 +977,30 @@ public final class InterfacePredicates {
     public static BlockPredicate anyEnergyInput();
     public static BlockPredicate anyOfEnergyOutput();
     public static BlockPredicate anyEnergyOutput();
+    public static BlockPredicate anyOfItemPorts();
+    public static BlockPredicate anyItemPorts();
+    public static BlockPredicate anyOfFluidPorts();
+    public static BlockPredicate anyFluidPorts();
+    public static BlockPredicate anyOfEnergyPorts();
+    public static BlockPredicate anyEnergyPorts();
+    public static BlockPredicate anyOfChemicalInput();
+    public static BlockPredicate anyChemicalInput();
+    public static BlockPredicate anyOfChemicalOutput();
+    public static BlockPredicate anyChemicalOutput();
+    public static BlockPredicate anyOfRadioactiveChemicalInput();
+    public static BlockPredicate anyRadioactiveChemicalInput();
+    public static BlockPredicate anyOfRadioactiveChemicalOutput();
+    public static BlockPredicate anyRadioactiveChemicalOutput();
+    public static BlockPredicate anyOfChemicalPorts();
+    public static BlockPredicate anyChemicalPorts();
+    public static BlockPredicate anyOfRadioactiveChemicalPorts();
+    public static BlockPredicate anyRadioactiveChemicalPorts();
+    public static BlockPredicate anyOfHeatInput();
+    public static BlockPredicate anyHeatInput();
+    public static BlockPredicate anyOfHeatOutput();
+    public static BlockPredicate anyHeatOutput();
+    public static BlockPredicate anyOfHeatPorts();
+    public static BlockPredicate anyHeatPorts();
     public static BlockPredicate anyOfUpgradeBus();
     public static BlockPredicate anyUpgradeBus();
     public static BlockPredicate ports();
@@ -986,8 +1028,20 @@ public final class InterfacePredicates {
 | `anyOfFluidOutput()` / `anyFluidOutput()` | 所有内置流体输出端口 |
 | `anyOfEnergyInput()` / `anyEnergyInput()` | 所有内置能量输入端口 |
 | `anyOfEnergyOutput()` / `anyEnergyOutput()` | 所有内置能量输出端口 |
+| `anyOfItemPorts()` / `anyItemPorts()` | 所有内置物品输入与输出端口 |
+| `anyOfFluidPorts()` / `anyFluidPorts()` | 所有内置流体输入与输出端口 |
+| `anyOfEnergyPorts()` / `anyEnergyPorts()` | 所有内置能量输入与输出端口 |
+| `anyOfChemicalInput()` / `anyChemicalInput()` | Mekanism 化学品输入端口 |
+| `anyOfChemicalOutput()` / `anyChemicalOutput()` | Mekanism 化学品输出端口 |
+| `anyOfChemicalPorts()` / `anyChemicalPorts()` | Mekanism 化学品输入与输出端口 |
+| `anyOfRadioactiveChemicalInput()` / `anyRadioactiveChemicalInput()` | Mekanism 放射性化学品输入端口 |
+| `anyOfRadioactiveChemicalOutput()` / `anyRadioactiveChemicalOutput()` | Mekanism 放射性化学品输出端口 |
+| `anyOfRadioactiveChemicalPorts()` / `anyRadioactiveChemicalPorts()` | Mekanism 放射性化学品输入与输出端口 |
+| `anyOfHeatInput()` / `anyHeatInput()` | Mekanism 热量输入端口 |
+| `anyOfHeatOutput()` / `anyHeatOutput()` | Mekanism 热量输出端口 |
+| `anyOfHeatPorts()` / `anyHeatPorts()` | Mekanism 热量输入与输出端口 |
 | `anyOfUpgradeBus()` / `anyUpgradeBus()` | 所有尺寸的内置升级总线 |
-| `ports()` | 所有内置端口（物品 + 流体 + 能量，输入 + 输出） |
+| `ports()` | 所有内置端口；Mekanism 可用时还包含化学品、放射性化学品与热量端口 |
 
 `anyOf...()` 与 `any...()` 完全等价，命名风格的差异仅为兼容旧版 API。
 
@@ -1012,6 +1066,7 @@ public final class InterfacePredicates {
 :::warning 注意事项
 
 - 端口"族"快捷方法通过遍历所有已注册端口的实现，匹配绑定到指定族与流向的端口方块。新增自定义端口后这些快捷方法会自动包含。
+- `anyOfChemical...()`、`anyOfRadioactiveChemical...()` 与 `anyOfHeat...()` 在 Mekanism 未加载时返回不匹配任何方块的谓词。
 - 不要在结构中使用 `ports()` 作为某个字符的绑定，除非该字符位置允许任意端口。
 - `parallelControllers()` 匹配所有等级的并行控制器。如果只允许特定等级，应使用 `port("parallel_controller_normal")` 等精确 ID。
 - `anyOfPort()` 的所有变体都要求至少一个端口参数。
@@ -1161,8 +1216,8 @@ public final class MyRecipeRegistrar {
     @SubscribeEvent
     public static void register(MMCRMachineRecipesEvent event) {
         event.registerRecipe(MachineRecipeBuilder
-                .recipe(Identifier.fromNamespaceAndPath("my_mod", "my_recipe"),
-                        MY_MACHINE)
+                .recipe(Identifier.fromNamespaceAndPath("my_mod", "my_recipe"))
+                .recipePool(MY_POOL)
                 .duration(200)
                 .inputItem(Ingredient.of(Items.IRON_INGOT), 1)
                 .outputItem(Items.IRON_NUGGET, 10)
@@ -1185,11 +1240,11 @@ public final class MyRecipeRegistrar {
 
 #### `recipes()`
 
-返回当前已注册的全部配方的不可变快照。幂等检查应针对具体配方 ID，而非机器 ID：
+返回当前已注册的全部配方的不可变快照。幂等检查应针对具体配方 ID：
 
 ```java
 if (event.recipes().containsKey(MY_RECIPE)) return;
-event.registerRecipe(MY_RECIPE, ...);
+event.registerRecipe(MachineRecipeBuilder.recipe(MY_RECIPE).recipePool(MY_POOL).build());
 ```
 
 #### `freeze()`
@@ -1205,21 +1260,127 @@ MMCR 在配方加载阶段创建并发布该事件。生产构建中配方不可
 - 配方事件是 NeoForge 事件总线事件，必须通过 `@SubscribeEvent` 订阅。
 - 配方 ID 必须全局唯一，跨机器不可重复。
 - 数据驱动的配方（`data/<namespace>/recipes/*.json` 或 KubeJS `ServerEvents.recipes`）走另外一条通道，不通过此事件。
-- 配方与机器的耦合只通过机器 ID：配方 ID 不必包含机器 ID，但建议使用 `<machine_id>_<recipe_index>` 命名以便阅读。
+- 配方通过配方池 ID 归类；一台机器可以属于多个配方池。
 
 ---
 :::
+
+### `MMCRJeiRecipeInformationEvent`
+
+完整类名：`cn.howxu.mmcr.api.publicapi.event.MMCRJeiRecipeInformationEvent`
+
+客户端 JEI 事件，用于给 MMCR 配方池页或单条配方添加本地化说明。事件在 JEI 注册配方分类时发布。
+
+#### 类签名
+
+```java
+public final class MMCRJeiRecipeInformationEvent extends Event {
+    public void registerRecipePool(Identifier poolId, String translationKey, Object... arguments);
+    public void registerRecipe(Identifier recipeId, String translationKey, Object... arguments);
+    public void freeze();
+    public List<RecipeInformation> entries();
+}
+```
+
+| 方法 | 含义 |
+| --- | --- |
+| `registerRecipePool(poolId, translationKey, arguments...)` | 为指定配方池页添加翻译文本。 |
+| `registerRecipe(recipeId, translationKey, arguments...)` | 为指定配方添加翻译文本。 |
+| `entries()` | 返回当前注册条目的不可变快照。 |
+| `freeze()` | 关闭注册窗口；之后再注册会抛 `IllegalStateException`。 |
+
+`translationKey` 不能为 `null` 或空白；应在语言文件中提供对应条目。`arguments` 会传给 `Component.translatable(...)`。在注册窗口冻结后调用 `registerRecipePool` / `registerRecipe` 会抛 `IllegalStateException`。
+
+#### 订阅示例
+
+```java
+@EventBusSubscriber(modid = "my_mod")
+public final class MyJeiInformation {
+    @SubscribeEvent
+    public static void register(MMCRJeiRecipeInformationEvent event) {
+        event.registerRecipePool(MY_POOL, "jei.my_mod.pool.info", 10);
+        event.registerRecipe(MY_RECIPE, "jei.my_mod.recipe.info", "extra");
+    }
+}
+```
+
+### `RecipeInformation`
+
+完整类名：`cn.howxu.mmcr.api.publicapi.recipe.RecipeInformation`
+
+JEI 配方信息记录，关联到一个配方池或单条配方，并在客户端转换为本地化 `Component`。
+
+```java
+public record RecipeInformation(
+        Target target, Identifier targetId, String translationKey, List<Object> arguments) {
+    public static RecipeInformation pool(Identifier poolId, String translationKey, Object... arguments);
+    public static RecipeInformation recipe(Identifier recipeId, String translationKey, Object... arguments);
+    public Component component();
+
+    public enum Target { RECIPE_POOL, RECIPE }
+}
+```
+
+所有字段不可变；`translationKey` 不能为 `null` 或空白，标识符和 `target` 不能为 `null`。`component()` 等价于 `Component.translatable(translationKey, arguments...)`。
+
+### `MMCRJeiWorkstationsEvent`
+
+完整类名：`cn.howxu.mmcr.api.publicapi.event.MMCRJeiWorkstationsEvent`
+
+客户端 JEI 事件，用于把工作台方块或物品关联到 MMCR 配方池页，或把 MMCR 控制器关联到其他 JEI 配方类型。事件在 JEI 注册工作台时发布。
+
+#### 类签名
+
+```java
+public final class MMCRJeiWorkstationsEvent extends Event {
+    public void addRecipePoolWorkstation(Identifier recipePoolId, ItemLike workstation);
+    public void addRecipePoolWorkstation(Identifier recipePoolId, Identifier itemId);
+    public void addRecipePoolWorkstation(Identifier recipePoolId, ItemStack workstation);
+    public void addMachineWorkstation(Identifier machineId, Identifier recipeTypeId);
+    public void freeze();
+    public List<JeiWorkstationRegistration> entries();
+}
+```
+
+- `addRecipePoolWorkstation(...)`：把物品添加为指定配方池 JEI 页的工作台。
+- `addMachineWorkstation(...)`：把指定机器控制器添加为任意 JEI 配方类型的工作台。
+- 注册窗口冻结后再添加条目会抛 `IllegalStateException`。未注册的池、机器、物品或 JEI 配方类型会在 JEI 应用注册时跳过并记录警告。
+
+```java
+@EventBusSubscriber(modid = "my_mod")
+public final class MyJeiWorkstations {
+    @SubscribeEvent
+    public static void register(MMCRJeiWorkstationsEvent event) {
+        event.addRecipePoolWorkstation(MY_POOL, Blocks.BLAST_FURNACE);
+        event.addMachineWorkstation(MY_MACHINE, Identifier.parse("minecraft:smelting"));
+    }
+}
+```
+
+### `JeiWorkstationRegistration`
+
+完整类名：`cn.howxu.mmcr.api.publicapi.jei.JeiWorkstationRegistration`
+
+JEI 工作台关联的 sealed 接口，包含三种记录：
+
+| 记录 | 字段 | 含义 |
+| --- | --- | --- |
+| `RecipePoolItem(Identifier recipePoolId, Identifier itemId)` | 配方池 ID、物品 ID | 用物品作为 MMCR 配方池页的工作台。 |
+| `RecipePoolStack(Identifier recipePoolId, ItemStack workstation)` | 配方池 ID、物品栈 | 用指定物品栈作为 MMCR 配方池页的工作台；数量规范为 1。 |
+| `Machine(Identifier machineId, Identifier recipeTypeId)` | 机器 ID、JEI 配方类型 ID | 用 MMCR 控制器作为其他 JEI 配方类型的工作台。 |
+
 ### `MachineRecipeBuilder`
 
 完整类名：`cn.howxu.mmcr.api.publicapi.recipe.MachineRecipeBuilder`
 
-配方阶段的入口构建器，由用户直接调用 `recipe(id, machineId)` 创建。
+配方阶段的入口构建器，由用户调用 `recipe(id)` 创建，再通过 `recipePool(...)` 指定该配方所属的配方池。
 
 #### 类签名
 
 ```java
 public final class MachineRecipeBuilder {
-    public static MachineRecipeBuilder recipe(Identifier id, Identifier machineId);
+    public static MachineRecipeBuilder recipe(Identifier id);
+    public MachineRecipeBuilder recipePool(Identifier recipePoolId);
 
     public MachineRecipeBuilder duration(int duration);
     public MachineRecipeBuilder priority(int priority);
@@ -1245,6 +1406,7 @@ public final class MachineRecipeBuilder {
     public MachineRecipeBuilder outputChance(ItemStack stack, float chance, DataComponentPredicateSet components);
 
     public MachineRecipeBuilder levelRequirement(Identifier typeId, Identifier levelId);
+    public MachineRecipeBuilder stageRequirement(int minStage);
     public MachineRecipeBuilder requiredHost(Identifier hostId);
 
     public MachineRecipeBuilder requirement(RecipeRequirement requirement);
@@ -1256,16 +1418,22 @@ public final class MachineRecipeBuilder {
 }
 ```
 
-#### `recipe(Identifier id, Identifier machineId)`
+#### `recipe(Identifier id)`
 
 | 参数 | 类型 | 含义 |
 | --- | --- | --- |
 | `id` | `Identifier` | 配方 ID，必须全局唯一。 |
-| `machineId` | `Identifier` | 所属机器的注册 ID，必须已在机器定义阶段声明。 |
 
 抛出：
 
-- `IllegalArgumentException`：`id` 或 `machineId` 为 `null`。
+- `IllegalArgumentException`：`id` 为 `null`。
+
+#### `recipePool(Identifier recipePoolId)`
+
+指定这条配方所属的配方池。目标配方池必须由至少一台机器声明。
+
+- `recipePoolId` 为 `null` 时，在 `build()` 阶段抛 `IllegalStateException`。
+- 一台机器可以声明多个配方池，但一条配方只属于一个配方池。
 
 #### 行为控制方法
 
@@ -1307,6 +1475,7 @@ public final class MachineRecipeBuilder {
 | 方法 | 含义 |
 | --- | --- |
 | `levelRequirement(Identifier typeId, Identifier levelId)` | 声明等级要求。等级类型与等级必须在 `MMCRMachineStructuresEvent` 阶段注册。 |
+| `stageRequirement(int minStage)` | 要求结构至少匹配指定阶段；`minStage` 范围为 1 到 64。 |
 | `requiredHost(Identifier hostId)` | 声明宿主机器要求。 |
 | `modifier(Identifier modifierId)` | 声明配方接受的修饰符。 |
 
@@ -1320,6 +1489,8 @@ public final class MachineRecipeBuilder {
 #### `build()`
 
 终结构建，返回不可变的 `MachineRecipeDefinition`。约束由构建器在 `build()` 阶段进行最终检查。
+
+必须先调用 `recipePool(...)`；未指定配方池时抛 `IllegalStateException`。
 
 :::warning 注意事项
 
@@ -1340,7 +1511,7 @@ public final class MachineRecipeBuilder {
 ```java
 public record MachineRecipeDefinition(
         Identifier id,
-        Identifier machineId,
+        Identifier recipePoolId,
         int tickTime,
         int priority,
         int maxThreads,
@@ -1356,7 +1527,6 @@ public record MachineRecipeDefinition(
         List<RecipeRequirement> requirements,
         List<CustomRecipeIo> customOutputs,
         List<Identifier> modifierIds,
-        List<LevelRequirement> levelRequirements,
         Set<RequiredHost> requiredHosts) {
     public Set<Identifier> requiredHostIds();
 }
@@ -1367,7 +1537,7 @@ public record MachineRecipeDefinition(
 | 字段 | 类型 | 含义 |
 | --- | --- | --- |
 | `id` | `Identifier` | 配方 ID，全局唯一。 |
-| `machineId` | `Identifier` | 所属机器的注册 ID。 |
+| `recipePoolId` | `Identifier` | 所属配方池 ID。 |
 | `tickTime` | `int` | 持续时间（tick）。`< 1` 抛 `IllegalArgumentException`。 |
 | `priority` | `int` | 配方优先级。`< 0` 抛 `IllegalArgumentException`。 |
 | `maxThreads` | `int` | 最大线程数。`< 1` 抛 `IllegalArgumentException`。 |
@@ -1383,8 +1553,9 @@ public record MachineRecipeDefinition(
 | `requirements` | `List<RecipeRequirement>` | 全部输入输出与自定义条目。 |
 | `customOutputs` | `List<CustomRecipeIo>` | 自定义输出条目。 |
 | `modifierIds` | `List<Identifier>` | 接受的修饰符 ID 列表。 |
-| `levelRequirements` | `List<LevelRequirement>` | 等级要求列表。 |
 | `requiredHosts` | `Set<RequiredHost>` | 宿主机器要求集合。 |
+
+`requirements` 同时包含物品、流体、能量、等级、阶段、智能接口及自定义需求；`MachineRecipeDefinition` 不再单独保存等级要求列表。
 
 #### `requiredHostIds()`
 
@@ -1392,7 +1563,7 @@ public record MachineRecipeDefinition(
 
 #### 构造约束
 
-- `id` / `machineId` 不能为 `null`。
+- `id` / `recipePoolId` 不能为 `null`。
 - `tickTime < 1` 抛 `IllegalArgumentException`。
 - `priority < 0` 抛 `IllegalArgumentException`。
 - `maxThreads < 1` 抛 `IllegalArgumentException`。
@@ -1401,7 +1572,7 @@ public record MachineRecipeDefinition(
 
 - `MachineRecipeDefinition` 是不可变值对象，构建后全部字段都不可修改。
 - 能量输出字段复用 `EnergyInput` 类型，由 `ioType` 区分输入 / 输出。
-- 配方 ID 必须全局唯一，跨机器不可重复。
+- 配方 ID 必须全局唯一；配方归属由 `recipePoolId` 决定。
 
 ---
 :::
@@ -3041,7 +3212,7 @@ public record MachineLevel(
         int priority,
         BlockPredicate statePredicate,
         DisplayStack representative,
-        LevelModifier modifier);
+        ModifierDefinition modifier);
 ```
 
 #### 字段
@@ -3053,7 +3224,7 @@ public record MachineLevel(
 | `priority` | `int` | 优先级。数值越大越优先（决定结构匹配时多个等级并存时的优先级）。 |
 | `statePredicate` | `BlockPredicate` | 等级槽位方块必须满足的状态谓词。 |
 | `representative` | `DisplayStack` | 用于屏幕 / JADE 显示的代表物品。 |
-| `modifier` | `LevelModifier` | 该等级生效时的配方修正系数。 |
+| `modifier` | `ModifierDefinition` | 该等级生效时应用的机器修饰符集合。 |
 
 构造约束：
 
@@ -3068,65 +3239,14 @@ MachineLevel lv = new MachineLevel(
         10,
         BlockPredicate.block(Items.DIAMOND_BLOCK),
         DisplayStack.of(new ItemStack(Items.DIAMOND)),
-        new LevelModifier(0.5D, 1.5D, 1.0D, 0, 0));
+        ModifierDefinition.of("duration", "input", 0.9D, "multiply", false));
 event.registerLevel(lv);
 ```
 
 :::warning 注意事项
 
 - `statePredicate` 必须与等级槽位字符所绑定的方块一致；不一致会导致结构匹配时该等级被忽略。
-- `modifier` 影响所有走该机器的配方：持续时间倍率小于 1 表示加速，大于 1 表示减速；并行度加成加到机器原本的并行上限上。
-
----
-:::
-### `LevelModifier`
-
-完整类名：`cn.howxu.mmcr.api.publicapi.machine.LevelModifier`
-
-等级生效时的配方修正系数。包含五个字段，全部乘数 / 加成。
-
-#### 记录签名
-
-```java
-public record LevelModifier(
-        double durationMultiplier,
-        double energyMultiplier,
-        double outputMultiplier,
-        int parallelismBonus,
-        int factoryThreadBonus);
-```
-
-#### 字段
-
-| 字段 | 类型 | 含义 |
-| --- | --- | --- |
-| `durationMultiplier` | `double` | 持续时间乘数。`<= 0` 抛 `IllegalArgumentException`。`< 1` 加速，`> 1` 减速。 |
-| `energyMultiplier` | `double` | 能量乘数。`<= 0` 抛 `IllegalArgumentException`。 |
-| `outputMultiplier` | `double` | 输出数量乘数。`<= 0` 抛 `IllegalArgumentException`。 |
-| `parallelismBonus` | `int` | 并行加成（加到机器 `maxParallelism`）。 |
-| `factoryThreadBonus` | `int` | 工厂线程加成（加到机器工厂线程上限）。 |
-
-#### 静态常量
-
-| 常量 | 含义 |
-| --- | --- |
-| `IDENTITY` | `(1D, 1D, 1D, 0, 0)`，无任何修正。 |
-
-#### 构造约束
-
-- 三个乘数字段任一 `≤ 0` → `IllegalArgumentException("Machine level multipliers must be positive")`。
-
-#### 示例
-
-```java
-LevelModifier speedTwo = new LevelModifier(0.5D, 1.0D, 1.0D, 0, 0); // 2x 加速
-LevelModifier bonus = new LevelModifier(1.0D, 1.0D, 2.0D, 4, 1);      // 2x 输出、+4 并行、+1 线程
-```
-
-:::warning 注意事项
-
-- 乘数对配方持续时间的影响在 `beforeStart` 钩子应用之前就已计算完毕——回调中的 `duration()` 反映的是等级修正后的结果。
-- `parallelismBonus` 会直接加到 `MachineDefinition.maxParallelism` 上；超过 `maxParallelAmount` 的并行度上限仍受机器配置约束。
+- `modifier` 使用与结构修饰符相同的 `ModifierDefinition` / `MachineModifier` 模型，可修改耗时、能耗、输出或机器调度参数。
 
 ---
 :::
@@ -3173,7 +3293,8 @@ public record LevelRequirement(RecipeIo io, Identifier typeId, Identifier levelI
 #### 示例
 
 ```java
-MachineRecipeBuilder.recipe(MY_RECIPE, MY_MACHINE)
+MachineRecipeBuilder.recipe(MY_RECIPE)
+        .recipePool(MY_POOL)
         .levelRequirement(
                 Identifier.fromNamespaceAndPath("my_mod", "tech_level"),
                 Identifier.fromNamespaceAndPath("my_mod", "tech_level/mk2"));
@@ -3199,9 +3320,11 @@ MachineRecipeBuilder.recipe(MY_RECIPE, MY_MACHINE)
 #### 记录签名
 
 ```java
-public record ModifierDefinition(List<RecipeModifier> modifiers) {
-    public static ModifierDefinition of(String target, String ioTarget, float modifier, String operation,
+public record ModifierDefinition(List<MachineModifier> modifiers) {
+    public static final ModifierDefinition EMPTY;
+    public static ModifierDefinition of(String target, String scope, double modifier, String operation,
             boolean affectsChance);
+    public static ModifierDefinition combine(ModifierDefinition... definitions);
 }
 ```
 
@@ -3209,35 +3332,55 @@ public record ModifierDefinition(List<RecipeModifier> modifiers) {
 
 | 字段 | 类型 | 含义 |
 | --- | --- | --- |
-| `modifiers` | `List<RecipeModifier>` | 该修饰符包含的全部 `RecipeModifier` 项。空列表表示无效果（仍可作为占位注册）。 |
+| `modifiers` | `List<MachineModifier>` | 有序修饰项列表，可包含数值修饰或布尔型并行设置。空列表表示无效果。 |
 
 #### 静态构造方法 `of(...)`
 
-便捷工厂，使用字符串名构造单条 `RecipeModifier`。
+便捷工厂，使用目标、作用域和操作名称创建单条数值修饰项。
 
 | 参数 | 类型 | 含义 |
 | --- | --- | --- |
-| `target` | `String` | 修饰目标（"duration" / "energy" / "input.&lt;id&gt;" / "output.&lt;id&gt;"）。 |
-| `ioTarget` | `String` | IO 方向："input" / "output"。会通过 `RecipeModifier.IOType.valueOf(ioTarget.toUpperCase(Locale.ROOT))` 解析。 |
-| `modifier` | `float` | 修饰系数（具体含义取决于 `operation`）。 |
-| `operation` | `String` | 操作类型（"multiply" / "add" / "set" / 等）。 |
-| `affectsChance` | `boolean` | 是否影响概率字段（仅 `output` 方向生效）。 |
+| `target` | `String` | 修饰目标：`duration`、`energy`、`output`、`parallelism`、`factory_threads` 或 `recipe_threads`。 |
+| `scope` | `String` | 与目标匹配的作用域，见下表。 |
+| `modifier` | `double` | 修饰数值，具体效果取决于 `operation`。 |
+| `operation` | `String` | `add`、`multiply`、`subtract` 或 `divide`，不区分大小写。 |
+| `affectsChance` | `boolean` | 是否影响输出概率；仅 `output` 目标支持。 |
+
+| target | scope |
+| --- | --- |
+| `duration` / `energy` | `input` |
+| `output` | `output` |
+| `parallelism` / `factory_threads` | `machine` |
+| `recipe_threads` | `recipe` |
+
+布尔目标 `parallelized` 不通过 `of(...)` 创建；Java 端使用 `MachineModifier.parallelized(boolean)`。
 
 抛出：
 
-- `IllegalArgumentException`：`ioTarget` 或 `operation` 对应的枚举名未知。
+- `IllegalArgumentException`：目标、作用域或操作不匹配，数值非有限，或目标不支持 `affectsChance`。
+
+#### `combine(ModifierDefinition... definitions)` 与 `EMPTY`
+
+- `combine(...)` 按参数顺序合并所有定义中的修饰项。
+- `EMPTY` 是空修饰符定义。
+
+#### `MachineModifier`
+
+完整类名：`cn.howxu.mmcr.api.machine.modifier.MachineModifier`
+
+`MachineModifier` 是 `ModifierDefinition.modifiers` 的元素类型。数值修饰由 `Numeric` 表示；`Parallelized(boolean value)` 表示配方是否启用并行。Java 端可用 `MachineModifier.parallelized(value)` 构造布尔项；数值项由 `ModifierDefinition.of(...)` 构造。
 
 #### 示例
 
 ```java
 event.registerModifier(Identifier.fromNamespaceAndPath("my_mod", "speed"),
-        ModifierDefinition.of("duration", "input", 0.5F, "multiply", false));
+        ModifierDefinition.of("duration", "input", 0.5D, "multiply", false));
 ```
 
 :::warning 注意事项
 
 - `ModifierDefinition` 是不可变值对象；同一修饰符 ID 的注册只能有一次。
-- 多个 `RecipeModifier` 项在配方执行时按顺序应用——前面的修饰符可能影响后续修饰符的目标值。
+- 多个 `MachineModifier` 项按声明顺序应用；同一 `ModifierDefinition` 可用于结构修饰符或机器等级。
 
 ---
 :::
@@ -3403,11 +3546,16 @@ MachineBuilder.machine(MY_ID).smartInterface(type);
 public record SmartInterfaceModifier(
         String interfaceType,
         String target,
-        RecipeModifier.IOType io,
+        String scope,
         boolean affectsChance,
         float minValue, float maxValue,
         float atMin, float atMax,
         RecipeModifier.Operation operation) {
+
+    public SmartInterfaceModifier(String interfaceType, String target, RecipeModifier.IOType io,
+                                  boolean affectsChance, float minValue, float maxValue,
+                                  float atMin, float atMax, RecipeModifier.Operation operation);
+    public RecipeModifier.IOType io();
 
     public static SmartInterfaceModifier duration(String type, float min, float max,
                                                   float atMin, float atMax,
@@ -3423,8 +3571,8 @@ public record SmartInterfaceModifier(
 | 字段 | 类型 | 含义 |
 | --- | --- | --- |
 | `interfaceType` | `String` | 对应的 `SmartInterfaceType.type`。 |
-| `target` | `String` | 修饰目标（"duration" / "energy" / "input.&lt;id&gt;" / "output.&lt;id&gt;"）。 |
-| `io` | `RecipeModifier.IOType` | IO 方向，默认为 `INPUT`。 |
+| `target` | `String` | 数值修饰目标：`duration`、`energy`、`output`、`parallelism`、`factory_threads` 或 `recipe_threads`。 |
+| `scope` | `String` | 目标对应的作用域：`duration` / `energy` 用 `input`，`output` 用 `output`，并行与工厂线程目标用 `machine`，`recipe_threads` 用 `recipe`。 |
 | `affectsChance` | `boolean` | 是否影响概率字段。 |
 | `minValue` / `maxValue` | `float` | 智能接口值范围。 |
 | `atMin` / `atMax` | `float` | 当智能接口值取到 `minValue` / `maxValue` 时，映射到目标上的修饰值。 |
@@ -3434,12 +3582,13 @@ public record SmartInterfaceModifier(
 
 | 方法 | 等价于 |
 | --- | --- |
-| `duration(type, min, max, atMin, atMax, op)` | `new SmartInterfaceModifier(type, "duration", INPUT, false, min, max, atMin, atMax, op)` |
-| `energy(type, min, max, atMin, atMax, op)` | `new SmartInterfaceModifier(type, "energy", INPUT, false, min, max, atMin, atMax, op)` |
+| `duration(type, min, max, atMin, atMax, op)` | `new SmartInterfaceModifier(type, "duration", "input", false, min, max, atMin, atMax, op)` |
+| `energy(type, min, max, atMin, atMax, op)` | `new SmartInterfaceModifier(type, "energy", "input", false, min, max, atMin, atMax, op)` |
 
 #### 构造约束
 
 - `interfaceType` / `target` 为 `null` / 空字符串 → `IllegalArgumentException`。
+- `scope` 为 `null` / 空字符串，或 `target` 与 `scope` 不匹配 → `IllegalArgumentException`。
 - 任一数值非有限 → `IllegalArgumentException("smart interface modifier values must be finite")`。
 
 #### 示例
@@ -3450,10 +3599,13 @@ SmartInterfaceModifier durationMod = SmartInterfaceModifier.duration(
 MachineBuilder.machine(MY_ID).smartInterfaceModifier(durationMod);
 ```
 
+兼容构造器仍接受 `RecipeModifier.IOType`，`io()` 访问器也仍可用；新代码应使用 `scope` 字段。
+
 :::warning 注意事项
 
 - `atMin` / `atMax` 决定智能接口值与配方修饰值的映射曲线。当 `op == MULTIPLY` 时，`atMin = 1F` 表示"最小智能接口值时不缩放"，`atMax = 0.25F` 表示"最大智能接口值时缩放到 0.25x"。
 - 智能接口的实际值由运行时 `MachineIoView.smartInterfaceValue(name)` 提供，回调中的取值随玩家设置变化。
+- 当前统一修饰符目标校验不接受 `item` / `fluid` 的输入作用域；相应 KubeJS `*InputByInterface(...)` 方法仍存在，但调用会抛 `IllegalArgumentException`。输出侧辅助方法将目标映射到 `output`。
 
 ---
 :::
@@ -3947,7 +4099,8 @@ public record RequiredHost(Identifier id);
 #### 示例
 
 ```java
-MachineRecipeBuilder.recipe(MY_RECIPE, MY_MODULE)
+MachineRecipeBuilder.recipe(MY_RECIPE)
+        .recipePool(MY_MODULE_POOL)
         .requiredHost(Identifier.fromNamespaceAndPath("my_mod", "module_host"));
 ```
 
@@ -4219,9 +4372,8 @@ public record ControllerRenderContext(
     public record StructureView(boolean formed, boolean structureAreaLoaded, int matchedStage) { }
     public record CraftingView(@Nullable Identifier recipeId,
                                CraftingStatus.Status status, String statusMessage,
-                               @Nullable ExecutionStatus failure,
-                               int tick, int totalTick, long parallelism, long maxParallelism,
-                               boolean recipeLocked, String lockedRecipeId) { }
+                                @Nullable ExecutionStatus failure,
+                                int tick, int totalTick, long parallelism, long maxParallelism) { }
 }
 ```
 
@@ -4261,8 +4413,6 @@ public record ControllerRenderContext(
 | `failure` | 当前失败状态（`ExecutionStatus`），可空。 |
 | `tick` / `totalTick` | 当前 tick 与配方总 tick。 |
 | `parallelism` / `maxParallelism` | 当前并行数与上限。 |
-| `recipeLocked` | 配方是否被锁定（控制器界面上不再显示配方切换）。 |
-| `lockedRecipeId` | 被锁定配方的 ID 字符串（`recipeLocked == false` 时为空字符串）。 |
 
 #### 示例
 
@@ -5399,7 +5549,7 @@ public final class ProducerBehavior implements MachineBehavior {
 
 本节覆盖 `cn.howxu.mmcr.api.publicapi.recipe.modifier.RecipeModifier`、`cn.howxu.mmcr.api.publicapi.recipe.requirement.MachineRequirement` 及其扩展点 `CustomRequirement`。
 
-注意：公共 API 中的 `RecipeModifier` 仅作为命名空间持有 `IOType` / `Operation` 两个枚举——实际的修饰符值、修饰器逻辑、Codec 都不属于公共 API 表面，由 MMCR 内部实现。配方修饰项的构造与注入仍由 `MachineRecipeBuilder` / `MachineDefinition.modifierUse(...)` 等高层 API 处理（见 [12 修饰符系统](#12-修饰符系统)）。
+注意：公共 API 中的 `RecipeModifier` 仅持有 `IOType` / `Operation` 两个枚举；修饰符值使用 [12 修饰符系统](#12-修饰符系统)中的 `MachineModifier` 与 `ModifierDefinition` 表示。`MachineRequirement` 和 `CustomRequirement` 则用于配方需求项。
 
 ### `RecipeModifier`
 
@@ -5458,6 +5608,29 @@ public final class RecipeModifier {
 :::warning 注意事项
 
 - 与之前版本的命名顺序一致；序列化协议保持向后兼容。
+
+---
+:::
+### `StageRequirement`
+
+完整类名：`cn.howxu.mmcr.api.publicapi.recipe.StageRequirement`
+
+配方的结构阶段需求。它是输入方向的逻辑校验，不对应物理输入槽位。
+
+```java
+public record StageRequirement(RecipeIo io, int minStage) implements RecipeRequirement {
+    public StageRequirement(int minStage);
+}
+```
+
+| 字段 | 类型 | 含义 |
+| --- | --- | --- |
+| `io` | `RecipeIo` | 固定为 `RecipeIo.INPUT`。 |
+| `minStage` | `int` | 最低结构阶段，范围为 1 到 64。 |
+
+`new StageRequirement(minStage)` 等价于 `new StageRequirement(RecipeIo.INPUT, minStage)`。`io` 不是 `INPUT`、阶段小于 1 或大于 64 时抛 `IllegalArgumentException`；`io` 为 `null` 时抛 `NullPointerException`。
+
+Java 配方构建器可直接调用 `stageRequirement(minStage)` 添加该需求。
 
 ---
 :::

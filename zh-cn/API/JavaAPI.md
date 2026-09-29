@@ -4,7 +4,7 @@ title: JavaAPI
 
 # Java 公共 API 参考
 
-本节是 MMCR 全部 Java 公共 API 的集中参考。所有 Java API 按主题分节，每节先给完整类名，再列出方法签名、参数、抛出条件、默认值与示例。教程文档中提到的所有 API 都可以在这里查到详细说明。
+本节是 MMCR 全部 Java 公共 API 的集中参考。所有 Java API 按主题分节，每节含有完整类名和方法签名、参数、抛出条件、默认值、示例。教程文档中提到的所有 API 都可以在这里查到详细说明。
 
 ## 包路径
 
@@ -24,23 +24,17 @@ title: JavaAPI
 - `cn.howxu.mmcr.api.publicapi.controller` — 控制器屏幕文本与 Jade。
 - `cn.howxu.mmcr.api.publicapi.render` — 控制器渲染器。
 
-启动期注册相关的类型（见 `package-info.java` 的 ABI allow-list）是稳定 API；运行期数据存储、网络与配方修饰符等子包位于公共 jar 内、API 仍可能在后续小版本内调整，调用方应在小版本升级时回归验证。
-
-## 阅读建议
-
-- 第一次阅读：仅看教程目录下 [JavaAPI/开始](/zh-cn/JavaAPI/高炉) 这篇示例，看完对整体流程有概念。
-- 写代码时：按需跳转到本节对应章节查阅签名与边界条件。
-- 写完代码后：回到教程页面，对照本节注意事项一节检查是否触及边界。
+启动期注册相关的类型是稳定 API；运行期数据存储、网络与配方修饰符等子包位于公共 jar 内、API 仍可能在后续小版本内调整，调用方应在小版本升级时回归验证。
 
 ---
 
-## 1 机器定义阶段
+## 1. 机器定义阶段
 
 ### `MachineDefinitionProvider`
 
 完整类名：`cn.howxu.mmcr.api.publicapi.MachineDefinitionProvider`
 
-MMCR 的启动期扩展点接口。所有声明机器定义的 Mod 必须实现该接口，并通过 `ServiceLoader` 在 `META-INF/services/cn.howxu.mmcr.api.publicapi.MachineDefinitionProvider` 中注册实现类。
+MMCR 的启动期扩展点接口。所有声明机器定义的 Mod 必须实现该接口，并通过 `ServiceLoader` 在 `META-INF/services/cn.howxu.mmcr.api.publicapi.MachineDefinitionProvider` 文件中注册实现类。
 
 #### 接口签名
 
@@ -66,7 +60,7 @@ public interface MachineDefinitionProvider {
 
 #### 使用方式
 
-1. 实现接口。在 `register(...)` 内通过 `event.registerMachine(...)` 提交机器定义；配方与结构推荐通过 NeoForge 事件总线（`MMCRMachineStructuresEvent`、`MMCRMachineRecipesEvent`）单独注册，避免与启动期耦合。
+1. 实现接口。在 `register(...)` 内通过 `event.registerMachine(...)` 提交机器定义。配方与结构推荐通过 NeoForge 事件总线（`MMCRMachineStructuresEvent`、`MMCRMachineRecipesEvent`）单独注册，避免与启动期耦合。
 2. 在 `src/main/resources/META-INF/services/` 下新建与接口全限定名完全同名的文件，文件内每行写入一个 Provider 类的全限定名。
 3. 编译并启动游戏，MMCR 启动期会自动遍历所有声明的 Provider。
 
@@ -74,14 +68,13 @@ public interface MachineDefinitionProvider {
 
 ```java
 public final class MyMachinesProvider implements MachineDefinitionProvider {
-    public static final Identifier MY_MACHINE =
-            Identifier.fromNamespaceAndPath("my_mod", "my_machine");
+    public static final Identifier MY_MACHINE = Identifier.fromNamespaceAndPath("my_mod", "my_machine");
 
     @Override
     public void register(MMCRMachineDefinationsEvent event) {
         if (event.definitions().containsKey(MY_MACHINE)) return;
-        event.registerMachine(MY_MACHINE, builder -> builder
-                .displayNameKey("machine.my_mod.my_machine"));
+                event.registerMachine(MY_MACHINE, builder -> builder
+                        .displayNameKey("machine.my_mod.my_machine"));
     }
 }
 ```
@@ -95,7 +88,7 @@ com.example.mymachines.MyMachinesProvider
 :::warning 注意事项
 
 - 一个 Mod 可以注册多个 Provider，每个 Provider 仅负责自己声明的机器，MMCR 会按 `ServiceLoader.load(...)` 返回顺序依次调用。
-- 不要在 Provider 实现内持有任何 `MachineDefinition` 实例的强引用；定义应在 `register(...)` 内即时构建并提交。
+- 不要在 Provider 实现内持有任何 `MachineDefinition` 实例的强引用，定义应在 `register(...)` 内即时构建并提交。
 - Provider 的生命周期与启动期绑定。结构与配方事件通过 NeoForge 事件总线发布，必须通过 `@SubscribeEvent` 订阅，与 Provider 是两条独立路径。
 
 ---
@@ -124,7 +117,7 @@ public class MMCRMachineDefinationsEvent extends Event {
 | 参数 | 类型 | 含义 |
 | --- | --- | --- |
 | `id` | `Identifier` | 机器注册 ID，必须全局唯一。 |
-| `consumer` | `UnaryOperator<MachineBuilder>` | 配置机器构建器的回调。返回的构建器会自动 `build()`。 |
+| `consumer` | `UnaryOperator<MachineBuilder>` | 配置机器构建器的回调，返回的构建器会自动调用 `build()`。 |
 
 抛出：
 
@@ -274,8 +267,10 @@ public MachineBuilder recipePool(Identifier... recipePoolIds) {
 event.registerMachine(MY_MACHINE, builder -> builder
         .displayNameKey("machine.my_mod.my_machine")
         .recipePool(
-                Identifier.fromNamespaceAndPath("my_mod", "shared_pool"),
-                Identifier.fromNamespaceAndPath("my_mod", "alternate_pool")));
+            Identifier.fromNamespaceAndPath("my_mod", "shared_pool"),
+            Identifier.fromNamespaceAndPath("my_mod", "alternate_pool")
+        )
+    );
 ```
 
 机器可同时属于多个配方池。每条配方仍只指定一个配方池；同一个机器的配方池选择顺序与这里传入的顺序一致。
@@ -372,7 +367,7 @@ event.registerMachine(MY_MACHINE, builder -> builder
 - `parallelizable` → `false`
 - `allowMultithreading` → `false`
 - `maxParallelAmount` → `1`
-- `behavior` → `RecipeBehavior.defaults()`（配方数据驱动）
+- `behavior` → `RecipeBehavior.defaults()`
 
 :::warning 注意事项
 
@@ -456,7 +451,7 @@ public record MachineDefinition(
 #### 构造约束
 
 - `id` 不能为 `null`，否则 `IllegalArgumentException`。
-- `displayNameKey` 不能为空字符串，但可以为 `null`（使用默认）。
+- `displayNameKey` 不能为空字符串，但可以为 `null`（默认）。
 - `maxParallelism < 1` 抛 `IllegalArgumentException`。
 - `maxParallelAmount < 1` 抛 `IllegalArgumentException`。
 - `role != HOST` 但 `acceptedModuleIds` 非空 → `IllegalStateException`。
@@ -586,7 +581,7 @@ public static final class Builder {
 
 ---
 :::
-## 2 结构阶段
+## 2. 结构阶段
 
 ### `MMCRMachineStructuresEvent`
 
@@ -847,9 +842,9 @@ public final class PatternBuilder {
 展开为：
 
 ```
-AXA      ← y = 0（最下层 y 行）
+AXA      ← y = 0（最下层）
 XIX      ← y = 1
-XXX      ← y = 2（最上层 y 行）
+XXX      ← y = 2（最上层）
 ```
 
 字符 `' '`（空格）表示该位置不校验任何方块；其他字符必须通过 `where(...)` 绑定到一个 `BlockPredicate`。

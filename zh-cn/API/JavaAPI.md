@@ -23,6 +23,7 @@ title: JavaAPI
 - `cn.howxu.mmcr.api.publicapi.network` — 机器网络通信（`NetworkApi`、`MachineReference`、`NetworkInterfaceReference`、`RequestBody`、`RequestInfo`、`RequestProcess`、`RequestFailed`、`RequestFailureReason`）。
 - `cn.howxu.mmcr.api.publicapi.controller` — 控制器屏幕文本与 Jade。
 - `cn.howxu.mmcr.api.publicapi.render` — 控制器渲染器。
+- `cn.howxu.mmcr.api.compat.mekanism` — Mekanism 中立的化学品与热量配方声明值（供 `MachineRecipeBuilder` 使用）。
 
 启动期注册相关的类型是稳定 API；运行期数据存储、网络与配方修饰符等子包位于公共 jar 内、API 仍可能在后续小版本内调整，调用方应在小版本升级时回归验证。
 
@@ -205,6 +206,9 @@ public final class MachineBuilder {
 
     public MachineBuilder requestProcess(Identifier requestId, cn.howxu.mmcr.api.publicapi.network.RequestProcess process);
     public MachineBuilder requestFailed(Identifier requestId, cn.howxu.mmcr.api.publicapi.network.RequestFailed failure);
+    public MachineBuilder requestProcessInternal(Identifier requestId, cn.howxu.mmcr.api.network.RequestProcess process);
+    @Deprecated(forRemoval = true)
+    public MachineBuilder requestFailedLegacy(Identifier requestId, cn.howxu.mmcr.api.network.RequestFailed failure);
 
     public MachineDefinition build();
 }
@@ -346,6 +350,10 @@ event.registerMachine(MY_MACHINE, builder -> builder
 #### `requestFailed(Identifier requestId, cn.howxu.mmcr.api.publicapi.network.RequestFailed failure)`
 
 注册公共请求失败处理器；回调签名见 [`RequestFailed`](#requestfailed)。`requestId` 重复抛 `IllegalArgumentException("Duplicate request failure handler: <id>")`。
+
+#### 兼容桥接方法
+
+`requestProcessInternal(...)` 接收 MMCR 内部网络回调类型，`requestFailedLegacy(...)` 接收旧版内部失败回调类型。两者仅用于兼容已有内部集成；新代码应使用上面的 `cn.howxu.mmcr.api.publicapi.network.RequestProcess` / `RequestFailed`，其中 `requestFailedLegacy(...)` 已标记为 `@Deprecated(forRemoval = true)`。
 
 #### `build()`
 
@@ -494,6 +502,8 @@ public record AppearanceSpec(
 
 ```java
 public static final class Builder {
+    public Builder appearance(Identifier machineBasicBlock);
+    public Builder appearance(String machineBasicBlock);
     public Builder machineBasicBlock(Identifier machineBasicBlock);
     public Builder machineBasicBlock(String machineBasicBlock);
     public Builder controllerBaseTexture(Identifier controllerBaseTexture);
@@ -507,6 +517,7 @@ public static final class Builder {
 
 | 方法 | 含义 |
 | --- | --- |
+| `appearance(Identifier)` / `appearance(String)` | `machineBasicBlock(...)` 的兼容别名。 |
 | `machineBasicBlock(...)` | 设置机器未成型时的基础方块。 |
 | `controllerBaseTexture(...)` | 设置控制器方块的底面纹理 ID。 |
 | `formedPortBaseTexture(...)` | 设置成型后端口方块的底面纹理 ID。 |
@@ -1185,7 +1196,7 @@ public record MachineStructureDefinition(
 
 ---
 :::
-## 3 配方阶段
+## 3. 配方阶段
 
 ### `MMCRMachineRecipesEvent`
 
@@ -1391,9 +1402,19 @@ public final class MachineRecipeBuilder {
     public MachineRecipeBuilder inputItem(Ingredient item, int count, DataComponentPredicateSet components, float consumeChance);
 
     public MachineRecipeBuilder inputFluid(Fluid fluid, int amount);
+    public MachineRecipeBuilder inputFluid(Fluid fluid, int amount, float consumeChance);
     public MachineRecipeBuilder outputFluid(Fluid fluid, int amount);
+    public MachineRecipeBuilder inputChemical(Identifier id, long amount);
+    public MachineRecipeBuilder inputChemical(Identifier id, long amount, float consumeChance);
+    public MachineRecipeBuilder inputChemicalTag(Identifier id, long amount);
+    public MachineRecipeBuilder inputChemicalTag(Identifier id, long amount, float consumeChance);
+    public MachineRecipeBuilder outputChemical(Identifier id, long amount, float chance);
+    public MachineRecipeBuilder inputHeatTemperature(double temperature);
+    public MachineRecipeBuilder outputHeat(double heat);
     public MachineRecipeBuilder inputEnergy(long fePerTick);
     public MachineRecipeBuilder outputEnergy(long fePerTick);
+    public MachineRecipeBuilder iFEt(long fePerTick);
+    public MachineRecipeBuilder oFEt(long fePerTick);
     public MachineRecipeBuilder outputItem(Item item, int count);
     public MachineRecipeBuilder outputItem(ItemStack stack);
     public MachineRecipeBuilder outputItem(ItemStack stack, DataComponentPredicateSet components);
@@ -1461,9 +1482,63 @@ public final class MachineRecipeBuilder {
 | 方法 | 含义 |
 | --- | --- |
 | `inputFluid(Fluid fluid, int amount)` | 声明流体输入。 |
+| `inputFluid(Fluid fluid, int amount, float consumeChance)` | 声明带消耗概率的流体输入；`consumeChance` 范围为 `0` 到 `1`。 |
 | `outputFluid(Fluid fluid, int amount)` | 声明流体输出。 |
 | `inputEnergy(long fePerTick)` | 声明每 tick 消耗的能量。 |
 | `outputEnergy(long fePerTick)` | 声明每 tick 产生的能量。 |
+| `iFEt(long fePerTick)` | `inputEnergy(...)` 的 FE/t 别名。 |
+| `oFEt(long fePerTick)` | `outputEnergy(...)` 的 FE/t 别名。 |
+
+#### 化学品 / 热量
+
+这些方法通过 `CustomRecipeIo` 写入 Mekanism 兼容的配方 IO；需要 Mekanism 兼容内容已加载。
+
+| 方法 | 含义 |
+| --- | --- |
+| `inputChemical(Identifier id, long amount)` | 声明指定化学品的输入。默认完全消耗。 |
+| `inputChemical(Identifier id, long amount, float consumeChance)` | 声明指定化学品输入，并设置消耗概率。 |
+| `inputChemicalTag(Identifier id, long amount)` | 按化学品标签声明输入。默认完全消耗。 |
+| `inputChemicalTag(Identifier id, long amount, float consumeChance)` | 按化学品标签声明输入，并设置消耗概率。 |
+| `outputChemical(Identifier id, long amount, float chance)` | 声明指定化学品输出及输出概率。 |
+| `inputHeatTemperature(double temperature)` | 声明热量温度输入。 |
+| `outputHeat(double heat)` | 声明热量输出。 |
+
+#### 化学品 / 热量辅助值类型
+
+`MachineRecipeBuilder` 的静态 payload 工厂和部分底层扩展使用下列 Mekanism 中立类型：
+
+```java
+public record ChemicalIngredient(Kind kind, Identifier id, long amount) {
+    public static ChemicalIngredient chemical(Identifier id, long amount);
+    public static ChemicalIngredient tag(Identifier id, long amount);
+}
+
+public record ChemicalOutput(Identifier id, long amount, float chance) {
+    public static ChemicalOutput of(Identifier id, long amount, float chance);
+}
+
+public record HeatRequirement(Kind kind, double value) {
+    public static HeatRequirement minimumTemperature(double temperature);
+    public static HeatRequirement outputHeat(double heat);
+}
+```
+
+完整类名分别为 `cn.howxu.mmcr.api.compat.mekanism.ChemicalIngredient`、`ChemicalOutput` 和 `HeatRequirement`。化学品数量必须为正数，输出概率与消耗概率范围为 `0` 到 `1`，热量值必须为非负有限数。
+
+#### 静态 payload 工厂
+
+以下方法返回可传给 `RecipeApi.custom(...)` 的 JSON payload：
+
+```java
+public static JsonObject chemicalInputPayload(ChemicalIngredient ingredient);
+public static JsonObject chemicalInputPayload(ChemicalIngredient ingredient, float consumeChance);
+public static JsonObject chemicalOutputPayload(ChemicalOutput output);
+public static JsonObject heatInputPayload(double temperature);
+public static JsonObject heatOutputPayload(double heat);
+public static JsonObject heatPayload(HeatRequirement requirement, Identifier typeId, RecipeIo io);
+```
+
+这些方法属于 `MachineRecipeBuilder` 的静态工具，不需要创建构建器实例；传入 `null` 或超出约束范围的值会抛 `IllegalArgumentException`。
 
 #### 等级、宿主、修饰符
 
@@ -1571,7 +1646,7 @@ public record MachineRecipeDefinition(
 
 ---
 :::
-## 4 顶层入口
+## 4. 顶层入口
 
 本节覆盖公共 API 模块的顶层入口类。这些类不参与机器 / 结构 / 配方构建流程，但提供 MMCR 启动期状态的查询入口、自定义 IO 校验、注册异常类型与数字格式化工具。
 
@@ -1696,7 +1771,7 @@ MMCR 内部实现与公共 API artifact 之间的桥接类。`ApiRuntime` 自身
 
 #### `install(Hook implementation)`
 
-Mod 在启动期通过该方法注入 MMCR 的内部实现。同步方法，仅由 MMCR 主模块调用，外部 Mod 不要调用。
+Mod 在启动期通过该方法注入 MMCR 的内部实现。同步方法，仅由 MMCR 主模块调用，**外部 Mod 不要调用**(当然你非要调用我也没招)。
 
 | 参数 | 类型 | 含义 |
 | --- | --- | --- |
@@ -1844,7 +1919,7 @@ SI 数值始终向下截断，不是四舍五入；超过 `Y` 前缀可表示的
 ReadableNumber.format(1_234_567L);             // "1.23M"
 ReadableNumber.formatCompact(1_500_000L);      // "1.5M"
 ReadableNumber.formatExact(1_234_567L);        // "1,234,567"
-ReadableNumber.formatForSlot(2_500_000, 0, "FE"); // "2MFE"
+ReadableNumber.formatForSlot(2_500_000, 0, " FE"); // "2M FE"
 ```
 
 :::warning 注意事项
@@ -1855,7 +1930,7 @@ ReadableNumber.formatForSlot(2_500_000, 0, "FE"); // "2MFE"
 
 ---
 :::
-## 5 渲染事件
+## 5. 渲染事件
 
 本节覆盖渲染器注册阶段的事件。渲染器在 MMCRMachineRendersEvent 阶段提交，绑定到机器 ID，并在控制器方块渲染时被回调。
 
@@ -1939,7 +2014,7 @@ MMCR 在启动期与结构加载之后、配方加载之后发布渲染器事件
 
 ---
 :::
-## 6 行为与上下文（机器端）
+## 6. 行为与上下文
 
 本节覆盖机器端的行为策略与运行时上下文。机器在构建时声明一个 `MachineBehavior`（配方驱动或 tick 驱动），运行时 MMCR 会向策略注入 `MachineBehaviorContext` 或其子类，使回调能够读写 IO、屏幕文本与 JADE 文本。
 
@@ -1998,8 +2073,8 @@ MachineBehavior.MachineCallback idleStart = ctx ->
 
 :::warning 注意事项
 
-- 该接口是 `sealed`，不能由用户自行实现；如需自定义行为，组合 `RecipeBehavior` 或 `TickBehavior`。
-- 内部函数式接口通过 `RecipeBehavior.Builder` / `TickBehavior.Builder` 暴露，而不是直接由用户实现。
+- 该接口是 `sealed`，不能由调用者自行实现；如需自定义行为，组合 `RecipeBehavior` 或 `TickBehavior`。
+- 内部函数式接口通过 `RecipeBehavior.Builder` / `TickBehavior.Builder` 暴露，而不是直接由调用者实现。
 
 ---
 :::
@@ -2009,7 +2084,7 @@ MachineBehavior.MachineCallback idleStart = ctx ->
 
 服务端权威上下文：所有机器行为回调共享的基础字段。包括机器 ID、控制器位置、当前游戏时间、屏幕文本、IO 视图、升级总线物品与 JADE 文本。
 
-#### 字段（通过访问器读取）
+#### 字段
 
 | 字段 | 类型 | 含义 |
 | --- | --- | --- |
@@ -2201,7 +2276,7 @@ MachineBuilder.machine(MY_ID)
 
 `beforeStart` 钩子的上下文：配方消费起始输入前可调整 duration、requirements 与 outputs，或直接取消配方。
 
-#### 字段（通过访问器读取）
+#### 字段
 
 | 字段 | 类型 | 含义 |
 | --- | --- | --- |
@@ -2276,7 +2351,7 @@ MMCR 内部构造。Mod 通常通过 `beforeStart` 钩子接收上下文，而�
 
 `recipeTick` 钩子的上下文：配方每 tick 触发，提供当前 tick、配方总 tick、并行数以及只读的需求 / 输出 / 能力快照。
 
-#### 字段（通过访问器读取）
+#### 字段
 
 | 字段 | 类型 | 含义 |
 | --- | --- | --- |
@@ -2315,7 +2390,7 @@ public RecipeTickContext(MachineBehaviorContext machineContext, MachineRecipe re
 
 `beforeFinish` 钩子的上下文：配方提交输出前可调整 outputs，或直接取消。
 
-#### 字段（通过访问器读取）
+#### 字段
 
 | 字段 | 类型 | 含义 |
 | --- | --- | --- |
@@ -2430,7 +2505,7 @@ MachineBuilder.machine(MY_ID)
 
 `TickBehavior.serverTick` 钩子的上下文：扩展了 `MachineBehaviorContext`，新增工厂线程数、并行数与能力快照访问器，并提供 IO 计划入口。
 
-#### 字段（通过访问器读取）
+#### 字段
 
 | 字段 | 类型 | 含义 |
 | --- | --- | --- |
@@ -2470,7 +2545,7 @@ public TickBehaviorContext(MachineBehaviorContext base, CapabilitySnapshot snaps
 
 ---
 :::
-## 7 控制器规格
+## 7. 控制器规格
 
 本节覆盖控制器方块的外观与朝向规格。
 
@@ -2576,7 +2651,7 @@ MachineBuilder.machine(MY_ID)
 
 ---
 :::
-## 8 高级机器属性
+## 8. 高级机器属性
 
 本节覆盖机器的高级属性：角色、IO 计划与视图、显示物品栈、并行控制器等级。
 
@@ -2626,13 +2701,14 @@ public final class MachineIoPlan {
     public record CommitResult(boolean successful, @Nullable ExecutionStatus failure) { }
 
     public MachineIoView view();
-    public MachineIoPlan addInput(MachineRequirement requirement);
-    public MachineIoPlan addOutput(MachineRequirement requirement, OutputPolicy policy);
-    public MachineIoPlan add(MachineRequirement requirement);
-    public List<MachineRequirement> requirements();
+    public MachineIoPlan addInput(RecipeRequirement requirement);
+    public MachineIoPlan addOutput(RecipeRequirement requirement, OutputPolicy policy);
+    public MachineIoPlan add(RecipeRequirement requirement);
+    public List<RecipeRequirement> requirements();
     public Simulation simulate();
     public CommitResult commit();
     public CommitResult commit(Consumer<TransactionContext> transactionWrites);
+    public CommitResult commitData(Consumer<DataStorage.Transaction> transactionWrites);
     public List<OutputSimulation> outputSimulations();
     public boolean inputsSatisfied();
     public boolean energySatisfied();
@@ -2653,19 +2729,19 @@ public final class MachineIoPlan {
 
 返回当前能力快照对应的只读视图（每次返回新实例）。
 
-#### `addInput(MachineRequirement requirement) → MachineIoPlan`
+#### `addInput(RecipeRequirement requirement) → MachineIoPlan`
 
-追加一个输入需求。会自动插入到所有已有输出项之前，确保输入先于输出参与模拟。`requirement.io()` 必须为 `INPUT`，否则抛 `IllegalArgumentException`。
+追加一个 `RecipeRequirement` 输入需求。会自动插入到所有已有输出项之前，确保输入先于输出参与模拟。转换后的 `requirement.io()` 必须为 `INPUT`，否则抛 `IllegalArgumentException`。
 
-#### `addOutput(MachineRequirement requirement, OutputPolicy policy) → MachineIoPlan`
+#### `addOutput(RecipeRequirement requirement, OutputPolicy policy) → MachineIoPlan`
 
-追加一个输出需求，并指定该输出的放置策略。`requirement.io()` 必须为 `OUTPUT`，`policy` 为 `null` 抛 `NullPointerException`。
+追加一个 `RecipeRequirement` 输出需求，并指定该输出的放置策略。转换后的 `requirement.io()` 必须为 `OUTPUT`，`policy` 为 `null` 抛 `NullPointerException`。
 
-#### `add(MachineRequirement requirement) → MachineIoPlan`
+#### `add(RecipeRequirement requirement) → MachineIoPlan`
 
-根据 `requirement.io()` 自动路由到 `addInput(...)` 或 `addOutput(requirement, REQUIRE_FULL)`。
+根据转换后的 `requirement.io()` 自动路由到 `addInput(...)` 或 `addOutput(requirement, REQUIRE_FULL)`。
 
-#### `requirements() → List<MachineRequirement>`
+#### `requirements() → List<RecipeRequirement>`
 
 返回当前已添加的全部需求（按插入顺序）。模拟前需要的所有需求必须先加入。
 
@@ -2691,6 +2767,12 @@ public final class MachineIoPlan {
 
 - `IllegalStateException`：plan 已被 `commit(...)` 消耗。
 - `NullPointerException`：`transactionWrites` 为 `null`。
+
+#### `commitData(Consumer<DataStorage.Transaction> transactionWrites) → CommitResult`
+
+使用公共数据存储事务视图执行 commit。回调收到的 `DataStorage.Transaction` 是对底层 NeoForge 事务的公共包装；其余提交语义与 `commit(...)` 相同。
+
+- `transactionWrites` 为 `null` 时抛 `NullPointerException`。
 
 #### `Simulation`
 
@@ -2739,13 +2821,15 @@ if (sim.inputsSatisfied()) {
 
 机器能力的只读聚合视图。提供对当前输入 / 输出、容量、智能接口值与展示条目的查询。
 
-#### 字段（通过访问器读取）
+#### 字段
 
 | 字段 | 类型 | 含义 |
 | --- | --- | --- |
 | `displays()` | `List<CapabilityDisplay>` | 全部能力的展示条目（用于屏幕显示）。 |
 | `itemInputs()` | `List<ResourceAmount<ItemResource>>` | 当前所有物品输入资源的聚合量。 |
 | `fluidInputs()` | `List<ResourceAmount<FluidResource>>` | 当前所有流体输入资源的聚合量。 |
+| `chemicalInputs()` | `List<ResourceAmount<Identifier>>` | 当前所有化学品输入的聚合量。 |
+| `heatInputs()` / `heatOutputs()` | `List<HeatState>` | 当前热量输入 / 输出能力的状态，按能力快照顺序返回。 |
 | `energyInput()` | `long` | 当前所有能量输入的总量。 |
 | `smartInterfaceValue(String name)` | `Optional<Float>` | 按名称查询智能接口值。 |
 | `smartInterfaceValues()` | `Map<String, Float>` | 所有智能接口值。 |
@@ -2759,6 +2843,22 @@ public record ResourceAmount<R>(R resource, long amount);
 ```
 
 构造约束：`resource == null` 或 `amount < 0` 抛 `IllegalArgumentException`。
+
+#### `HeatState`
+
+不可变的热量能力状态记录：
+
+```java
+public record HeatState(double heat, double temperature, double heatCapacity) { }
+```
+
+| 字段 | 含义 |
+| --- | --- |
+| `heat` | 当前存储热量。 |
+| `temperature` | 当前温度，单位为 K。 |
+| `heatCapacity` | 热量容量；表示热量能力的容量，不是最大存储数量。 |
+
+三个字段都必须是非负有限数，否则构造时抛 `IllegalArgumentException`。
 
 #### `forTags(Set<String> requiredTags) → MachineIoView`
 
@@ -2780,6 +2880,26 @@ public record ResourceAmount<R>(R resource, long amount);
 
 按 `FluidIngredient` 聚合所有匹配流体输入的总量。
 
+#### `chemicalInputs() → List<ResourceAmount<Identifier>>`
+
+返回当前所有化学品输入能力按化学品 ID 聚合后的列表。没有化学品能力或能力当前没有已知化学品时，不会加入对应条目。
+
+#### `chemicalAmount(Identifier chemicalId) → long`
+
+返回指定化学品在所有输入能力中的聚合数量。`chemicalId` 为 `null` 时抛 `NullPointerException`。
+
+#### `chemicalTagAmount(Identifier tagId) → long`
+
+返回匹配指定化学品标签的所有输入能力的聚合数量。`tagId` 为 `null` 时抛 `NullPointerException`。
+
+#### `chemicalOutputCapacity(Identifier chemicalId) → long`
+
+返回所有化学品输出能力对指定化学品的聚合剩余容量。`chemicalId` 为 `null` 时抛 `NullPointerException`。
+
+#### `heatInputs() → List<HeatState>` / `heatOutputs() → List<HeatState>`
+
+分别返回热量输入与输出能力的状态列表，顺序与能力快照一致；没有对应能力时返回空列表。
+
 #### `itemOutputCapacity(ItemStack stack) → long`
 
 返回当前物品输出能力中还能容纳指定物品栈的总余量。会忽略已含其他物品的 slot。空栈返回 `0`。
@@ -2798,6 +2918,8 @@ public record ResourceAmount<R>(R resource, long amount);
 MachineIoView view = ctx.ioView();
 long available = view.itemAmount(Ingredient.of(Items.IRON_INGOT));
 long spare = view.itemOutputCapacity(new ItemStack(Items.DIAMOND));
+long oxygen = view.chemicalAmount(Identifier.fromNamespaceAndPath("mekanism", "oxygen"));
+List<MachineIoView.HeatState> heat = view.heatInputs();
 Optional<Float> tier = view.smartInterfaceValue("efficiency");
 ```
 
@@ -2805,6 +2927,7 @@ Optional<Float> tier = view.smartInterfaceValue("efficiency");
 
 - 所有容量与数量都是聚合值，可能溢出到 `Long.MAX_VALUE`（`saturatedAdd`）。
 - `itemAmount(...)` / `fluidAmount(...)` 使用 `Ingredient.test(...)` 进行匹配，对于复合谓词可能产生多次比较；调用频率高时请注意性能。
+- 化学品与热量访问器依赖对应的 Mekanism 能力；未加载或不存在对应能力时返回空列表或 `0`。
 - `displays()` 返回的是渲染用的展示条目；不应在逻辑判断中依赖其内容。
 
 ---
@@ -2891,7 +3014,7 @@ int max = ParallelTier.PRO.maxParallelism();  // 256
 
 ---
 :::
-## 9 接口与等级
+## 9. 接口与等级
 
 本节覆盖端口等级与端口需求的便捷工厂。这些工厂是 `PortTiers` / `PortRequirements` 的快捷方式，主要供 `StructureStage.Builder` 之外的代码（如工具方法、跨阶段共享声明）使用。
 
@@ -3019,7 +3142,7 @@ PortRequirements req = PortRequirements.builder()
 
 ---
 :::
-## 10 模式与结构
+## 10. 模式与结构
 
 本节覆盖结构模式定义与结构高级要求。`PatternDefinition` 是 `PatternBuilder` 链式构建的不可变结果；`StructureRequirements` 承载修饰符替换与等级槽位声明。
 
@@ -3149,7 +3272,7 @@ StructureRequirements req = StructureRequirements.builder()
 
 ---
 :::
-## 11 等级系统
+## 11. 等级系统
 
 本节覆盖等级类型与等级实例声明。等级是结构中"标识玩家将机器升级到某级"的标记；每台机器可选地声明若干等级槽位，每个槽位对应一个等级类型。
 
@@ -3302,7 +3425,7 @@ MachineRecipeBuilder.recipe(MY_RECIPE)
 
 ---
 :::
-## 12 修饰符系统
+## 12. 修饰符系统
 
 本节覆盖机器修饰符（modifier）的定义与使用声明。修饰符是玩家可以放置到结构中的特殊物品，会按配方中预先声明的规则影响配方执行。
 
@@ -3451,7 +3574,7 @@ MachineIoPlan plan = tickCtx.ioPlan()
 
 ---
 :::
-## 13 智能接口
+## 13. 智能接口
 
 本节覆盖智能接口（Smart Interface）类型与修饰符。智能接口允许玩家向机器传递非物品 / 流体的浮点参数（如"效率"），并由机器按修饰符规则影响配方。
 
@@ -3604,7 +3727,7 @@ MachineBuilder.machine(MY_ID).smartInterfaceModifier(durationMod);
 
 ---
 :::
-## 14 配方 IO 类型
+## 14. 配方 IO 类型
 
 本节覆盖配方 IO 类型的不可变记录。这些类都是 `record`，仅包含数据字段与构造约束。运行时操作（添加输入 / 输出到配方）请使用 `MachineRecipeBuilder`。
 
@@ -3659,6 +3782,50 @@ CustomRecipeIo io = new CustomRecipeIo(
 
 ---
 :::
+
+#### Mekanism 配方 IO 类型
+
+启用 Mekanism bridge 后，以下类型 ID 可作为 `CustomRecipeIo.typeId` 使用。它们不是 `RecipeIo` 的枚举值；`RecipeIo` 仍只表示 `INPUT` / `OUTPUT` 方向。
+
+| 类型 ID | 方向 | 负载核心字段 | 对应便捷方法 |
+| --- | --- | --- | --- |
+| `mekanism:chemical` | 输入 / 输出 | `kind`、`id`、`amount`、`consume_chance`、`chance` | `MachineRecipeBuilder.inputChemical(...)`、`inputChemicalTag(...)`、`outputChemical(...)` |
+| `mekanism:temperature` | 输入 | `value` | `MachineRecipeBuilder.inputHeatTemperature(...)` |
+| `mekanism:heat` | 输出 | `value` | `MachineRecipeBuilder.outputHeat(...)` |
+
+数据驱动配方中的示例：
+
+```json
+{
+  "type": "mekanism:chemical",
+  "io": "input",
+  "kind": "chemical",
+  "id": "mekanism:oxygen",
+  "amount": 1000,
+  "consume_chance": 0.5
+}
+```
+
+```json
+{
+  "type": "mekanism:chemical",
+  "io": "output",
+  "id": "mekanism:hydrogen",
+  "amount": 500,
+  "chance": 0.75
+}
+```
+
+```json
+{ "type": "mekanism:temperature", "io": "input", "value": 1000 }
+```
+
+```json
+{ "type": "mekanism:heat", "io": "output", "value": 250 }
+```
+
+`mekanism:chemical` 的 `kind` 可为 `chemical` 或 `tag`；化学品输出必须使用具体化学品 ID。`consume_chance` 与 `chance` 范围均为 `[0, 1]`，热量 `value` 必须为非负有限数。未加载 Mekanism 时，这些类型不可执行，相关需求会被视为不可用。
+
 ### `ItemInput`
 
 完整类名：`cn.howxu.mmcr.api.publicapi.recipe.ItemInput`
@@ -4279,7 +4446,7 @@ DataComponentPredicateSet set = new DataComponentPredicateSet(Map.of(
 
 ---
 :::
-## 15 控制器渲染
+## 15. 控制器渲染
 
 本节覆盖客户端控制器方块的渲染器接口。渲染器通过 `MMCRMachineRendersEvent` 注册，绑定到机器 ID，并在控制器方块的 `BlockEntityRenderer` 流程中被回调。
 
@@ -4429,9 +4596,9 @@ ControllerRenderer renderer = (ctx, pose, collector, camera) -> {
 
 ---
 :::
-## 16 控制器屏幕文本
+## 16. 屏幕文本和Jade集成信息
 
-本节覆盖服务端运行时控制器屏幕文本的注册与渲染。屏幕文本通过 `ControllerScreenTextRegistry` 注册到机器 ID，每次控制器 tick 时由 MMCR 调用。
+本节覆盖服务端运行时屏幕文本和Jade集成信息的注册与渲染。屏幕文本通过 `ControllerScreenTextRegistry` 注册到机器 ID，每次控制器 tick 时由 MMCR 调用。Jade信息由`MachineBehaviorContext.jadeText()` 返回句柄并添加内容，统一由 MMCR 提交注册。
 
 ### `ControllerScreenText`
 
@@ -4751,7 +4918,7 @@ ctx.jadeText().append(
 
 ---
 :::
-## 17 数据子包
+## 17. 数据子包
 
 本节覆盖 `cn.howxu.mmcr.api.publicapi.data` 子包——机器数据存储的公共视图、值包装、跨机器数据查询扩展点以及事务封装的对外入口。运行期类型位于公共 jar 内，但**不在** `package-info.java` 列出的"启动期 ABI allow-list"中，调用方应在小版本升级时回归验证。
 
@@ -4997,9 +5164,9 @@ double power = storage.get("power").flatMap(DataValue::asDouble).orElse(0.0);
 
 :::warning 注意事项
 
-- `DataStorage` 是公共视图而不是原始存储——`view(...)` 接受 MMCR 内部的 `cn.howxu.mmcr.api.data.DataStorage` 实例（来自 `ctx.dataStorage()` 返回的对象），并包装成可被外部 Mod 操作的公共类型。
-- 外部 Mod **不能** 直接 `new DataStorage(...)`——构造器私有。
-- 非事务版本（`set(...)` 不带 `transaction`）与事务版本（带 `transaction`）行为不同：`MachineIoPlan` 失败回滚时只有事务版本的写入会被撤销，非事务版本一旦调用立即生效。
+- `DataStorage` 是公共视图而不是原始存储，`view(...)` 接受 MMCR 内部的 `cn.howxu.mmcr.api.data.DataStorage` 实例（来自 `ctx.dataStorage()` 返回的对象），并包装成可被外部 Mod 操作的公共类型。
+- 外部 Mod **不能** 直接 `new DataStorage(...)`，其为构造器私有。
+- 非事务版本（`set(...)`）与事务版本（`transaction`）行为不同：`MachineIoPlan` 失败回滚时只有事务版本的写入会被撤销，非事务版本一旦调用立即生效。
 - `get(...)` 返回 `Optional`，**不要**用 `null` 判定键是否存在；用 `contains(...)`。
 
 ---
@@ -5031,7 +5198,7 @@ public interface DataReservation {
 
 :::warning 注意事项
 
-- 当前 MMCR 不会主动暴露数据存储库实现，`DataRepository` 接口（见下）只为未来扩展而保留——除非自行实现 `DataRepository`，否则无需直接构造 `DataReservation`。
+- 当前 MMCR 不会主动暴露数据存储库实现，`DataRepository` 接口（见下）只为未来扩展而保留，除非自行实现 `DataRepository`，否则无需直接构造 `DataReservation`。
 
 ---
 :::
@@ -5097,7 +5264,7 @@ public record DataRepositoryRequest(Identifier repositoryId, BlockPos controller
 | `requestedValue` | `DataValue` | 期望值。`null` → `IllegalArgumentException("requestedValue must not be null")`；`requestedValue.type()` 必须等于 `requestedType`，否则 `IllegalArgumentException("requestedValue type must match requestedType")`。 |
 | `reservation` | `Optional<DataReservation>` | 可选的预留结果；空表示当前无可用数据。`null` → `IllegalArgumentException("reservation must not be null")`。 |
 
-##### 便捷构造（无预留）
+##### 便捷构造
 
 `new DataRepositoryRequest(repositoryId, controllerPos, key, requestedType, requestedValue)` 等价于 `...unavailable(...)`——`reservation` 字段为空。
 
@@ -5148,7 +5315,7 @@ public interface DataRepository {
 
 ---
 :::
-## 18 网络子包
+## 18. 网络子包
 
 本节覆盖 `cn.howxu.mmcr.api.publicapi.network` 子包——机器网络通信的公共视图、不可变消息体、回调接口与静态门面。运行期网络类型位于公共 jar 内，但**不在** `package-info.java` 列出的"启动期 ABI allow-list"中，调用方应在小版本升级时回归验证。
 
@@ -5304,7 +5471,7 @@ double power = body.get("power").flatMap(DataValue::asDouble).orElse(0.0);
 
 :::warning 注意事项
 
-- 与 KubeJS 端不同——Java 端必须显式用 `DataValue.of(...)` 包好每个值；脚本端由 [`api.dataValue(...)`](#) 自动包装。
+- Java 端必须显式用 `DataValue.of(...)` 包装好每个值。
 - 构造时键与值都需合法；构造完成后请求体不可修改。
 
 ---
@@ -5330,7 +5497,7 @@ public record RequestInfo(Identifier requestId, MachineReference peer) {
 
 | 字段 | 类型 | 含义 |
 | --- | --- | --- |
-| `requestId` | `Identifier` | 请求 ID（命名空间 + 路径均非空）。`null` → `NullPointerException("requestId")`。 |
+| `requestId` | `Identifier` | 请求 ID（命名空间和路径均非空）。`null` → `NullPointerException("requestId")`。 |
 | `peer` | `MachineReference` | 发送方机器引用（公共版本）。`null` → `NullPointerException("peer")`。 |
 
 #### 示例
@@ -5347,7 +5514,7 @@ ctx.requestProcess(REPORT_POWER, (body, request, senderStorage, receiverStorage)
 
 :::warning 注意事项
 
-- 该类型为不可变值对象——可以安全地在 `RequestProcess` 闭包内捕获。
+- 该类型为不可变值对象，可以安全地在 `RequestProcess` 闭包内捕获。
 
 ---
 :::
@@ -5393,7 +5560,7 @@ ctx.requestProcess(REPORT_POWER,
 :::warning 注意事项
 
 - 通过 `MachineBuilder.requestProcess(Identifier, RequestProcess)` 注册；同一请求 ID 注册多次时，以最后一次为准。
-- 公共签名上的 `senderStorage` / `receiverStorage` 不再带 `@Nullable` 注解，但运行时仍可能为 `null`——处理器必须在闭包开头自行判空。
+- 公共签名上的 `senderStorage` / `receiverStorage` 不再带 `@Nullable` 注解，但运行时仍可能为 `null`，处理器必须在闭包开头自行判空。
 - 抛出的异常会被 MMCR 捕获并记日志；不要把控制流逻辑放在异常抛出上。
 
 ---
@@ -5426,7 +5593,7 @@ public interface RequestFailed {
 
 :::warning 注意事项
 
-- 仅当 MMCR 内部判定请求**不能**送达时才会调用该回调；正常接收请使用 `RequestProcess`。
+- 仅当 MMCR 内部判定请求**不能**送达时才会调用该回调，正常接收请使用 `RequestProcess`。
 - 注册位置见 `MachineBuilder.requestFailed(...)`。
 
 ---
@@ -5439,7 +5606,7 @@ public interface RequestFailed {
 
 #### 枚举常量
 
-枚举常量（按源码声明顺序）：
+枚举常量：
 
 | 常量 | 触发条件（按命名推断 / 源码注释） |
 | --- | --- |
@@ -5540,7 +5707,7 @@ public final class ProducerBehavior implements MachineBehavior {
 
 ---
 :::
-## 19 修饰符与需求类型
+## 19. 修饰符与需求类型
 
 本节覆盖 `cn.howxu.mmcr.api.publicapi.recipe.modifier.RecipeModifier`、`cn.howxu.mmcr.api.publicapi.recipe.requirement.MachineRequirement` 及其扩展点 `CustomRequirement`。
 
@@ -5580,7 +5747,7 @@ public final class RecipeModifier {
 
 :::warning 注意事项
 
-- 在配方 IO 类型语义上与 `cn.howxu.mmcr.api.publicapi.recipe.RecipeIo.INPUT` / `RecipeIo.OUTPUT` 完全一致（见 [14 配方 IO 类型](#14-配方-io-类型)）。`FluidRequirement` / `ItemRequirement` / `EnergyRequirement` 等公共 `MachineRequirement` 子类型在 Java 端使用 `RecipeIo` 作为 IO 字段；`RecipeModifier.IOType` 主要在配方修饰表达式中引用。
+- 在配方 IO 类型语义上与 `cn.howxu.mmcr.api.publicapi.recipe.RecipeIo.INPUT` / `RecipeIo.OUTPUT` 完全一致（见 [14. 配方 IO 类型](#14-配方-io-类型)）。`FluidRequirement` / `ItemRequirement` / `EnergyRequirement` 等公共 `MachineRequirement` 子类型在 Java 端使用 `RecipeIo` 作为 IO 字段；`RecipeModifier.IOType` 主要在配方修饰表达式中引用。
 - KubeJS 教程引用此类型时写作 `RecipeModifier.IOType`，对应此锚点。
 
 ---

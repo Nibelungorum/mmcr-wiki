@@ -2857,6 +2857,26 @@ stage.pattern("X").set("X", "minecraft:iron_block").controller("X")
 | `requiredHost(hostId)` | `(String)` | 把宿主机器 ID 追加到 `required_host_ids`。 |
 | `requiresLevel(typeId, levelId)` | `(String, String)` | 校验等级与类型匹配，并把等级需求追加到 `requirements`。 |
 
+#### Mekanism 配方 IO 类型
+
+启用 Mekanism bridge 后，`requirements` 中可使用以下自定义类型。`io` 仍只表示输入 / 输出方向，化学品和热量由 `type` 区分：
+
+| `type` | 方向 | 主要字段 | 编程式对应 |
+| --- | --- | --- | --- |
+| `mekanism:chemical` | 输入 / 输出 | `kind`、`id`、`amount`、`consume_chance`、`chance` | `chemicalInput(...)`、`chemicalTagInput(...)`、`chemicalOutput(...)` |
+| `mekanism:temperature` | 输入 | `value` | `heatTemperatureInput(...)` |
+| `mekanism:heat` | 输出 | `value` | `heatOutput(...)` |
+
+```javascript
+requirements: [
+    { type: "mekanism:chemical", io: "input", kind: "chemical", id: "mekanism:oxygen", amount: 1000 },
+    { type: "mekanism:temperature", io: "input", value: 1000 },
+    { type: "mekanism:heat", io: "output", value: 250 }
+]
+```
+
+`mekanism:chemical` 的 `kind` 可为 `chemical` 或 `tag`；输出必须指定具体化学品 ID。`consume_chance` 与 `chance` 范围为 `0` 到 `1`。未加载 Mekanism 时，这些类型不可执行。
+
 `requirements` 也可直接写入阶段需求：
 
 ```javascript
@@ -3067,6 +3087,28 @@ builder.conditions([
 builder.energyPerTick(32)
 ```
 
+##### `iFEt(long fePerTick) → MachineRecipeBuilderJS`
+
+- **参数表**：`fePerTick`（`long`）— 每 tick 消耗的 FE。
+- **返回**：当前构建器；追加一条能量输入。
+- **抛出**：负数会在配方构建校验阶段抛 `IllegalArgumentException`。
+- **示例**：
+
+```javascript
+builder.iFEt(32)
+```
+
+##### `oFEt(long fePerTick) → MachineRecipeBuilderJS`
+
+- **参数表**：`fePerTick`（`long`）— 每 tick 产生的 FE。
+- **返回**：当前构建器；追加一条能量输出。
+- **抛出**：负数会在配方构建校验阶段抛 `IllegalArgumentException`。
+- **示例**：
+
+```javascript
+builder.oFEt(16)
+```
+
 ##### `cancelIfPerTickFails(boolean cancelIfPerTickFails) → MachineRecipeBuilderJS`
 
 - **参数表**：`cancelIfPerTickFails`（`boolean`）— 每 tick 失败时是否取消配方。
@@ -3235,6 +3277,83 @@ builder.fluidInput("minecraft:water", 1000)
 builder.fluidInput("minecraft:water", 1000, 0.5)
 ```
 
+##### `chemicalInput(String chemicalId, long amount) → MachineRecipeBuilderJS`
+
+- **参数表**：`chemicalId`（`String`）— 化学品 ID；`amount`（`long`）— 输入量。
+- **返回**：当前构建器；默认完全消耗输入。
+- **抛出**：化学品 ID 非法、数量非法或 Mekanism 化学品类型不可用时抛异常。
+- **示例**：
+
+```javascript
+builder.chemicalInput("mekanism:oxygen", 1000)
+```
+
+##### `chemicalInput(String chemicalId, long amount, double consumeChance) → MachineRecipeBuilderJS`
+
+- **参数表**：前两个参数同上；`consumeChance`（`double`）— 消耗概率，范围为 `0` 到 `1`。
+- **返回**：当前构建器。
+- **抛出**：ID、数量或消耗概率非法时抛异常。
+- **示例**：
+
+```javascript
+builder.chemicalInput("mekanism:oxygen", 1000, 0.5)
+```
+
+##### `chemicalTagInput(String tagId, long amount) → MachineRecipeBuilderJS`
+
+- **参数表**：`tagId`（`String`）— 化学品标签 ID；`amount`（`long`）— 每种匹配化学品的输入量。
+- **返回**：当前构建器；默认完全消耗输入。
+- **抛出**：标签 ID 或数量非法时抛异常。
+- **示例**：
+
+```javascript
+builder.chemicalTagInput("mekanism:fuels", 1000)
+```
+
+##### `chemicalTagInput(String tagId, long amount, double consumeChance) → MachineRecipeBuilderJS`
+
+- **参数表**：前两个参数同上；`consumeChance`（`double`）— 消耗概率，范围为 `0` 到 `1`。
+- **返回**：当前构建器。
+- **抛出**：标签、数量或消耗概率非法时抛异常。
+- **示例**：
+
+```javascript
+builder.chemicalTagInput("mekanism:fuels", 1000, 0.5)
+```
+
+##### `chemicalOutput(String chemicalId, long amount, double chance) → MachineRecipeBuilderJS`
+
+- **参数表**：`chemicalId`（`String`）— 化学品 ID；`amount`（`long`）— 输出量；`chance`（`double`）— 输出概率，范围为 `0` 到 `1`。
+- **返回**：当前构建器；追加化学品输出。
+- **抛出**：化学品 ID、数量或概率非法时抛异常。
+- **示例**：
+
+```javascript
+builder.chemicalOutput("mekanism:hydrogen", 500, 0.75)
+```
+
+##### `heatTemperatureInput(double temperature) → MachineRecipeBuilderJS`
+
+- **参数表**：`temperature`（`double`）— 最低所需温度（K）。
+- **返回**：当前构建器；追加热量温度输入需求。
+- **抛出**：温度为负数或非有限值时抛异常。
+- **示例**：
+
+```javascript
+builder.heatTemperatureInput(1000)
+```
+
+##### `heatOutput(double heat) → MachineRecipeBuilderJS`
+
+- **参数表**：`heat`（`double`）— 产生的热量（K/t）。
+- **返回**：当前构建器；追加热量输出。
+- **抛出**：热量为负数或非有限值时抛异常。
+- **示例**：
+
+```javascript
+builder.heatOutput(250)
+```
+
 #### 输出
 
 ##### `outputs(List<ItemStack> outputs) → MachineRecipeBuilderJS`
@@ -3333,6 +3452,18 @@ builder.requirements([api.energyRequirement(api.recipeIO().INPUT, 32)])
 
 ```javascript
 builder.addRequirement(api.fluidInputRequirement("minecraft:water", 1000))
+```
+
+##### `addRequirement(RecipeRequirement requirement) → MachineRecipeBuilderJS`
+
+- **参数表**：`requirement`（`RecipeRequirement`）— 任意公共配方需求；会先转换为内部 `MachineRequirement`。
+- **返回**：当前构建器。
+- **抛出**：需求无法转换时抛异常。
+- **默认值**：无。
+- **示例**：
+
+```javascript
+builder.addRequirement(api.custom("example:custom_input", api.recipeIO().INPUT, payload))
 ```
 
 ##### `custom(String typeId, RecipeIo io, JsonElement payload) → MachineRecipeBuilderJS`
@@ -3585,9 +3716,33 @@ const behavior = behaviorBuilder.build()
 - `RecipeTickContext` 不提供 `ioPlan`；只有 `TickBehaviorContext` 暴露 IO 计划。
 - 配方回调中的 `ctx.machineContext()` 返回 `MachineBehaviorContext`，可访问 `dataStorage`、`screenText`、`jadeText`、`level`、`controllerPos()` 等运行时状态。
 :::
+### `MachineIoView`
+
+> `ctx.machineContext().ioView()` 返回的只读能力视图。下列访问器可直接在 KubeJS 行为回调中调用；化学品与热量方法需要对应的 Mekanism 能力存在。
+
+#### 新增化学品与热量访问器
+
+| 方法 | 返回 | 含义 |
+| --- | --- | --- |
+| `chemicalInputs()` | `List<ResourceAmount<Identifier>>` | 按化学品 ID 聚合所有输入能力。 |
+| `chemicalAmount(Identifier chemicalId)` | `long` | 查询指定化学品的输入总量。ID 为 `null` 时抛异常。 |
+| `chemicalTagAmount(Identifier tagId)` | `long` | 查询匹配指定标签的化学品输入总量。ID 为 `null` 时抛异常。 |
+| `chemicalOutputCapacity(Identifier chemicalId)` | `long` | 查询指定化学品的输出剩余容量。ID 为 `null` 时抛异常。 |
+| `heatInputs()` | `List<HeatState>` | 返回热量输入状态列表。 |
+| `heatOutputs()` | `List<HeatState>` | 返回热量输出状态列表。 |
+
+`HeatState` 提供 `heat()`、`temperature()` 和 `heatCapacity()` 三个访问器，单位分别为热量、K 和热量容量。没有对应能力时，列表为空，数量与容量查询返回 `0`。
+
+```javascript
+const view = ctx.machineContext().ioView()
+const Identifier = Java.loadClass("net.minecraft.resources.Identifier")
+const oxygen = view.chemicalAmount(Identifier.parse("mekanism:oxygen"))
+const heatStates = view.heatInputs()
+```
+
 ### `MachineIoPlan`
 
-> `cn.howxu.mmcr.api.publicapi.machine.MachineIoPlan` 是 `TickBehaviorContext.ioPlan()` 返回的 IO 计划入口。在 `tickBehavior(behavior => behavior.serverTick(ctx => ...))` 回调内通过 `ctx.ioPlan()` 取得；用于在每个服务端 tick 声明要消费/产出的 `MachineRequirement`，先 `simulate()` 预演再 `commit()`。每 `MachineBehaviorBuilderJS` 实例每次 tick 都返回新的 plan，多次调用之间状态不共享。
+> `cn.howxu.mmcr.api.publicapi.machine.MachineIoPlan` 是 `TickBehaviorContext.ioPlan()` 返回的 IO 计划入口。在 `tickBehavior(behavior => behavior.serverTick(ctx => ...))` 回调内通过 `ctx.ioPlan()` 取得；用于在每个服务端 tick 声明要消费/产出的 `RecipeRequirement`（通常使用 `MachineRequirement` 子类型），先 `simulate()` 预演再 `commit()`。每 `MachineBehaviorBuilderJS` 实例每次 tick 都返回新的 plan，多次调用之间状态不共享。
 
 **字段**
 
@@ -3595,9 +3750,9 @@ const behavior = behaviorBuilder.build()
 
 **方法**
 
-#### `addInput(MachineRequirement requirement) → MachineIoPlan`
+#### `addInput(RecipeRequirement requirement) → MachineIoPlan`
 
-- **参数表**：`requirement`（`MachineRequirement`）— 方向为输入的需求（`requirement.io() == INPUT`），通常来自 `api.itemInputRequirement(...)` / `api.fluidInputRequirement(...)` / `api.energyRequirement(...)`。
+- **参数表**：`requirement`（`RecipeRequirement`）— 方向为输入的需求（`requirement.io() == INPUT`），通常来自 `api.itemInputRequirement(...)` / `api.fluidInputRequirement(...)` / `api.energyRequirement(...)` 返回的 `MachineRequirement`。
 - **返回**：当前 plan，支持链式调用。
 - **抛出**：`IllegalArgumentException`：`requirement.io()` 不为 `INPUT`。
 - **默认值**：无。
@@ -3608,9 +3763,9 @@ const plan = ctx.ioPlan()
     .addInput(api.itemInputRequirement("minecraft:iron_ingot", 1))
 ```
 
-#### `addOutput(MachineRequirement requirement, OutputPolicy policy) → MachineIoPlan`
+#### `addOutput(RecipeRequirement requirement, OutputPolicy policy) → MachineIoPlan`
 
-- **参数表**：`requirement`（`MachineRequirement`）— 方向为输出的需求；`policy`（`OutputPolicy`）— 通过 `api.outputPolicy().REQUIRE_FULL` 或 `api.outputPolicy().ALLOW_PARTIAL` 取值。
+- **参数表**：`requirement`（`RecipeRequirement`）— 方向为输出的需求；`policy`（`OutputPolicy`）— 通过 `api.outputPolicy().REQUIRE_FULL` 或 `api.outputPolicy().ALLOW_PARTIAL` 取值。
 - **返回**：当前 plan，支持链式调用。
 - **抛出**：`IllegalArgumentException`：`requirement.io()` 不为 `OUTPUT`；`NullPointerException`：`policy` 为 `null`。
 - **默认值**：无。
@@ -3622,9 +3777,9 @@ const plan = ctx.ioPlan()
                api.outputPolicy().ALLOW_PARTIAL)
 ```
 
-#### `add(MachineRequirement requirement) → MachineIoPlan`
+#### `add(RecipeRequirement requirement) → MachineIoPlan`
 
-- **参数表**：`requirement`（`MachineRequirement`）— 按 `requirement.io()` 自动路由到 `addInput(...)` 或 `addOutput(requirement, REQUIRE_FULL)`。
+- **参数表**：`requirement`（`RecipeRequirement`）— 按 `requirement.io()` 自动路由到 `addInput(...)` 或 `addOutput(requirement, REQUIRE_FULL)`。
 - **返回**：当前 plan。
 - **抛出**：与对应路径一致（输入错配抛 `IllegalArgumentException`，输出策略为隐式 `REQUIRE_FULL`）。
 - **默认值**：无。
@@ -3634,7 +3789,7 @@ const plan = ctx.ioPlan()
 const plan = ctx.ioPlan().add(api.energyRequirement(api.recipeIO().INPUT, 32))
 ```
 
-#### `requirements() → List<MachineRequirement>`
+#### `requirements() → List<RecipeRequirement>`
 
 - **参数表**：无。
 - **返回**：当前已添加的全部需求（按插入顺序）。模拟前需要的所有需求必须先加入。
@@ -3692,6 +3847,19 @@ plan.commit(transaction => {
     const publicTransaction = DataStorage.Transaction.view(transaction)
     storage.set("energy", /* DataValue.of(...) */ null, publicTransaction)
     if (energyShort) transaction.getSnapshotLedger().abort()
+})
+```
+
+#### `commitData(Consumer<DataStorage.Transaction> transactionWrites) → CommitResult`
+
+- **参数表**：`transactionWrites`（`Consumer<DataStorage.Transaction>`）— 公共数据存储事务回调；回调收到的事务可直接传给 `DataStorage.set(...)` 的事务重载。
+- **返回**：`CommitResult`。
+- **抛出**：`NullPointerException`：`transactionWrites` 为 `null`；其余提交语义与 `commit(...)` 相同。
+- **示例**：
+
+```javascript
+plan.commitData(transaction => {
+    // 使用 transaction 执行可随 plan 一起回滚的数据存储写入
 })
 ```
 

@@ -5016,6 +5016,7 @@ public final class DataValue {
 
     public static DataValue list(List<DataValue> values);
     public static DataValue map(Map<String, DataValue> values);
+    public static DataValue from(Object value);
 
     public Object value();
     public DataValueType type();
@@ -5057,6 +5058,11 @@ public final class DataValue {
 | `DataValue.of(BigInteger)` / `BigDecimal` | 任意精度数。`null` → `NullPointerException("value")`。 |
 | `DataValue.list(List<DataValue>)` | 有序列表。元素或入参为 `null` → `NullPointerException("values")`。 |
 | `DataValue.map(Map<String, DataValue>)` | 键值映射。键为空 / `null` → `IllegalArgumentException("map key must not be blank")`；值或入参为 `null` → `NullPointerException("map value")`。 |
+| `DataValue.from(Object)` | 递归把支持的 Java 对象、集合、数组、映射或已有 `DataValue` 转换为 `DataValue`。 |
+
+##### `from(Object value) → DataValue`
+
+递归转换通用 Java 值：已有 `DataValue` 原样返回；`Map` 转为字符串键映射；`Collection` 与 Java 数组转为列表；布尔、字符串、数值包装类、`BigInteger` 和 `BigDecimal` 转为对应标量。`null`、空白映射键、非有限浮点和不支持的对象会抛 `IllegalArgumentException`。
 
 ##### `value() → Object`
 
@@ -5121,7 +5127,9 @@ public final class DataStorage {
     public Map<String, DataValue> values();
 
     public void set(String key, DataValue value);
+    public void set(String key, Object value);
     public boolean set(String key, DataValue value, DataStorage.Transaction transaction);
+    public boolean set(String key, Object value, DataStorage.Transaction transaction);
     public Optional<DataValue> remove(String key);
 
     public Object bridgeValue();
@@ -5152,13 +5160,13 @@ public final class DataStorage {
 
 返回当前全部键值的**不可变**快照（按插入顺序，`LinkedHashMap`）。每次调用都会重新生成快照；调用方在 `set(...)` / `remove(...)` 后需要重新取值。
 
-##### `set(key, value)`
+##### `set(String key, DataValue value)` / `set(String key, Object value)`
 
-非事务写入。值与现存值相等时跳过变更通知；其他情况覆写键、失效缓存、触发监听器。
+非事务写入。`Object` 重载使用 `DataValue.from(value)` 递归转换普通 Java 值。值与现存值相等时跳过变更通知；其他情况覆写键、失效缓存、触发监听器。
 
-##### `set(key, value, transaction) → boolean`
+##### `set(String key, DataValue value, DataStorage.Transaction transaction)` / `set(String key, Object value, DataStorage.Transaction transaction) → boolean`
 
-事务感知写入。事务回滚时写入自动撤销；根提交时按需触发监听器。
+事务感知写入。`Object` 重载先使用 `DataValue.from(value)` 转换；事务回滚时写入自动撤销，根提交时按需触发监听器。
 
 - `transaction`：`DataStorage.Transaction`（公共事务包装），`null` → `NullPointerException("transaction")`。
 - 返回：`true` 表示值真正发生变化；`false` 表示新值与现存值相等，未发生写入。

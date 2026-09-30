@@ -447,7 +447,7 @@ MMCREvents.server(event => {
 
 **字段**
 
-类自身只有三个私有缓存字段：`screenScope`、`recipeIO`、`outputPolicy`。脚本通过下列方法取得它们。
+类自身只有四个私有缓存字段：`screenScope`、`recipeIO`、`outputPolicy`、`modifierOperation`。脚本通过下列方法取得它们。
 
 **方法**
 
@@ -491,6 +491,19 @@ const input = io.INPUT
 const policy = MMCR.getAPI().outputPolicy().ALLOW_PARTIAL
 ```
 
+##### `modifierOperation() → ModifierOperationValues`
+
+- **参数表**：无。
+- **返回**：配方修饰器操作常量对象。
+- **抛出**：无。
+- **默认值**：缓存的 `ModifierOperationValues`。
+- **示例**：
+
+```javascript
+const operation = MMCR.getAPI().modifierOperation()
+machine.durationByInterface("temperature", 0, 100, 2, 0.5, operation.ADD)
+```
+
 #### `ScreenScopeValues`
 
 | 名称 | 类型 | 值 |
@@ -511,6 +524,15 @@ const policy = MMCR.getAPI().outputPolicy().ALLOW_PARTIAL
 |------|------|------|
 | `REQUIRE_FULL` | `OutputPolicy` | 要求输出全部接受。 |
 | `ALLOW_PARTIAL` | `OutputPolicy` | 允许输出计划部分接受。 |
+
+#### `ModifierOperationValues`
+
+| 名称 | 类型 | 值 |
+|------|------|------|
+| `ADD` | `RecipeModifier.Operation` | 加法。 |
+| `MULTIPLY` | `RecipeModifier.Operation` | 乘法。 |
+| `SUBTRACT` | `RecipeModifier.Operation` | 减法。 |
+| `DIVIDE` | `RecipeModifier.Operation` | 除法。 |
 
 #### 字符串与数字
 
@@ -1328,6 +1350,7 @@ ctx.dataStorage().set("state", value)
 - `portRequirements` 的端口 ID 是端口注册名，不是方块标签；区间写成 JavaScript 二元数组。
 - `customRecipeIo` 只接受已经注册 codec 的类型，任意 JSON 并不会自动成为自定义 IO。
 - `dataValue` 的映射值也会递归转换；网络请求根对象必须是映射，不能直接发送单个数字或字符串。
+- `DataStorage.set(...)` 现在也接受支持的普通脚本值；只有需要显式构造类型包装或用于网络请求时才需要调用 `api.dataValue(...)`。
 - `smartInterfaceInput` 的 API 门面只有范围签名；固定值需求应使用相同的 `min` 和 `max`，或使用编程式配方构建器的固定值重载。
 :::
 
@@ -2139,8 +2162,8 @@ machine.durationByInterface("temperature", 0, 100, 2, 0.5)
 - **示例**：
 
 ```javascript
-const Operation = Java.loadClass("cn.howxu.mmcr.api.recipe.modifier.RecipeModifier$Operation")
-machine.durationByInterface("temperature", 0, 100, 2, 0.5, Operation.ADD)
+const operation = MMCR.getAPI().modifierOperation()
+machine.durationByInterface("temperature", 0, 100, 2, 0.5, operation.ADD)
 ```
 
 ##### `energyByInterface(String type, float min, float max, float atMin, float atMax) → MachineBuilderJS`
@@ -2164,8 +2187,8 @@ machine.energyByInterface("mode", 1, 3, 1, 2)
 - **示例**：
 
 ```javascript
-const Operation = Java.loadClass("cn.howxu.mmcr.api.recipe.modifier.RecipeModifier$Operation")
-machine.energyByInterface("mode", 1, 3, 1, 2, Operation.MULTIPLY)
+const operation = MMCR.getAPI().modifierOperation()
+machine.energyByInterface("mode", 1, 3, 1, 2, operation.MULTIPLY)
 ```
 
 ##### `itemInputByInterface(String type, float min, float max, float atMin, float atMax) → MachineBuilderJS`
@@ -2219,8 +2242,8 @@ machine.itemOutputChanceByInterface("quality", 0, 1, 0.5, 1)
 - **示例**：
 
 ```javascript
-const Operation = Java.loadClass("cn.howxu.mmcr.api.recipe.modifier.RecipeModifier$Operation")
-machine.itemOutputChanceByInterface("quality", 0, 1, 0.5, 1, Operation.MULTIPLY)
+const operation = MMCR.getAPI().modifierOperation()
+machine.itemOutputChanceByInterface("quality", 0, 1, 0.5, 1, operation.MULTIPLY)
 ```
 
 ##### `fluidInputByInterface(String type, float min, float max, float atMin, float atMax) → MachineBuilderJS`
@@ -2274,8 +2297,8 @@ machine.fluidOutputChanceByInterface("quality", 0, 1, 0.5, 1)
 - **示例**：
 
 ```javascript
-const Operation = Java.loadClass("cn.howxu.mmcr.api.recipe.modifier.RecipeModifier$Operation")
-machine.fluidOutputChanceByInterface("quality", 0, 1, 0.5, 1, Operation.ADD)
+const operation = MMCR.getAPI().modifierOperation()
+machine.fluidOutputChanceByInterface("quality", 0, 1, 0.5, 1, operation.ADD)
 ```
 
 ##### `chemicalInputByInterface(String type, float min, float max, float atMin, float atMax) → MachineBuilderJS`
@@ -2329,10 +2352,9 @@ machine.fluidOutputChanceByInterface("quality", 0, 1, 0.5, 1, Operation.ADD)
 示例：
 
 ```javascript
-const Operation = Java.loadClass("cn.howxu.mmcr.api.recipe.modifier.RecipeModifier$Operation")
 machine
     .chemicalInputByInterface("chemical_rate", 0, 100, 1, 2)
-    .chemicalOutputChanceByInterface("quality", 0, 100, 0.5, 1, Operation.MULTIPLY)
+    .chemicalOutputChanceByInterface("quality", 0, 100, 0.5, 1, MMCR.getAPI().modifierOperation().MULTIPLY)
     .heatInputByInterface("temperature", 0, 100, 1, 1.5)
 ```
 
@@ -3975,7 +3997,7 @@ if (!result.successful()) {
 
 #### `commit(Consumer<TransactionContext> transactionWrites) → CommitResult`
 
-- **参数表**：`transactionWrites`（`Consumer<TransactionContext>`），事务回调；运行在 NeoForge transfer 事务上下文中。回调收到的是 NeoForge 的 `TransactionContext`；要写入数据存储请用 `DataStorage.Transaction.view(transaction)` 包装成公共事务再传给 `DataStorage.set(...)`，失败回滚时事务写入会被撤销。
+- **参数表**：`transactionWrites`（`Consumer<TransactionContext>`），事务回调；运行在 NeoForge transfer 事务上下文中。回调收到的是 NeoForge 的 `TransactionContext`；需要写入数据存储时，优先使用下方的 `commitData(...)`。
 - **返回**：`CommitResult`。
 - **抛出**：`IllegalStateException`：plan 已被 `commit(...)` 消耗；`NullPointerException`：`transactionWrites` 为 `null`。
 - **默认值**：无。
@@ -3983,11 +4005,7 @@ if (!result.successful()) {
 
 ```javascript
 plan.commit(transaction => {
-    const DataStorage = Java.loadClass("cn.howxu.mmcr.api.publicapi.data.DataStorage")
-    const storage = DataStorage.view(ctx.dataStorage())
-    if (storage == null) return
-    const publicTransaction = DataStorage.Transaction.view(transaction)
-    storage.set("energy", /* DataValue.of(...) */ null, publicTransaction)
+    // 低层 NeoForge transfer 事务操作
     if (energyShort) transaction.getSnapshotLedger().abort()
 })
 ```
@@ -4000,8 +4018,11 @@ plan.commit(transaction => {
 - **示例**：
 
 ```javascript
+const storage = ctx.dataStorage()
+if (storage == null) return
 plan.commitData(transaction => {
-    // 使用 transaction 执行可随 plan 一起回滚的数据存储写入
+    // 直接传入脚本值；写入会随 plan 一起回滚
+    storage.set("energy", 20.0, transaction)
 })
 ```
 

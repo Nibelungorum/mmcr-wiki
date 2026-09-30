@@ -4,7 +4,7 @@ title: KubeJS API
 
 # KubeJS API
 
-本页是 Modular Machinery Community Refoxed（MMCR）KubeJS 集成层的集中参考。内容以 `cn.howxu.mmcr.compat.kubejs` 当前源码为准，示例使用 KubeJS/Rhino 可接受的 JavaScript 写法。
+本页是 MMCR 的 KubeJS 集成层的集中参考。内容以 `cn.howxu.mmcr.compat.kubejs` 当前源码为准，示例使用 KubeJS/Rhino 可接受的 JavaScript 写法。
 
 MMCR 的 KubeJS API 分为三个时序窗口：启动脚本中的机器、等级、修饰符和屏幕文本注册；服务端脚本加载中的结构注册；`ServerEvents.recipes` 中的数据驱动配方注册。启动注册与服务端结构注册由 `/reload` 之外的生命周期管理，配方事务则可以随服务器资源重载一起替换。
 
@@ -322,7 +322,7 @@ MMCREvents.startup(event => {
 
 #### `registerModifier(String id, ModifierDefinition definition) → void`
 
-- **参数表**：`id`（`String`）— 修饰器 ID；`definition`（`ModifierDefinition`）— Java 公共 API 的修饰器定义对象，通常由 `event.getAPI().modifierDefinition(...)` 创建。
+- **参数表**：`id`（`String`）— 修饰器 ID；`definition`（`ModifierDefinition`）为 Java 公共 API 的修饰器定义对象，通常由 `event.getAPI().modifierDefinition(...)` 创建。
 - **返回**：无；把修饰器加入当前机器结构注册窗口。
 - **抛出**：`IllegalArgumentException`：ID 无法解析；注册器可能因重复 ID、空定义或生命周期状态抛异常。
 - **默认值**：无。
@@ -352,7 +352,7 @@ MMCREvents.startup(event => {
 
 #### `addRecipePoolWorkstation(String recipePoolId, String itemId) → void`
 
-把指定物品注册为 JEI 中某个 MMCR 配方池页的工作台。两个 ID 都必须是有效资源 ID。
+把指定物品注册为 JEI 中某个 MMCR 配方池页的工作方块。两个 ID 都必须是有效资源 ID。
 
 ```javascript
 MMCREvents.startup(event => {
@@ -362,7 +362,7 @@ MMCREvents.startup(event => {
 
 #### `addRecipePoolWorkstation(String recipePoolId, ItemStack workstation) → void`
 
-以物品栈注册配方池工作台；空物品栈会被拒绝，注册时物品数量归一为 1。
+以物品栈注册配方池工作方块；空物品栈会被拒绝，注册时物品数量归一为 1。
 
 #### `addMachineWorkstation(String machineId, String recipeTypeId) → void`
 
@@ -532,7 +532,7 @@ const policy = MMCR.getAPI().outputPolicy().ALLOW_PARTIAL
 ##### `readableNumber(long value) → String`
 
 - **参数表**：`value`（`long`）— 要格式化的整数。
-- **返回**：紧凑可读格式。从 `1000` 起使用 SI 前缀，并去除末尾零，例如 `1000` → `1k`、`1500` → `1.5k`。对应 Java 端 `ReadableNumber.formatCompact(long)`。
+- **返回**：紧凑可读格式。从 `1000` 起使用 SI 前缀，并去除末尾零，例如 `1000` → `1k`、`1500` → `1.5k`。
 - **抛出**：`IllegalArgumentException`（`value < 0`）。
 - **默认值**：无。
 - **示例**：
@@ -544,7 +544,7 @@ const text = MMCR.getAPI().readableNumber(1000000)
 ##### `readableNumberBigInt(BigInteger value) → String`
 
 - **参数表**：`value`（`BigInteger`）— 要格式化的任意精度整数。
-- **返回**：紧凑可读格式，例如 `1_000_000` 格式化为 `1M`。对应 Java 端 `ReadableNumber.formatCompact(BigInteger)`，**没有 long 重载的精度上限**。
+- **返回**：紧凑可读格式，例如 `1_000_000` 格式化为 `1M`。
 - **抛出**：`IllegalArgumentException`（负数）。
 - **示例**：
 
@@ -557,7 +557,7 @@ const text = MMCR.getAPI().readableNumberBigInt(stored) // "1.23E29"
 ##### `readableNumberBigDecimal(BigDecimal value) → String`
 
 - **参数表**：`value`（`BigDecimal`）— 要格式化的任意精度小数。
-- **返回**：紧凑可读格式，例如 `12345.678` 格式化为 `12.34k`。对应 Java 端 `ReadableNumber.formatCompact(BigDecimal)`；结果最多保留两位小数并向下截断。
+- **返回**：紧凑可读格式，例如 `12345.678` 格式化为 `12.34k`。
 - **抛出**：`IllegalArgumentException`（负数）。
 - **示例**：
 
@@ -569,7 +569,7 @@ const text = MMCR.getAPI().readableNumberBigDecimal(new BigDecimal("12345.678"))
 ##### `readableNumberExact(long value) → String`
 
 - **参数表**：`value`（`long`）— 要格式化的整数。
-- **返回**：带分组分隔符的精确格式，例如 `1000000` 格式化为 `1,000,000`。对应 Java 端 `ReadableNumber.formatExact(long)`——`1_000` 以下也加千分位（`"999"` → `"999"`，`"1000"` → `"1,000"`）。
+- **返回**：带分组分隔符的精确格式，例如 `1000000` 格式化为 `1,000,000`。
 - **抛出**：`IllegalArgumentException`（`value < 0`）。
 - **默认值**：无。
 - **示例**：
@@ -581,7 +581,7 @@ const text = MMCR.getAPI().readableNumberExact(1000000)
 ##### `readableNumberFull(long value) → String`
 
 - **参数表**：`value`（`long`）— 要格式化的整数。
-- **返回**：完整 SI 前缀可读格式——`999_999` 以下返回带分组的整数，`1_000_000` 起使用 SI 前缀并保留两位小数（`1_000_000` → `"1.00M"`、`1_230_000_000` → `"1.23G"`）。对应 Java 端 `ReadableNumber.format(long)`。
+- **返回**：完整 SI 前缀可读格式——`999_999` 以下返回带分组的整数，`1_000_000` 起使用 SI 前缀并保留两位小数（`1_000_000` → `"1.00M"`、`1_230_000_000` → `"1.23G"`）。
 - **抛出**：`IllegalArgumentException`（负数）。
 - **示例**：
 
@@ -592,7 +592,7 @@ const text = MMCR.getAPI().readableNumberFull(1234567890) // "1.23G"
 ##### `readableNumberFullBigInt(BigInteger value) → String`
 
 - **参数表**：`value`（`BigInteger`）— 要格式化的任意精度整数。
-- **返回**：完整 SI 前缀可读格式，无 long 精度上限。对应 Java 端 `ReadableNumber.format(BigInteger)`。
+- **返回**：完整 SI 前缀可读格式，无 long 精度上限。
 - **抛出**：`IllegalArgumentException`（负数）。
 - **示例**：
 
@@ -605,7 +605,7 @@ const text = MMCR.getAPI().readableNumberFullBigInt(stored) // "9.99E29"
 ##### `readableNumberFullBigDecimal(BigDecimal value) → String`
 
 - **参数表**：`value`（`BigDecimal`）— 要格式化的任意精度小数。
-- **返回**：完整 SI 前缀可读格式。对应 Java 端 `ReadableNumber.format(BigDecimal)`。
+- **返回**：完整 SI 前缀可读格式。
 - **抛出**：`IllegalArgumentException`（负数）。
 - **示例**：
 
@@ -617,7 +617,7 @@ const text = MMCR.getAPI().readableNumberFullBigDecimal(new BigDecimal("1234567.
 ##### `readableNumberForSlot(long value, int scale, String unit) → String`
 
 - **参数表**：`value`（`long`）— 原始整数值；`scale`（`int`，`0..18`）— 小数点偏移；`unit`（`String`）— 单位后缀（如 `"B"`、`"FE"`）。
-- **返回**：最多 5 个字符的槽位字符串——按 `value / 10^scale` 在所给 `unit` 下渲染，使用**大写** SI 前缀（`""`、`"K"`、`"M"`、`"G"`、`"T"`、`"P"`、`"E"`），多余位数截断而非四舍五入。例如 `readableNumberForSlot(1_001, 3, "B")` 返回 `"1.00B"`，`readableNumberForSlot(15_000_000, 0, "FE")` 返回 `"15MFE"`。对应 Java 端 `ReadableNumber.formatForSlot(long, int, String)`。
+- **返回**：最多 5 个字符的槽位字符串——按 `value / 10^scale` 在所给 `unit` 下渲染，使用**大写** SI 前缀（`""`、`"K"`、`"M"`、`"G"`、`"T"`、`"P"`、`"E"`），多余位数截断而非四舍五入。例如 `readableNumberForSlot(1_001, 3, "B")` 返回 `"1.00B"`，`readableNumberForSlot(15_000_000, 0, "FE")` 返回 `"15MFE"`。
 - **抛出**：`IllegalArgumentException`（负数 / `scale` 越界 / `unit` 过长导致槽位放不下）。
 - **示例**：
 
@@ -666,7 +666,7 @@ builder.set("X", api.any())
 ##### `coupler() → BlockPredicate`
 
 - **参数表**：无。
-- **返回**：匹配 MMCR 机器耦合器的谓词。
+- **返回**：匹配 MMCR 模块桥接器的谓词。
 - **抛出**：无。
 - **默认值**：无。
 - **示例**：
@@ -921,6 +921,8 @@ const tiers = api.portTierRequirements([
 端口等级名称按类别分别为：物品 `tiny`、`small`、`normal`、`reinforced`、`big`、`huge`、`ludicrous`；流体额外有 `vacuum`；能量额外有 `ultimate`。
 
 #### 配方输入输出
+
+注意，以下内容是提供给自定义 Tick 中调整合成计划使用的 API ，在 `ServerEvents.recipes()` 事件中调用是无法正常使用的。
 
 ##### `itemInput(String itemId, long count, float consumeChance) → MachineIngredient`
 
@@ -1414,8 +1416,9 @@ const machine = event.createMachine("example:press").displayNameKey("machine.exa
 ```javascript
 const machine = event.createMachine("example:press").localizedName("machine.example.press")
 ```
-
+::: warning
 该方法标记为 `@Deprecated(forRemoval = true)`，新脚本应使用 `displayNameKey`。
+:::
 
 ##### `recipePool(String... recipePoolIds) → MachineBuilderJS`
 
@@ -1469,7 +1472,7 @@ machine.role("host").host("example:module")
 
 ##### `host(String... moduleIds) → MachineBuilderJS`
 
-- **参数表**：`moduleIds`（`String...`）— 被该宿主接受的模块机器 ID；重复项会去重并保持插入顺序。
+- **参数表**：`moduleIds`（`String...`），被该宿主接受的模块机器 ID；重复项会去重并保持插入顺序。
 - **返回**：当前构建器。
 - **抛出**：`IllegalArgumentException`：非空 ID 无法解析；显式 `HOST` 角色没有任何模块时在构建时抛异常。
 - **默认值**：空集合；`null` 数组或数组中的 `null` 项被忽略。
@@ -1493,7 +1496,7 @@ machine.module()
 
 ##### `module(boolean module) → MachineBuilderJS`
 
-- **参数表**：`module`（`boolean`）— 是否为模块机器。
+- **参数表**：`module`（`boolean`），是否为模块机器。
 - **返回**：当前构建器。
 - **抛出**：与显式角色冲突时在 `createObject()` 或 `register()` 阶段抛 `IllegalArgumentException`。
 - **默认值**：`false`。
@@ -1505,7 +1508,7 @@ machine.module(true)
 
 ##### `factoryThreads(int factoryThreads) → MachineBuilderJS`
 
-- **参数表**：`factoryThreads`（`int`）— 工厂线程上限。
+- **参数表**：`factoryThreads`（`int`），工厂线程上限。
 - **返回**：当前构建器。
 - **抛出**：`IllegalArgumentException`：小于 `1`。
 - **默认值**：`1`。
@@ -1529,7 +1532,7 @@ machine.allowMultithreading()
 
 ##### `allowMultithreading(boolean allow) → MachineBuilderJS`
 
-- **参数表**：`allow`（`boolean`）— 是否允许多线程。
+- **参数表**：`allow`（`boolean`），是否允许多线程。
 - **返回**：当前构建器。
 - **抛出**：无。
 - **默认值**：`false`。
@@ -1553,7 +1556,7 @@ machine.allowParallelism()
 
 ##### `allowParallelism(boolean allow) → MachineBuilderJS`
 
-- **参数表**：`allow`（`boolean`）— 是否允许并行控制器。
+- **参数表**：`allow`（`boolean`），是否允许并行控制器。
 - **返回**：当前构建器。
 - **抛出**：无。
 - **默认值**：`false`。
@@ -1565,7 +1568,7 @@ machine.allowParallelism(true)
 
 ##### `maxParallelAmount(long amount) → MachineBuilderJS`
 
-- **参数表**：`amount`（`long`）— 最大并行数量，支持超过 `Integer.MAX_VALUE` 的长整数。
+- **参数表**：`amount`（`long`），最大并行数量，支持超过 `Integer.MAX_VALUE` 的长整数。
 - **返回**：当前构建器。
 - **抛出**：`IllegalArgumentException`：最终机器注册校验发现数量小于 `1`。
 - **默认值**：`1`。
@@ -1577,7 +1580,7 @@ machine.maxParallelAmount(32)
 
 ##### `maxParallelism(long maxParallelism) → MachineBuilderJS`
 
-- **参数表**：`maxParallelism`（`long`）— `maxParallelAmount` 的别名参数。
+- **参数表**：`maxParallelism`（`long`），`maxParallelAmount` 的别名参数。
 - **返回**：等价于 `maxParallelAmount(maxParallelism)` 的当前构建器。
 - **抛出**：同 `maxParallelAmount`。
 - **默认值**：`1`。
@@ -1601,7 +1604,7 @@ machine.allowModifiers()
 
 ##### `allowModifiers(boolean allow) → MachineBuilderJS`
 
-- **参数表**：`allow`（`boolean`）— 是否允许机器修饰器。
+- **参数表**：`allow`（`boolean`），是否允许机器修饰器。
 - **返回**：当前构建器。
 - **抛出**：无。
 - **默认值**：`false`。
@@ -1615,7 +1618,7 @@ machine.allowModifiers(true)
 
 ##### `controllerSpec(MachineControllerSpec controllerSpec) → MachineBuilderJS`
 
-- **参数表**：`controllerSpec`（`MachineControllerSpec`）— 已构建的完整控制器规格。
+- **参数表**：`controllerSpec`（`MachineControllerSpec`），已构建的完整控制器规格。
 - **返回**：当前构建器。
 - **抛出**：源码不立即检查 `null`；传入 `null` 会回退到自动派生规格。
 - **默认值**：由纹理、朝向和 tooltip 字段派生。
@@ -1628,7 +1631,7 @@ machine.controllerSpec(spec)
 
 ##### `controllerTooltip(String... lines) → MachineBuilderJS`
 
-- **参数表**：`lines`（`String...`）— tooltip 翻译键或文本行；空白行和 `null` 项忽略。
+- **参数表**：`lines`（`String...`），tooltip 翻译键或文本行；空白行和 `null` 项忽略。
 - **返回**：当前构建器。
 - **抛出**：无额外异常；数组为 `null` 时不添加内容。
 - **默认值**：空列表。
@@ -1640,7 +1643,7 @@ machine.controllerTooltip("tooltip.example.press.0", "tooltip.example.press.1")
 
 ##### `controllerTextures(String front, String otherFive) → MachineBuilderJS`
 
-- **参数表**：`front`（`String`）— 前面纹理 ID；`otherFive`（`String`）— 其余方向共用的纹理 ID。
+- **参数表**：`front`（`String`），前面纹理 ID；`otherFive`（`String`），其余方向共用的纹理 ID。
 - **返回**：当前构建器。
 - **抛出**：`IllegalArgumentException`：任一 ID 无法解析。
 - **默认值**：未调用时使用控制器默认纹理。
@@ -1652,7 +1655,7 @@ machine.controllerTextures("example:block/controller_front", "example:block/cont
 
 ##### `controllerFrontTexture(String texture) → MachineBuilderJS`
 
-- **参数表**：`texture`（`String`）— 前面纹理资源 ID。
+- **参数表**：`texture`（`String`），前面纹理资源 ID。
 - **返回**：当前构建器。
 - **抛出**：`IllegalArgumentException`：ID 无法解析。
 - **默认值**：控制器规格的默认前面纹理。
@@ -1664,7 +1667,7 @@ machine.controllerFrontTexture("example:block/controller_front")
 
 ##### `controllerSideTexture(String texture) → MachineBuilderJS`
 
-- **参数表**：`texture`（`String`）— 侧面纹理资源 ID。
+- **参数表**：`texture`（`String`），侧面纹理资源 ID。
 - **返回**：当前构建器。
 - **抛出**：`IllegalArgumentException`：ID 无法解析。
 - **默认值**：控制器规格的默认侧面纹理。
@@ -1676,7 +1679,7 @@ machine.controllerSideTexture("example:block/controller_side")
 
 ##### `controllerTopTexture(String texture) → MachineBuilderJS`
 
-- **参数表**：`texture`（`String`）— 顶面纹理资源 ID。
+- **参数表**：`texture`（`String`），顶面纹理资源 ID。
 - **返回**：当前构建器。
 - **抛出**：`IllegalArgumentException`：ID 无法解析。
 - **默认值**：控制器规格的默认顶面纹理。
@@ -1688,7 +1691,7 @@ machine.controllerTopTexture("example:block/controller_top")
 
 ##### `controllerBottomTexture(String texture) → MachineBuilderJS`
 
-- **参数表**：`texture`（`String`）— 底面纹理资源 ID。
+- **参数表**：`texture`（`String`），底面纹理资源 ID。
 - **返回**：当前构建器。
 - **抛出**：`IllegalArgumentException`：ID 无法解析。
 - **默认值**：控制器规格的默认底面纹理。
@@ -1700,7 +1703,7 @@ machine.controllerBottomTexture("example:block/controller_bottom")
 
 ##### `controllerIdleOverlayTexture(String texture) → MachineBuilderJS`
 
-- **参数表**：`texture`（`String`）— 控制器空闲状态的覆盖纹理资源 ID。
+- **参数表**：`texture`（`String`），控制器空闲状态的覆盖纹理资源 ID。
 - **返回**：当前构建器。
 - **抛出**：`IllegalArgumentException`：ID 无法解析。
 - **默认值**：不绘制空闲覆盖纹理。
@@ -1712,7 +1715,7 @@ machine.controllerIdleOverlayTexture("example:block/controller_idle_overlay")
 
 ##### `controllerActiveOverlayTexture(String texture) → MachineBuilderJS`
 
-- **参数表**：`texture`（`String`）— 控制器运行状态的覆盖纹理资源 ID。
+- **参数表**：`texture`（`String`），控制器运行状态的覆盖纹理资源 ID。
 - **返回**：当前构建器。
 - **抛出**：`IllegalArgumentException`：ID 无法解析。
 - **默认值**：不绘制运行覆盖纹理。
@@ -1736,7 +1739,7 @@ machine.allowVerticalFacing()
 
 ##### `allowVerticalFacing(boolean allow) → MachineBuilderJS`
 
-- **参数表**：`allow`（`boolean`）— 是否允许竖直朝向。
+- **参数表**：`allow`（`boolean`），是否允许竖直朝向。
 - **返回**：当前构建器。
 - **抛出**：无。
 - **默认值**：`false`。
@@ -1760,7 +1763,7 @@ machine.fullyRotationallySymmetric()
 
 ##### `fullyRotationallySymmetric(boolean symmetric) → MachineBuilderJS`
 
-- **参数表**：`symmetric`（`boolean`）— 是否完全旋转对称。
+- **参数表**：`symmetric`（`boolean`），是否完全旋转对称。
 - **返回**：当前构建器。
 - **抛出**：无。
 - **默认值**：`false`。
@@ -1784,7 +1787,7 @@ machine.requireVerticalFacing()
 
 ##### `requireVerticalFacing(boolean required) → MachineBuilderJS`
 
-- **参数表**：`required`（`boolean`）— 是否强制竖直朝向；为 `true` 时会同步打开允许竖直朝向。
+- **参数表**：`required`（`boolean`），是否强制竖直朝向；为 `true` 时会同步打开允许竖直朝向。
 - **返回**：当前构建器。
 - **抛出**：无。
 - **默认值**：`false`。
@@ -1796,7 +1799,7 @@ machine.requireVerticalFacing(true)
 
 ##### `machineBasicBlock(String blockId) → MachineBuilderJS`
 
-- **参数表**：`blockId`（`String`）— 基础外观方块 ID。
+- **参数表**：`blockId`（`String`），基础外观方块 ID。
 - **返回**：当前构建器。
 - **抛出**：`IllegalArgumentException`：ID 无法解析；实际资源不存在时由外观系统处理。
 - **默认值**：外观默认基础方块。
@@ -1808,7 +1811,7 @@ machine.machineBasicBlock("minecraft:smooth_basalt")
 
 ##### `controllerBaseTexture(String textureId) → MachineBuilderJS`
 
-- **参数表**：`textureId`（`String`）— 控制器底纹理 ID。
+- **参数表**：`textureId`（`String`），控制器底纹理 ID。
 - **返回**：当前构建器。
 - **抛出**：`IllegalArgumentException`：ID 无法解析。
 - **默认值**：由基础外观方块派生。
@@ -1820,7 +1823,7 @@ machine.controllerBaseTexture("example:block/controller_base")
 
 ##### `formedPortBaseTexture(String textureId) → MachineBuilderJS`
 
-- **参数表**：`textureId`（`String`）— 成型端口底纹理 ID。
+- **参数表**：`textureId`（`String`），成型端口底纹理 ID。
 - **返回**：当前构建器。
 - **抛出**：`IllegalArgumentException`：ID 无法解析。
 - **默认值**：由基础外观方块派生。
@@ -1832,7 +1835,7 @@ machine.formedPortBaseTexture("example:block/formed_port_base")
 
 ##### `appearance(String machineBasicBlock) → MachineBuilderJS`
 
-- **参数表**：`machineBasicBlock`（`String`）— 基础外观方块 ID。
+- **参数表**：`machineBasicBlock`（`String`），基础外观方块 ID。
 - **返回**：等价于 `machineBasicBlock(machineBasicBlock)`。
 - **抛出**：同 `machineBasicBlock(String)`。
 - **默认值**：外观默认值。
@@ -1846,7 +1849,7 @@ machine.appearance("minecraft:green_terracotta")
 
 ##### `recipeBehavior(Consumer<MachineBehaviorBuilderJS> builder) → MachineBuilderJS`
 
-- **参数表**：`builder`（`Consumer<MachineBehaviorBuilderJS>`）— 配方行为配置回调。
+- **参数表**：`builder`（`Consumer<MachineBehaviorBuilderJS>`），配方行为配置回调。
 - **返回**：当前构建器。
 - **抛出**：`IllegalStateException`：已经选择 tick 行为；回调为空也会被拒绝。
 - **默认值**：`RecipeBehavior.defaults()`。
@@ -1860,7 +1863,7 @@ machine.recipeBehavior(behavior => behavior.recipeTick(ctx => {
 
 ##### `tickBehavior(Consumer<MachineBehaviorBuilderJS> builder) → MachineBuilderJS`
 
-- **参数表**：`builder`（`Consumer<MachineBehaviorBuilderJS>`）— 直接服务器 tick 行为配置回调。
+- **参数表**：`builder`（`Consumer<MachineBehaviorBuilderJS>`），直接服务器 tick 行为配置回调。
 - **返回**：当前构建器。
 - **抛出**：`IllegalStateException`：已经选择配方行为，或已经配置 `preServerTick`/`postServerTick`；回调为空也会被拒绝。
 - **默认值**：不调用时使用默认配方行为。
@@ -1875,7 +1878,7 @@ machine.tickBehavior(behavior => behavior.serverTick(ctx => {
 
 ##### `preServerTick(Consumer<MachineBehaviorContext> callback) → MachineBuilderJS`
 
-- **参数表**：`callback`（`Consumer<MachineBehaviorContext>`）— 配方机器每次服务器 tick 前执行的回调。
+- **参数表**：`callback`（`Consumer<MachineBehaviorContext>`），配方机器每次服务器 tick 前执行的回调。
 - **返回**：当前构建器。
 - **抛出**：`IllegalStateException`：已选择 tick 行为；`NullPointerException`：回调为空。
 - **默认值**：沿用配方行为的默认 pre-tick 回调。
@@ -1889,7 +1892,7 @@ machine.preServerTick(ctx => {
 
 ##### `postServerTick(Consumer<MachineBehaviorContext> callback) → MachineBuilderJS`
 
-- **参数表**：`callback`（`Consumer<MachineBehaviorContext>`）— 配方机器每次服务器 tick 后执行的回调。
+- **参数表**：`callback`（`Consumer<MachineBehaviorContext>`），配方机器每次服务器 tick 后执行的回调。
 - **返回**：当前构建器。
 - **抛出**：`IllegalStateException`：已选择 tick 行为；`NullPointerException`：回调为空。
 - **默认值**：沿用配方行为的默认 post-tick 回调。
@@ -1905,7 +1908,7 @@ machine.postServerTick(ctx => {
 
 ##### `networkInterface(int maxCount, int maxConnections) → MachineBuilderJS`
 
-- **参数表**：`maxCount`（`int`）— 机器允许的网络接口数量；`maxConnections`（`int`）— 每个网络接口允许的连接数上限。
+- **参数表**：`maxCount`（`int`），机器允许的网络接口数量；`maxConnections`（`int`），每个网络接口允许的连接数上限。
 - **返回**：当前构建器。
 - **抛出**：非法负值或超出注册器约束时在创建/注册机器时抛异常。
 - **默认值**：两个值均为 `0`，表示未启用网络接口能力。
@@ -1917,7 +1920,7 @@ machine.networkInterface(1, 16)
 
 ##### `allowNetworkMachine(String machineId) → MachineBuilderJS`
 
-- **参数表**：`machineId`（`String`）— 允许与本机器通信的目标机器 ID。
+- **参数表**：`machineId`（`String`），允许与本机器通信的目标机器 ID。
 - **返回**：当前构建器。
 - **抛出**：`IllegalArgumentException`：ID 无法解析；网络注册器可能在最终构建时校验目标。
 - **默认值**：白名单为空。
@@ -1961,7 +1964,7 @@ machine.requestFailed("example:report", (body, request, senderStorage, reason) =
 
 ##### `runningSound(String soundId) → MachineBuilderJS`
 
-- **参数表**：`soundId`（`String`）— 已注册声音事件 ID。
+- **参数表**：`soundId`（`String`），已注册声音事件 ID。
 - **返回**：当前构建器。
 - **抛出**：`IllegalArgumentException`：ID 无法解析；`ApiRegistrationException`：声音 ID 未通过 MMCR 声音校验。
 - **默认值**：无运行音效。
@@ -1973,7 +1976,7 @@ machine.runningSound("minecraft:block.furnace.fire_crackle")
 
 ##### `finishSound(String soundId) → MachineBuilderJS`
 
-- **参数表**：`soundId`（`String`）— 已注册声音事件 ID。
+- **参数表**：`soundId`（`String`），已注册声音事件 ID。
 - **返回**：当前构建器。
 - **抛出**：`IllegalArgumentException`：ID 无法解析；`ApiRegistrationException`：声音 ID 未注册或不合法。
 - **默认值**：无完成音效。
@@ -2023,7 +2026,7 @@ machine.shareSmartInterface()
 
 ##### `shareSmartInterface(boolean share) → MachineBuilderJS`
 
-- **参数表**：`share`（`boolean`）— 是否允许同一个智能接口方块绑定多个相同机器的控制器；启用后这些控制器读取同一份接口值。
+- **参数表**：`share`（`boolean`），是否允许同一个智能接口方块绑定多个相同机器的控制器；启用后这些控制器读取同一份接口值。
 - **返回**：当前构建器。
 - **抛出**：无。
 - **默认值**：`false`。
@@ -2077,7 +2080,7 @@ machine.energyByInterface("mode", 1, 3, 1, 2)
 
 ##### `energyByInterface(String type, float min, float max, float atMin, float atMax, RecipeModifier.Operation operation) → MachineBuilderJS`
 
-- **参数表**：前五个参数同上；`operation`（`RecipeModifier.Operation`）— 运算方式。
+- **参数表**：前五个参数同上；`operation`（`RecipeModifier.Operation`），运算方式。
 - **返回**：当前构建器。
 - **抛出**：操作或范围非法时抛异常。
 - **默认值**：无额外默认。
@@ -2090,13 +2093,13 @@ machine.energyByInterface("mode", 1, 3, 1, 2, Operation.MULTIPLY)
 
 ##### `itemInputByInterface(String type, float min, float max, float atMin, float atMax) → MachineBuilderJS`
 
-- **参数表**：`type`、`min`、`max`、`atMin`、`atMax`— 智能接口区间及物品输入数量修饰值。
+- **参数表**：`type`、`min`、`max`、`atMin`、`atMax`，智能接口区间及物品输入数量修饰值。
 - **返回**：当前构建器；目标为物品输入数量，操作固定为乘法。
 - **抛出**：当前统一修饰符目标校验不支持 `item` / `input`，调用时抛 `IllegalArgumentException`。
 
 ##### `itemOutputByInterface(String type, float min, float max, float atMin, float atMax) → MachineBuilderJS`
 
-- **参数表**：`type`、`min`、`max`、`atMin`、`atMax`— 物品输出数量修饰参数。
+- **参数表**：`type`、`min`、`max`、`atMin`、`atMax`，物品输出数量修饰参数。
 - **返回**：当前构建器；操作固定为乘法。
 - **抛出**：范围或类型非法时抛异常。
 - **默认值**：不影响输出概率。
@@ -2108,19 +2111,19 @@ machine.itemOutputByInterface("batch", 1, 4, 1, 4)
 
 ##### `itemInputChanceByInterface(String type, float min, float max, float atMin, float atMax) → MachineBuilderJS`
 
-- **参数表**：`type`、`min`、`max`、`atMin`、`atMax`— 物品输入概率修饰参数。
+- **参数表**：`type`、`min`、`max`、`atMin`、`atMax`，物品输入概率修饰参数。
 - **返回**：当前构建器；默认操作为乘法，且只作用于输入概率。
 - **抛出**：当前统一修饰符目标校验不支持 `item` / `input`，调用时抛 `IllegalArgumentException`。
 
 ##### `itemInputChanceByInterface(String type, float min, float max, float atMin, float atMax, RecipeModifier.Operation operation) → MachineBuilderJS`
 
-- **参数表**：前五个参数同上；`operation`（`RecipeModifier.Operation`）— 概率运算方式。
+- **参数表**：前五个参数同上；`operation`（`RecipeModifier.Operation`），概率运算方式。
 - **返回**：当前构建器。
 - **抛出**：操作或范围非法时抛异常；该输入目标当前还会因统一修饰符目标校验抛 `IllegalArgumentException`。
 
 ##### `itemOutputChanceByInterface(String type, float min, float max, float atMin, float atMax) → MachineBuilderJS`
 
-- **参数表**：`type`、`min`、`max`、`atMin`、`atMax`— 物品输出概率修饰参数。
+- **参数表**：`type`、`min`、`max`、`atMin`、`atMax`，物品输出概率修饰参数。
 - **返回**：当前构建器；默认操作为乘法，作用于输出概率。
 - **抛出**：范围或类型非法时抛异常。
 - **默认值**：操作为 `MULTIPLY`。
@@ -2132,7 +2135,7 @@ machine.itemOutputChanceByInterface("quality", 0, 1, 0.5, 1)
 
 ##### `itemOutputChanceByInterface(String type, float min, float max, float atMin, float atMax, RecipeModifier.Operation operation) → MachineBuilderJS`
 
-- **参数表**：前五个参数同上；`operation`（`RecipeModifier.Operation`）— 概率运算方式。
+- **参数表**：前五个参数同上；`operation`（`RecipeModifier.Operation`），概率运算方式。
 - **返回**：当前构建器。
 - **抛出**：操作、范围或类型非法时抛异常。
 - **默认值**：无额外默认。
@@ -2145,13 +2148,13 @@ machine.itemOutputChanceByInterface("quality", 0, 1, 0.5, 1, Operation.MULTIPLY)
 
 ##### `fluidInputByInterface(String type, float min, float max, float atMin, float atMax) → MachineBuilderJS`
 
-- **参数表**：`type`、`min`、`max`、`atMin`、`atMax`— 流体输入数量修饰参数。
+- **参数表**：`type`、`min`、`max`、`atMin`、`atMax`，流体输入数量修饰参数。
 - **返回**：当前构建器；操作固定为乘法。
 - **抛出**：当前统一修饰符目标校验不支持 `fluid` / `input`，调用时抛 `IllegalArgumentException`。
 
 ##### `fluidOutputByInterface(String type, float min, float max, float atMin, float atMax) → MachineBuilderJS`
 
-- **参数表**：`type`、`min`、`max`、`atMin`、`atMax`— 流体输出数量修饰参数。
+- **参数表**：`type`、`min`、`max`、`atMin`、`atMax`，流体输出数量修饰参数。
 - **返回**：当前构建器；操作固定为乘法。
 - **抛出**：范围或类型非法时抛异常。
 - **默认值**：不影响流体输出概率。
@@ -2163,7 +2166,7 @@ machine.fluidOutputByInterface("pressure", 0, 100, 1, 2)
 
 ##### `fluidInputChanceByInterface(String type, float min, float max, float atMin, float atMax) → MachineBuilderJS`
 
-- **参数表**：`type`、`min`、`max`、`atMin`、`atMax`— 流体输入概率修饰参数。
+- **参数表**：`type`、`min`、`max`、`atMin`、`atMax`，流体输入概率修饰参数。
 - **返回**：当前构建器；默认操作为乘法。
 - **抛出**：当前统一修饰符目标校验不支持 `fluid` / `input`，调用时抛 `IllegalArgumentException`。
 
@@ -2175,7 +2178,7 @@ machine.fluidOutputByInterface("pressure", 0, 100, 1, 2)
 
 ##### `fluidOutputChanceByInterface(String type, float min, float max, float atMin, float atMax) → MachineBuilderJS`
 
-- **参数表**：`type`、`min`、`max`、`atMin`、`atMax`— 流体输出概率修饰参数。
+- **参数表**：`type`、`min`、`max`、`atMin`、`atMax`，流体输出概率修饰参数。
 - **返回**：当前构建器；默认操作为乘法。
 - **抛出**：范围或类型非法时抛异常。
 - **默认值**：操作为 `MULTIPLY`。
@@ -2187,7 +2190,7 @@ machine.fluidOutputChanceByInterface("quality", 0, 1, 0.5, 1)
 
 ##### `fluidOutputChanceByInterface(String type, float min, float max, float atMin, float atMax, RecipeModifier.Operation operation) → MachineBuilderJS`
 
-- **参数表**：前五个参数同上；`operation`（`RecipeModifier.Operation`）— 概率运算方式。
+- **参数表**：前五个参数同上；`operation`（`RecipeModifier.Operation`），概率运算方式。
 - **返回**：当前构建器。
 - **抛出**：操作或范围非法时抛异常。
 - **默认值**：无额外默认。
@@ -2481,9 +2484,9 @@ event.createStructure("example:press")
     .build()
 ```
 
-#### 阶段式声明（高级）
+#### 阶段式声明
 
-`MachineStructureBuilderJS` 同时支持阶段式声明，对应 Java 端的 `fullStructure`/`expandStructure`/`extension`；阶段式 API 与扁平式 API 不能混用。
+`MachineStructureBuilderJS` 同时支持阶段式声明；阶段式 API 与扁平式 API 不能混用。
 
 ##### `fullStructure(PortRequirementSpec ports, PortTierRequirementSpec tiers, List<DynamicPatternSpec> dynamicPatterns, MachineStructureRequirements requirements) → MachineStructureBuilderJS`
 
@@ -2859,7 +2862,7 @@ stage.pattern("X").set("X", "minecraft:iron_block").controller("X")
 
 #### Mekanism 配方 IO 类型
 
-启用 Mekanism bridge 后，`requirements` 中可使用以下自定义类型。`io` 仍只表示输入 / 输出方向，化学品和热量由 `type` 区分：
+启用 Mekanism 后，`requirements` 中可使用以下自定义类型。`io` 仍只表示输入 / 输出方向，化学品和热量由 `type` 区分：
 
 | `type` | 方向 | 主要字段 | 编程式对应 |
 | --- | --- | --- | --- |
@@ -2929,6 +2932,10 @@ ServerEvents.recipes(event => {
 ```
 
 ### `MachineRecipeBuilderJS`
+
+:::error
+这是一个被废弃的功能，虽然实际上有在更新，但是并没有完全经过测试和各种场景的验证，请不要使用这个 API，请使用上方的数据驱动配方
+:::
 
 > `cn.howxu.mmcr.compat.kubejs.MachineRecipeBuilderJS` 是编程式配方构建器，由 `MachineRecipeBuilderJS(String/Identifier id)` 显式创建或通过测试代码使用。脚本中通常直接用数据驱动配方；该构建器用于需要在 `MMCREvents.server` 阶段按算法组装配方的场景。
 
@@ -3614,7 +3621,7 @@ builder.build()
 
 #### `idleStart(Consumer<MachineBehaviorContext> callback) → MachineBehaviorBuilderJS`
 
-- **参数表**：`callback`（`Consumer<MachineBehaviorContext>`）— 配方机器空闲期开始的回调。
+- **参数表**：`callback`（`Consumer<MachineBehaviorContext>`），配方机器空闲期开始的回调。
 - **返回**：当前构建器。
 - **抛出**：`IllegalStateException`：当前不是配方行为；`NullPointerException`：回调为空。
 - **默认值**：配方行为默认为空。
@@ -3628,7 +3635,7 @@ machine.recipeBehavior(behavior => behavior.idleStart(ctx => {
 
 #### `idleEnd(Consumer<MachineBehaviorContext> callback) → MachineBehaviorBuilderJS`
 
-- **参数表**：`callback`（`Consumer<MachineBehaviorContext>`）— 配方机器空闲期结束的回调。
+- **参数表**：`callback`（`Consumer<MachineBehaviorContext>`），配方机器空闲期结束的回调。
 - **返回**：当前构建器。
 - **抛出**：`IllegalStateException`：当前不是配方行为；`NullPointerException`：回调为空。
 - **默认值**：配方行为默认为空。
@@ -3642,7 +3649,7 @@ behavior.idleEnd(ctx => {
 
 #### `beforeStart(Consumer<RecipeStartContext> callback) → MachineBehaviorBuilderJS`
 
-- **参数表**：`callback`（`Consumer<RecipeStartContext>`）— 配方启动前的回调，可读取或替换需求。
+- **参数表**：`callback`（`Consumer<RecipeStartContext>`），配方启动前的回调，可读取或替换需求。
 - **返回**：当前构建器。
 - **抛出**：`IllegalStateException`：当前不是配方行为；`NullPointerException`：回调为空。
 - **默认值**：配方行为默认为空。
@@ -3656,7 +3663,7 @@ behavior.beforeStart(ctx => {
 
 #### `recipeTick(Consumer<RecipeTickContext> callback) → MachineBehaviorBuilderJS`
 
-- **参数表**：`callback`（`Consumer<RecipeTickContext>`）— 配方执行中的每个 tick 回调。
+- **参数表**：`callback`（`Consumer<RecipeTickContext>`），配方执行中的每个 tick 回调。
 - **返回**：当前构建器。
 - **抛出**：`IllegalStateException`：当前不是配方行为；`NullPointerException`：回调为空。
 - **默认值**：配方行为默认为空。
@@ -3670,7 +3677,7 @@ behavior.recipeTick(ctx => {
 
 #### `beforeFinish(Consumer<RecipeFinishContext> callback) → MachineBehaviorBuilderJS`
 
-- **参数表**：`callback`（`Consumer<RecipeFinishContext>`）— 配方完成输出前的回调。
+- **参数表**：`callback`（`Consumer<RecipeFinishContext>`），配方完成输出前的回调。
 - **返回**：当前构建器。
 - **抛出**：`IllegalStateException`：当前不是配方行为；`NullPointerException`：回调为空。
 - **默认值**：配方行为默认为空。
@@ -3684,7 +3691,7 @@ behavior.beforeFinish(ctx => {
 
 #### `serverTick(Consumer<TickBehaviorContext> callback) → MachineBehaviorBuilderJS`
 
-- **参数表**：`callback`（`Consumer<TickBehaviorContext>`）— 直接服务器 tick 回调。
+- **参数表**：`callback`（`Consumer<TickBehaviorContext>`），直接服务器 tick 回调。
 - **返回**：当前构建器。
 - **抛出**：`IllegalStateException`：当前不是 tick 行为；`NullPointerException`：回调为空。
 - **默认值**：tick 行为默认为空。
@@ -3833,7 +3840,7 @@ if (!result.successful()) {
 
 #### `commit(Consumer<TransactionContext> transactionWrites) → CommitResult`
 
-- **参数表**：`transactionWrites`（`Consumer<TransactionContext>`）— 事务回调；运行在 NeoForge transfer 事务上下文中。回调收到的是 NeoForge 的 `TransactionContext`；要写入数据存储请用 `DataStorage.Transaction.view(transaction)` 包装成公共事务再传给 `DataStorage.set(...)`，失败回滚时事务写入会被撤销。
+- **参数表**：`transactionWrites`（`Consumer<TransactionContext>`），事务回调；运行在 NeoForge transfer 事务上下文中。回调收到的是 NeoForge 的 `TransactionContext`；要写入数据存储请用 `DataStorage.Transaction.view(transaction)` 包装成公共事务再传给 `DataStorage.set(...)`，失败回滚时事务写入会被撤销。
 - **返回**：`CommitResult`。
 - **抛出**：`IllegalStateException`：plan 已被 `commit(...)` 消耗；`NullPointerException`：`transactionWrites` 为 `null`。
 - **默认值**：无。
@@ -3852,7 +3859,7 @@ plan.commit(transaction => {
 
 #### `commitData(Consumer<DataStorage.Transaction> transactionWrites) → CommitResult`
 
-- **参数表**：`transactionWrites`（`Consumer<DataStorage.Transaction>`）— 公共数据存储事务回调；回调收到的事务可直接传给 `DataStorage.set(...)` 的事务重载。
+- **参数表**：`transactionWrites`（`Consumer<DataStorage.Transaction>`），公共数据存储事务回调；回调收到的事务可直接传给 `DataStorage.set(...)` 的事务重载。
 - **返回**：`CommitResult`。
 - **抛出**：`NullPointerException`：`transactionWrites` 为 `null`；其余提交语义与 `commit(...)` 相同。
 - **示例**：
@@ -3906,7 +3913,7 @@ if (plan.inputsSatisfied() && plan.energySatisfied()) {
 
 #### `displayName(String displayName) → LevelTypeBuilderJS`
 
-- **参数表**：`displayName`（`String`）— 翻译键或文本。
+- **参数表**：`displayName`（`String`），翻译键或文本。
 - **返回**：当前构建器；写入 `displayNameKey`。
 - **抛出**：无。
 - **默认值**：未设置时使用类型 ID 字符串作为翻译键。
@@ -3918,7 +3925,7 @@ event.createLevelType("example:coil").displayName("level.example.coil")
 
 #### `displayNameKey(String key) → LevelTypeBuilderJS`
 
-- **参数表**：`key`（`String`）— 翻译键。
+- **参数表**：`key`（`String`），翻译键。
 - **返回**：当前构建器；`displayName` 的别名。
 - **抛出**：无。
 - **默认值**：无。
@@ -3981,7 +3988,7 @@ event.createLevelType("example:coil").displayNameKey("level.example.coil").regis
 
 #### `type(String typeId) → MachineLevelBuilderJS`
 
-- **参数表**：`typeId`（`String`）— 已注册等级类型 ID。
+- **参数表**：`typeId`（`String`），已注册等级类型 ID。
 - **返回**：当前构建器。
 - **抛出**：`IllegalArgumentException`：ID 非法。
 - **默认值**：未设置时 `createObject()` 抛 `IllegalStateException`。
@@ -3993,7 +4000,7 @@ event.createLevel("example:coil_iron").type("example:coil")
 
 #### `priority(int priority) → MachineLevelBuilderJS`
 
-- **参数表**：`priority`（`int`）— 等级优先级，数值越大越优先。
+- **参数表**：`priority`（`int`），等级优先级，数值越大越优先。
 - **返回**：当前构建器。
 - **抛出**：无。
 - **默认值**：`0`。
@@ -4005,7 +4012,7 @@ event.createLevel("example:coil_iron").type("example:coil").priority(0)
 
 #### `state(Object state) → MachineLevelBuilderJS`
 
-- **参数表**：`state`（`Object`）— `String`（方块 ID）或 `BlockState`。
+- **参数表**：`state`（`Object`），`String`（方块 ID）或 `BlockState`。
 - **返回**：当前构建器；字符串形式使用方块默认状态。
 - **抛出**：`IllegalArgumentException`：方块未知或参数类型不是字符串/`BlockState`。
 - **默认值**：未设置时 `createObject()` 抛 `IllegalStateException`。
@@ -4017,7 +4024,7 @@ event.createLevel("example:coil_iron").state("minecraft:iron_block")
 
 #### `modifier(ModifierDefinition modifier) → MachineLevelBuilderJS`
 
-- **参数表**：`modifier`（`ModifierDefinition`）— 通过 `KubeJSApi.modifierDefinition(...)` 创建的机器修饰符集合。
+- **参数表**：`modifier`（`ModifierDefinition`），通过 `KubeJSApi.modifierDefinition(...)` 创建的机器修饰符集合。
 - **返回**：当前构建器。
 - **抛出**：`NullPointerException`：`modifier` 为 `null`。
 - **默认值**：`ModifierDefinition.EMPTY`。
@@ -4119,7 +4126,7 @@ const pos = text.controllerPos()
 
 #### `append(String scope, String lineId, Component text) → void`
 
-- **参数表**：`scope`（`String`）— `controller` 或 `operation`；`lineId`（`String`）— 必须带命名空间，例如 `example:status`；`text`（`Component`）— 屏幕文本。
+- **参数表**：`scope`（`String`），`controller` 或 `operation`；`lineId`（`String`）必须带命名空间，例如 `example:status`；`text`（`Component`），屏幕文本。
 - **返回**：无。
 - **抛出**：`IllegalArgumentException`：`scope` 为空或不在允许列表；`lineId` 为空、缺命名空间或缺路径；`text` 为 `null`。
 - **默认值**：无。
@@ -4131,7 +4138,7 @@ text.append("controller", "example:status", Text.literal("Idle"))
 
 #### `appendAfter(String scope, String lineId, String afterLineId, Component text) → void`
 
-- **参数表**：`scope`（`String`）— `controller` 或 `operation`；`lineId`（`String`）— 新行 ID；`afterLineId`（`String`）— 已存在行的 ID；`text`（`Component`）— 文本。
+- **参数表**：`scope`（`String`），`controller` 或 `operation`；`lineId`（`String`），新行 ID；`afterLineId`（`String`），已存在行的 ID；`text`（`Component`）— 文本。
 - **返回**：无。
 - **抛出**：`IllegalArgumentException`：任一 ID 不合法或 `text` 为 `null`。
 - **默认值**：无。
@@ -4143,7 +4150,7 @@ text.appendAfter("operation", "example:new", "example:in", Text.literal("after")
 
 #### `replace(String lineId, Component text) → void`
 
-- **参数表**：`lineId`（`String`）— 已存在行 ID；`text`（`Component`）— 新文本。
+- **参数表**：`lineId`（`String`），已存在行 ID；`text`（`Component`），新文本。
 - **返回**：无。
 - **抛出**：`IllegalArgumentException`：`lineId` 不合法或 `text` 为 `null`。
 - **默认值**：无。
@@ -4155,7 +4162,7 @@ text.replace("example:status", Text.literal("Updated"))
 
 #### `appendTranslatable(String scope, String lineId, String key, Object... args) → void`
 
-- **参数表**：`scope`、`lineId` 同上；`key`（`String`）— 翻译键；`args`（`Object...`）— 翻译占位参数。
+- **参数表**：`scope`、`lineId` 同上；`key`（`String`），翻译键；`args`（`Object...`），翻译占位参数。
 - **返回**：无。
 - **抛出**：`IllegalArgumentException`：`scope`/`lineId`/`key` 非法或 `args` 为 `null`。
 - **默认值**：无。
@@ -4179,7 +4186,7 @@ text.appendAfterTranslatable("controller", "example:after", "example:in", "gui.e
 
 #### `replaceTranslatable(String lineId, String key, Object... args) → void`
 
-- **参数表**：`lineId`（`String`）— 已存在行 ID；`key`（`String`）— 翻译键；`args`（`Object...`）— 翻译占位参数。
+- **参数表**：`lineId`（`String`），已存在行 ID；`key`（`String`），翻译键；`args`（`Object...`），翻译占位参数。
 - **返回**：无。
 - **抛出**：`IllegalArgumentException`：`lineId`/`key` 非法或 `args` 为 `null`。
 - **默认值**：无。
@@ -4191,7 +4198,7 @@ text.replaceTranslatable("example:status", "gui.example.status")
 
 #### `remove(String scope, String lineId) → void`
 
-- **参数表**：`scope`（`String`）— `controller` 或 `operation`；`lineId`（`String`）— 已存在行 ID。
+- **参数表**：`scope`（`String`），`controller` 或 `operation`；`lineId`（`String`），已存在行 ID。
 - **返回**：无。
 - **抛出**：`IllegalArgumentException`：`scope` 不合法或 `lineId` 不合法。
 - **默认值**：无。
@@ -4201,7 +4208,7 @@ text.replaceTranslatable("example:status", "gui.example.status")
 text.remove("operation", "example:status")
 ```
 
-#### 静态辅助（内部）
+#### 静态辅助
 
 - `parseIdentifier(String value, String name)`：解析命名空间 ID，异常时抛出包含字段名的 `IllegalArgumentException`。
 - `handler(Consumer<ControllerScreenTextEventJS> handler)`：把脚本回调包装为 `ControllerScreenTextHandler`。
@@ -4296,5 +4303,5 @@ MMCREvents.startup(event => {
 - **配方多通道**：MMCR 配方有四条注册路径——`event.custom({ type: 'mmcr:machine_recipe' })` 数据驱动配方、`MachineRecipeBuilderJS` 编程式配方、`RecipeRegistry.registerStatic(...)` 静态注册（`Plugin.completeServerReload` 之外）、`MachineRecipeConverter` 转换的自定义 codec。同一 ID 在任意路径下只允许存在一次。
 - **网络请求**：`sendRequest` 找不到目标接口或目标不在 `source` 的连接表时会抛 `IllegalArgumentException`；送达后由目标机器在下一 tick 调用同 ID 的 `requestProcess`。若目标机器未注册对应 `requestId` 的处理器或任意中间检查失败，MMCR 会回调源机器通过 `requestFailed(...)` 注册的处理器，并传入 `RequestFailureReason` 枚举（`TARGET_HANDLER_MISSING`、`ALLOWLIST_REJECTED`、`HASH_MISMATCH` 等）。请求体根对象必须是字符串键映射，键不可为空或非字符串，值最终会被 [`api.dataValue(...)`](#datavalueobject-value--datavalue) 包装成 `DataValue`。
 - **智能接口**：智能接口类型在 `MachineBuilderJS.smartInterface(type, ...)` 注册时是机器级声明，结构可以同时通过 `set(symbol, smartInterfaceBlock())` 决定哪些位置允许放置接口；接口值由智能接口方块保存并供绑定的控制器读取。
-- **可热加载范围**：机器定义、等级类型、等级、修饰符和控制器屏幕文本注册在启动脚本中，修改后必须重启游戏；结构、配方、控制器屏幕文本内容可随 `/reload` 重载（屏幕文本行的静态/动态重写都遵循 `ControllerScreenText` 的替换语义）。
+- **可热加载范围**：机器定义、等级类型、等级、修饰符和控制器屏幕文本注册在启动脚本中，修改后必须重启游戏；结构、配方内容可随 `/reload` 重载。
 - **语言约定**：本文档中的 Java 类型在脚本里以相同名称使用；KubeJS 会把字符串、数组、对象和回调转换为对应参数；标记为 `@HideFromJS` 的重载（见 `MachineStructureBuilderJS` 多个 `extension`/`fullStructure` 与 `MachineBuilderJS` 的 `controllerSpec`/`runningSound(Identifier)` 等）保留给 Java 互操作或内部桥接，不应作为脚本入口。

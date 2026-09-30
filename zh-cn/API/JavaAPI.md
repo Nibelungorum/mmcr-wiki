@@ -23,7 +23,7 @@ title: JavaAPI
 - `cn.howxu.mmcr.api.publicapi.network` — 机器网络通信（`NetworkApi`、`MachineReference`、`NetworkInterfaceReference`、`RequestBody`、`RequestInfo`、`RequestProcess`、`RequestFailed`、`RequestFailureReason`）。
 - `cn.howxu.mmcr.api.publicapi.controller` — 控制器屏幕文本与 Jade。
 - `cn.howxu.mmcr.api.publicapi.render` — 控制器渲染器。
-- `cn.howxu.mmcr.api.compat.mekanism` — Mekanism 中立的化学品与热量配方声明值（供 `MachineRecipeBuilder` 使用）。
+- `cn.howxu.mmcr.api.compat.mekanism` — Mekanism 中立的化学品与热量配方声明值，以及能力读取 facet（供 `MachineRecipeBuilder` 与 `MachineIoView` 使用）。
 
 启动期注册相关的类型是稳定 API；运行期数据存储、网络与配方修饰符等子包位于公共 jar 内、API 仍可能在后续小版本内调整，调用方应在小版本升级时回归验证。
 
@@ -2932,6 +2932,44 @@ Optional<Float> tier = view.smartInterfaceValue("efficiency");
 
 ---
 :::
+### Mekanism 能力读取 Facet
+
+以下接口位于 `cn.howxu.mmcr.api.compat.mekanism`，不直接依赖 Mekanism 类型。实现化学品或热量能力时，可把对应 facet 挂到 `MachineCapability`，`MachineIoView` 会据此提供化学品与热量访问器。
+
+#### `ChemicalViewFacet`
+
+```java
+public interface ChemicalViewFacet extends CapabilityFacet {
+    Optional<Identifier> chemicalId();
+    long amount();
+    boolean matchesTag(Identifier tagId);
+    long outputCapacity(Identifier chemicalId);
+}
+```
+
+| 方法 | 含义 |
+| --- | --- |
+| `chemicalId()` | 当前能力中的具体化学品 ID；未知时返回 `Optional.empty()`。 |
+| `amount()` | 当前能力中的化学品数量。 |
+| `matchesTag(Identifier tagId)` | 判断当前化学品是否匹配指定标签。 |
+| `outputCapacity(Identifier chemicalId)` | 查询该能力对指定化学品的剩余输出容量。 |
+
+#### `HeatViewFacet`
+
+```java
+public interface HeatViewFacet extends CapabilityFacet {
+    double heat();
+    double temperature();
+    double heatCapacity();
+}
+```
+
+| 方法 | 含义 |
+| --- | --- |
+| `heat()` | 当前存储热量。 |
+| `temperature()` | 当前温度，单位为 K。 |
+| `heatCapacity()` | 热量能力容量，不表示最大存储数量。 |
+
 ### `DisplayStack`
 
 完整类名：`cn.howxu.mmcr.api.publicapi.machine.DisplayStack`
@@ -3458,15 +3496,16 @@ public record ModifierDefinition(List<MachineModifier> modifiers) {
 
 | 参数 | 类型 | 含义 |
 | --- | --- | --- |
-| `target` | `String` | 修饰目标：`duration`、`energy`、`output`、`parallelism`、`factory_threads` 或 `recipe_threads`。 |
+| `target` | `String` | 修饰目标：`duration`、`energy`、`chemical`、`heat`、`output`、`parallelism`、`factory_threads` 或 `recipe_threads`。 |
 | `scope` | `String` | 与目标匹配的作用域，见下表。 |
 | `modifier` | `double` | 修饰数值，具体效果取决于 `operation`。 |
 | `operation` | `String` | `add`、`multiply`、`subtract` 或 `divide`，不区分大小写。 |
-| `affectsChance` | `boolean` | 是否影响输出概率；仅 `output` 目标支持。 |
+| `affectsChance` | `boolean` | 是否影响概率；`output` 与 `chemical` 目标支持，`heat` 不支持。 |
 
 | target | scope |
 | --- | --- |
 | `duration` / `energy` | `input` |
+| `chemical` / `heat` | `input` |
 | `output` | `output` |
 | `parallelism` / `factory_threads` | `machine` |
 | `recipe_threads` | `recipe` |
@@ -3689,9 +3728,9 @@ public record SmartInterfaceModifier(
 | 字段 | 类型 | 含义 |
 | --- | --- | --- |
 | `interfaceType` | `String` | 对应的 `SmartInterfaceType.type`。 |
-| `target` | `String` | 数值修饰目标：`duration`、`energy`、`output`、`parallelism`、`factory_threads` 或 `recipe_threads`。 |
-| `scope` | `String` | 目标对应的作用域：`duration` / `energy` 用 `input`，`output` 用 `output`，并行与工厂线程目标用 `machine`，`recipe_threads` 用 `recipe`。 |
-| `affectsChance` | `boolean` | 是否影响概率字段。 |
+| `target` | `String` | 数值修饰目标：`duration`、`energy`、`chemical`、`heat`、`output`、`parallelism`、`factory_threads` 或 `recipe_threads`。 |
+| `scope` | `String` | 目标对应的作用域：`duration` / `energy` / `chemical` / `heat` 用 `input`，`output` 用 `output`，并行与工厂线程目标用 `machine`，`recipe_threads` 用 `recipe`。 |
+| `affectsChance` | `boolean` | 是否影响概率字段；`output` 与 `chemical` 支持，`heat` 不支持。 |
 | `minValue` / `maxValue` | `float` | 智能接口值范围。 |
 | `atMin` / `atMax` | `float` | 当智能接口值取到 `minValue` / `maxValue` 时，映射到目标上的修饰值。 |
 | `operation` | `RecipeModifier.Operation` | 应用方式，默认为 `MULTIPLY`。 |
@@ -3702,6 +3741,8 @@ public record SmartInterfaceModifier(
 | --- | --- |
 | `duration(type, min, max, atMin, atMax, op)` | `new SmartInterfaceModifier(type, "duration", "input", false, min, max, atMin, atMax, op)` |
 | `energy(type, min, max, atMin, atMax, op)` | `new SmartInterfaceModifier(type, "energy", "input", false, min, max, atMin, atMax, op)` |
+
+化学品与热量目标没有单独的 Java 便捷工厂，使用记录构造器声明：化学品使用 `target = "chemical"`、`scope = "input"`，热量使用 `target = "heat"`、`scope = "input"`。化学品目标可将 `affectsChance` 设为 `true`，热量目标不可影响概率。
 
 #### 构造约束
 

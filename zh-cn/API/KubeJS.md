@@ -972,6 +972,83 @@ const water = api.fluidInput("minecraft:water", 1000)
 const output = api.fluidStack("minecraft:lava", 250)
 ```
 
+##### `chemicalInput(String chemicalId, long amount) → CustomRecipeIo`
+
+- **参数表**：`chemicalId`（`String`）— 化学品 ID；`amount`（`long`）— 输入数量。
+- **返回**：`mekanism:chemical` 输入 IO，使用具体化学品 ID，默认完全消耗。
+- **抛出**：`IllegalArgumentException`：ID 为空、格式无效，或化学品 payload 不符合 codec。
+- **示例**：
+
+```javascript
+const oxygen = api.chemicalInput("mekanism:oxygen", 1000)
+```
+
+##### `chemicalInput(String chemicalId, long amount, double consumeChance) → CustomRecipeIo`
+
+- **参数表**：前两个参数同上；`consumeChance`（`double`）— 输入消耗概率。
+- **返回**：带 `consume_chance` 的 `mekanism:chemical` 输入 IO。
+- **抛出**：`IllegalArgumentException`：ID 无效，或 payload 校验失败。
+- **示例**：
+
+```javascript
+const oxygen = api.chemicalInput("mekanism:oxygen", 1000, 0.5)
+```
+
+##### `chemicalTagInput(String tagId, long amount) → CustomRecipeIo`
+
+- **参数表**：`tagId`（`String`）— 化学品标签 ID；`amount`（`long`）— 每种匹配化学品的输入数量。
+- **返回**：按标签匹配化学品的 `mekanism:chemical` 输入 IO，默认完全消耗。
+- **抛出**：`IllegalArgumentException`：标签 ID 为空或格式无效，或 payload 校验失败。
+- **示例**：
+
+```javascript
+const fuel = api.chemicalTagInput("mekanism:fuels", 1000)
+```
+
+##### `chemicalTagInput(String tagId, long amount, double consumeChance) → CustomRecipeIo`
+
+- **参数表**：前两个参数同上；`consumeChance`（`double`）— 输入消耗概率。
+- **返回**：带 `consume_chance` 的标签化学品输入 IO。
+- **抛出**：`IllegalArgumentException`：标签 ID 无效，或 payload 校验失败。
+- **示例**：
+
+```javascript
+const fuel = api.chemicalTagInput("mekanism:fuels", 1000, 0.5)
+```
+
+##### `chemicalOutput(String chemicalId, long amount, double chance) → CustomRecipeIo`
+
+- **参数表**：`chemicalId`（`String`）— 化学品 ID；`amount`（`long`）— 输出数量；`chance`（`double`）— 输出概率。
+- **返回**：`mekanism:chemical` 输出 IO；输出必须指定具体化学品 ID，不能使用标签。
+- **抛出**：`IllegalArgumentException`：ID 无效，或 payload 校验失败。
+- **示例**：
+
+```javascript
+const hydrogen = api.chemicalOutput("mekanism:hydrogen", 500, 0.75)
+```
+
+##### `heatTemperatureInput(double temperature) → CustomRecipeIo`
+
+- **参数表**：`temperature`（`double`）— 所需最低温度，单位为 K。
+- **返回**：`mekanism:temperature` 输入 IO。
+- **抛出**：`IllegalArgumentException`：温度不是非负有限数，或 payload 校验失败。
+- **示例**：
+
+```javascript
+const temperature = api.heatTemperatureInput(1000)
+```
+
+##### `heatOutput(double heat) → CustomRecipeIo`
+
+- **参数表**：`heat`（`double`）— 输出热量值。
+- **返回**：`mekanism:heat` 输出 IO。
+- **抛出**：`IllegalArgumentException`：热量不是非负有限数，或 payload 校验失败。
+- **示例**：
+
+```javascript
+const heat = api.heatOutput(250)
+```
+
 ##### `energyInput(long fePerTick) → MachineIngredient`
 
 - **参数表**：`fePerTick`（`long`）— 每 tick 输入的 FE 数量。
@@ -1090,7 +1167,7 @@ const output = api.fluidOutputRequirement("minecraft:lava", 250, 0.5)
 
 ##### `modifier(String target, String scope, double value, String operation, boolean chance) → MachineModifier.Numeric`
 
-- **参数表**：`target`（`String`）— `duration`、`energy`、`output`、`parallelism`、`factory_threads` 或 `recipe_threads`；`scope`（`String`）— 该目标对应的 `input`、`output`、`machine` 或 `recipe` 作用域；`value`（`double`）— 修饰数值；`operation`（`String`）— `add`、`multiply`、`subtract` 或 `divide`；`chance`（`boolean`）— 是否作用于输出概率。
+- **参数表**：`target`（`String`）— `duration`、`energy`、`chemical`、`heat`、`output`、`parallelism`、`factory_threads` 或 `recipe_threads`；`scope`（`String`）— 该目标对应的 `input`、`output`、`machine` 或 `recipe` 作用域；`value`（`double`）— 修饰数值；`operation`（`String`）— `add`、`multiply`、`subtract` 或 `divide`；`chance`（`boolean`）— 是否作用于输出 / 化学品概率。
 - **返回**：数值型机器修饰项。
 - **抛出**：`IllegalArgumentException`：目标与作用域不匹配、操作未知、数值非有限，或目标不支持 `chance`。
 - **默认值**：无；`target` 和 `scope` 必须提供。
@@ -1100,7 +1177,7 @@ const output = api.fluidOutputRequirement("minecraft:lava", 250, 0.5)
 const modifier = api.modifier("duration", "input", 0.5, "multiply", false)
 ```
 
-数值目标与作用域对应关系：`duration` / `energy` 使用 `input`；`output` 使用 `output`；`parallelism` / `factory_threads` 使用 `machine`；`recipe_threads` 使用 `recipe`。`parallelized` 是布尔目标，使用下方的布尔重载。
+数值目标与作用域对应关系：`duration` / `energy` / `chemical` / `heat` 使用 `input`；`output` 使用 `output`；`parallelism` / `factory_threads` 使用 `machine`；`recipe_threads` 使用 `recipe`。`chemical` 支持 `chance`，`heat` 不支持。`parallelized` 是布尔目标，使用下方的布尔重载。
 
 ##### `modifier(String target, String scope, boolean value) → MachineModifier.Parallelized`
 
@@ -2038,7 +2115,7 @@ machine.shareSmartInterface(true)
 
 :::warning 当前实现注意
 
-统一机器修饰符后，`itemInputByInterface(...)`、`itemInputChanceByInterface(...)`、`fluidInputByInterface(...)` 和 `fluidInputChanceByInterface(...)` 仍存在于构建器上，但当前目标校验不接受 `item` / `fluid` 的输入作用域，调用会抛 `IllegalArgumentException`。`durationByInterface(...)`、`energyByInterface(...)` 与输出侧变体使用受支持的目标。
+统一机器修饰符后，`itemInputByInterface(...)`、`itemInputChanceByInterface(...)`、`fluidInputByInterface(...)` 和 `fluidInputChanceByInterface(...)` 仍存在于构建器上，但当前目标校验不接受 `item` / `fluid` 的输入作用域，调用会抛 `IllegalArgumentException`。`durationByInterface(...)`、`energyByInterface(...)`、化学品输入 / 输出方法、热量输入 / 输出方法与其他输出侧变体使用受支持的目标。
 :::
 
 ##### `durationByInterface(String type, float min, float max, float atMin, float atMax) → MachineBuilderJS`
@@ -2062,7 +2139,7 @@ machine.durationByInterface("temperature", 0, 100, 2, 0.5)
 - **示例**：
 
 ```javascript
-const Operation = Java.loadClass("cn.howxu.mmcr.api.publicapi.recipe.modifier.RecipeModifier$Operation")
+const Operation = Java.loadClass("cn.howxu.mmcr.api.recipe.modifier.RecipeModifier$Operation")
 machine.durationByInterface("temperature", 0, 100, 2, 0.5, Operation.ADD)
 ```
 
@@ -2087,7 +2164,7 @@ machine.energyByInterface("mode", 1, 3, 1, 2)
 - **示例**：
 
 ```javascript
-const Operation = Java.loadClass("cn.howxu.mmcr.api.publicapi.recipe.modifier.RecipeModifier$Operation")
+const Operation = Java.loadClass("cn.howxu.mmcr.api.recipe.modifier.RecipeModifier$Operation")
 machine.energyByInterface("mode", 1, 3, 1, 2, Operation.MULTIPLY)
 ```
 
@@ -2142,7 +2219,7 @@ machine.itemOutputChanceByInterface("quality", 0, 1, 0.5, 1)
 - **示例**：
 
 ```javascript
-const Operation = Java.loadClass("cn.howxu.mmcr.api.publicapi.recipe.modifier.RecipeModifier$Operation")
+const Operation = Java.loadClass("cn.howxu.mmcr.api.recipe.modifier.RecipeModifier$Operation")
 machine.itemOutputChanceByInterface("quality", 0, 1, 0.5, 1, Operation.MULTIPLY)
 ```
 
@@ -2197,8 +2274,66 @@ machine.fluidOutputChanceByInterface("quality", 0, 1, 0.5, 1)
 - **示例**：
 
 ```javascript
-const Operation = Java.loadClass("cn.howxu.mmcr.api.publicapi.recipe.modifier.RecipeModifier$Operation")
+const Operation = Java.loadClass("cn.howxu.mmcr.api.recipe.modifier.RecipeModifier$Operation")
 machine.fluidOutputChanceByInterface("quality", 0, 1, 0.5, 1, Operation.ADD)
+```
+
+##### `chemicalInputByInterface(String type, float min, float max, float atMin, float atMax) → MachineBuilderJS`
+
+- **参数表**：`type`、`min`、`max`、`atMin`、`atMax`，分别为智能接口类型、输入值范围和化学品输入数量的端点修饰值。
+- **返回**：当前构建器；默认操作为 `MULTIPLY`，作用于化学品输入数量。
+- **抛出**：智能接口范围或类型非法时抛 `IllegalArgumentException`。
+
+##### `chemicalOutputByInterface(String type, float min, float max, float atMin, float atMax) → MachineBuilderJS`
+
+- **参数表**：同 `chemicalInputByInterface`，端点修饰值作用于化学品输出数量。
+- **返回**：当前构建器；默认操作为 `MULTIPLY`。
+- **抛出**：智能接口范围或类型非法时抛 `IllegalArgumentException`。
+
+##### `chemicalInputChanceByInterface(String type, float min, float max, float atMin, float atMax) → MachineBuilderJS`
+
+- **参数表**：同 `chemicalInputByInterface`，端点修饰值作用于化学品输入消耗概率。
+- **返回**：当前构建器；默认操作为 `MULTIPLY`。
+- **抛出**：智能接口范围或类型非法时抛 `IllegalArgumentException`。
+
+##### `chemicalInputChanceByInterface(String type, float min, float max, float atMin, float atMax, RecipeModifier.Operation operation) → MachineBuilderJS`
+
+- **参数表**：前五个参数同上；`operation`（`RecipeModifier.Operation`）— `ADD`、`MULTIPLY`、`SUBTRACT` 或 `DIVIDE`。
+- **返回**：当前构建器；作用于化学品输入消耗概率。
+- **抛出**：操作、范围或类型非法时抛 `IllegalArgumentException`。
+
+##### `chemicalOutputChanceByInterface(String type, float min, float max, float atMin, float atMax) → MachineBuilderJS`
+
+- **参数表**：同 `chemicalInputByInterface`，端点修饰值作用于化学品输出概率。
+- **返回**：当前构建器；默认操作为 `MULTIPLY`。
+- **抛出**：智能接口范围或类型非法时抛 `IllegalArgumentException`。
+
+##### `chemicalOutputChanceByInterface(String type, float min, float max, float atMin, float atMax, RecipeModifier.Operation operation) → MachineBuilderJS`
+
+- **参数表**：前五个参数同上；`operation`（`RecipeModifier.Operation`）— 概率运算方式。
+- **返回**：当前构建器；作用于化学品输出概率。
+- **抛出**：操作、范围或类型非法时抛 `IllegalArgumentException`。
+
+##### `heatInputByInterface(String type, float min, float max, float atMin, float atMax) → MachineBuilderJS`
+
+- **参数表**：`type`、`min`、`max`、`atMin`、`atMax`，分别为智能接口类型、输入值范围和热量输入的端点修饰值。
+- **返回**：当前构建器；默认操作为 `MULTIPLY`，作用于热量输入值。
+- **抛出**：智能接口范围或类型非法时抛 `IllegalArgumentException`。
+
+##### `heatOutputByInterface(String type, float min, float max, float atMin, float atMax) → MachineBuilderJS`
+
+- **参数表**：同 `heatInputByInterface`，端点修饰值作用于热量输出值。
+- **返回**：当前构建器；默认操作为 `MULTIPLY`。
+- **抛出**：智能接口范围或类型非法时抛 `IllegalArgumentException`。
+
+示例：
+
+```javascript
+const Operation = Java.loadClass("cn.howxu.mmcr.api.recipe.modifier.RecipeModifier$Operation")
+machine
+    .chemicalInputByInterface("chemical_rate", 0, 100, 1, 2)
+    .chemicalOutputChanceByInterface("quality", 0, 100, 0.5, 1, Operation.MULTIPLY)
+    .heatInputByInterface("temperature", 0, 100, 1, 1.5)
 ```
 
 #### 端口谓词与等级快捷
@@ -3759,7 +3894,7 @@ const heatStates = view.heatInputs()
 
 #### `addInput(RecipeRequirement requirement) → MachineIoPlan`
 
-- **参数表**：`requirement`（`RecipeRequirement`）— 方向为输入的需求（`requirement.io() == INPUT`），通常来自 `api.itemInputRequirement(...)` / `api.fluidInputRequirement(...)` / `api.energyRequirement(...)` 返回的 `MachineRequirement`。
+- **参数表**：`requirement`（`RecipeRequirement`）— 方向为输入的需求（`requirement.io() == INPUT`），通常来自 `api.itemInputRequirement(...)` / `api.fluidInputRequirement(...)` / `api.energyRequirement(...)` / `api.chemicalInput(...)` / `api.chemicalTagInput(...)` / `api.heatTemperatureInput(...)`。
 - **返回**：当前 plan，支持链式调用。
 - **抛出**：`IllegalArgumentException`：`requirement.io()` 不为 `INPUT`。
 - **默认值**：无。
@@ -3772,7 +3907,7 @@ const plan = ctx.ioPlan()
 
 #### `addOutput(RecipeRequirement requirement, OutputPolicy policy) → MachineIoPlan`
 
-- **参数表**：`requirement`（`RecipeRequirement`）— 方向为输出的需求；`policy`（`OutputPolicy`）— 通过 `api.outputPolicy().REQUIRE_FULL` 或 `api.outputPolicy().ALLOW_PARTIAL` 取值。
+- **参数表**：`requirement`（`RecipeRequirement`）— 方向为输出的需求，通常来自 `api.itemOutputRequirement(...)` / `api.fluidOutputRequirement(...)` / `api.chemicalOutput(...)` / `api.heatOutput(...)`；`policy`（`OutputPolicy`）— 通过 `api.outputPolicy().REQUIRE_FULL` 或 `api.outputPolicy().ALLOW_PARTIAL` 取值。
 - **返回**：当前 plan，支持链式调用。
 - **抛出**：`IllegalArgumentException`：`requirement.io()` 不为 `OUTPUT`；`NullPointerException`：`policy` 为 `null`。
 - **默认值**：无。

@@ -5,263 +5,190 @@ order: 15
 
 # 配方Tick测试机器
 
-一台有配方、但**每个生命周期阶段都要插入自定义逻辑**的机器。
+这台机器注册三条配方，并在五个生命周期 Hook 中插入自定义逻辑：空闲时展示提示，启动前施加力量效果并修改金锭需求，运行时追加文本，完成前施加夜视效果。
 
-## 概览
+## 涉及文件与 API
 
-配方Tick测试机器 是一台使用 [`RecipeBehavior`](../API/JavaAPI#recipebehavior) 的配方机器，它注册 3 条配方，但在配方生命周期的 5 个阶段都插入了自定义Hook：
+- [RECIPE_TICKER.java](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/org/nibelungorum/builtin/RECIPE_TICKER.java)
+- [KubeJS 结构对照](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/example/server_scripts/structure/advance/A_Recipe_Tick_Machine.js) / [配方对照](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/example/server_scripts/recipe/advance/A_Recipe_Tick_Machine.js)：脚本机器使用独立的 `mmcr_kubejs:kubejs_recipe_ticker` ID。
 
-- `idleStart` / `idleEnd`：进入 / 离开 idle 时显示提示
-- `beforeStart`：配方启动前给范围内生物加力量效果
-- `recipeTick`：每 tick 在屏幕上追加文本
-- `beforeFinish`：配方提交输出前给范围内生物加夜视效果
-
-## API
-
-| API | 参考 |
+| API | 用途与签名参考 |
 | --- | --- |
-| `MachineBehavior` / `MachineBehavior.Kind` | [链接](../API/JavaAPI#machinebehavior) |
-| `RecipeBehavior` | [链接](../API/JavaAPI#recipebehavior) |
-| `RecipeStartContext` / `RecipeTickContext` / `RecipeFinishContext` | [链接](../API/JavaAPI#recipestartcontext) / [链接](../API/JavaAPI#recipetickcontext) / [链接](../API/JavaAPI#recipefinishcontext) |
-| `MachineBehaviorContext` | [链接](../API/JavaAPI#machinebehaviorcontext) |
-| `MachineBuilder` | [链接](../API/JavaAPI#machinebuilder) |
-| `MMCRMachineDefinationsEvent` / `MMCRMachineStructuresEvent` / `MMCRMachineRecipesEvent` | [链接](../API/JavaAPI#mmcrmachinedefinationsevent) / [链接](../API/JavaAPI#mmcrmachinestructuresevent) / [链接](../API/JavaAPI#mmcrmachinerecipesevent) |
-| `MachineStructureBuilder` / `PatternBuilder` | [链接](../API/JavaAPI#machinestructurebuilder) / [链接](../API/JavaAPI#patternbuilder) |
-| `BlockPredicate` / `InterfacePredicates` | [链接](../API/JavaAPI#blockpredicate) / [链接](../API/JavaAPI#interfacepredicates) |
-| `MachineRecipeBuilder` | [链接](../API/JavaAPI#machinerecipebuilder) |
-| `ControllerScreenText` / `ControllerScreenTextScope` / `ControllerScreenTextRegistry` | [链接](../API/JavaAPI#controllerscreentext) / [链接](../API/JavaAPI#controllerscreentextscope) / [链接](../API/JavaAPI#controllerscreentextregistry) |
-| `ItemRequirement` / `RecipeIo` | [链接](../API/JavaAPI#itemrequirement) / [链接](../API/JavaAPI#recipeio)（源码用同义的 `RecipeModifier.IOType`） |
+| `Machines` / `Structures` / `Recipes` | [机器](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/publicapi/Machines.java)、[结构](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/publicapi/Structures.java)、[配方](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/publicapi/Recipes.java) 入口 |
+| `RegisterMachineDefinitionsEvent` / `RegisterMachineStructuresEvent` / `RegisterMachineRecipesEvent` | 注册 `MachineSpec`、`StructureSpec`、`RecipeSpec` |
+| `RecipeHooks` | [七个配方模式回调的配置签名](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/publicapi/behavior/RecipeHooks.java) |
+| `MachineContext` | 空闲、pre/post Tick 与配方上下文共享的服务端能力 |
+| `RecipeStartContext` | [启动前编辑](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/publicapi/behavior/RecipeStartContext.java)，优先使用 `replaceExactItemInputCount` |
+| `RecipeTickContext` | [执行中只读配方信息](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/publicapi/behavior/RecipeTickContext.java) |
+| `RecipeFinishContext` | [完成前编辑输出](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/publicapi/behavior/RecipeFinishContext.java) |
+| `RequirementSpec` / `OutputView` / `RecipeView` | 公共需求、输出与配方视图，替代直接使用底层 record |
+| `IoSnapshot` | `RecipeTickContext.ioSnapshot()` 与 `MachineContext.ioView()` 的返回类型 |
+| `ControllerTexts` / `ControllerText` / `TextScope` | 初始化文本、实时文本句柄与行作用域 |
+| `BlockConditions` | 方块及接口条件 |
 
-## 机器定义
-
-[RECIPE_TICKER.java](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/main/src/main/java/org/nibelungorum/builtin/RECIPE_TICKER.java)
+## 定义与文本模板
 
 ```java
-public static void registerDefinitions(MMCRMachineDefinationsEvent event) {
-    ControllerScreenTextRegistry.register(RECIPE_TICKER, context -> {
-        context.screenText().append(
-                ControllerScreenTextScope.CONTROLLER, BEFORE_LINE,
+private static final Identifier RECIPE_TICKER = id("recipe_ticker");
+private static final Identifier BEFORE_LINE = id("before_line");
+private static final Identifier IN_LINE = id("in_line");
+private static final Identifier AFTER_LINE = id("after_line");
+private static final Identifier DISPLAY_WHEN_IDLE = id("display_when_idle");
+private static final Identifier DISPLAY_WHEN_IDLE_EMPTY_LINE = id("display_when_idle_empty_line");
+private static final Identifier DISPLAY_WHEN_START_RECIPE = id("display_when_start_recipe");
+
+public static void registerDefinitions(RegisterMachineDefinitionsEvent event) {
+    ControllerTexts.register(RECIPE_TICKER, (ControllerTextContext context) -> {
+        context.screenText().append(TextScope.CONTROLLER, BEFORE_LINE,
                 Component.translatable("gui.mmcr.before_line"));
-        context.screenText().appendAfter(
-                ControllerScreenTextScope.CONTROLLER, IN_LINE,
-                id("sp_line_1"),
-                Component.translatable("gui.mmcr.in_line"));
-        context.screenText().append(
-                ControllerScreenTextScope.CONTROLLER, AFTER_LINE,
+        context.screenText().appendAfter(TextScope.CONTROLLER, IN_LINE,
+                id("sp_line_1"), Component.translatable("gui.mmcr.in_line"));
+        context.screenText().append(TextScope.CONTROLLER, AFTER_LINE,
                 Component.translatable("gui.mmcr.after_line"));
     });
-    ...
+    if (!event.definitions().containsKey(RECIPE_TICKER)) {
+        MachineSpec machine = Machines.machine(RECIPE_TICKER)
+                .recipePool(RECIPE_TICKER)
+                .displayNameKey("machine.mmcr.recipe_ticker")
+                .appearance(a -> a.machineBasicBlock(Identifier.parse("minecraft:green_terracotta")))
+                .recipeBehavior(behavior -> behavior
+                        // 接上下文各 Hook 的配置。
+                        .idleStart((MachineContext ctx) -> { /* 见下文 */ })
+                        .idleEnd(ctx -> { })
+                        .beforeStart((RecipeStartContext ctx) -> { /* 见下文 */ })
+                        .recipeTick((RecipeTickContext ctx) -> { /* 见下文 */ })
+                        .beforeFinish((RecipeFinishContext ctx) -> { /* 见下文 */ }))
+                .build();
+        event.registerMachine(machine);
+    }
 }
 ```
 
-[`ControllerScreenText.appendAfter(...)`](../API/JavaAPI#controllerscreentext) 把 `IN_LINE` 插到 `sp_line_1`之后，屏幕上按 `BEFORE_LINE → IN_LINE → AFTER_LINE` 排列。
+`recipeBehavior` 配置公共 `RecipeHooks`，无需使用底层 `RecipeBehavior.Builder`。七个 Hook 都接受 `Consumer<相应上下文>`，本例使用其中五个：
 
-机器定义与 `RecipeBehavior` 链式配置：
-
-```java
-var machine = MachineBuilder
-        .machine(RECIPE_TICKER)
-        .displayNameKey("machine.mmcr.recipe_ticker")
-        .appearance(a -> a.machineBasicBlock(Identifier.parse("minecraft:green_terracotta")))
-        .recipeBehavior(behavior -> behavior
-                .idleStart(ctx -> { ... })
-                .idleEnd(ctx -> { })
-                .beforeStart(ctx -> { ... })
-                .recipeTick(ctx -> { ... })
-                .beforeFinish(ctx -> { ... })
-        )
-        .build();
-event.registerMachine(machine);
-```
-
-调用 `.recipeBehavior(behavior -> behavior.xxx(...))` 把行为从默认空 `RecipeBehavior` 切换成显式声明 5 个Hook的版本。
-
-[`RecipeBehavior.Builder`](../API/JavaAPI#recipebehavior) 总共有 `idleStart` / `idleEnd` / `beforeStart` / `recipeTick` / `beforeFinish` / `preServerTick` / `postServerTick` 7个Hook，在这里只用到其中 5 个。
-
-`preServerTick` / `postServerTick` 留给"无论机器在不在跑配方，每 tick 都触发"的全局逻辑。
-
-(是的你没看错，即使是 Recipe Tick 也是可以使用 Server Tick 的)
-
-5 个Hook的接收上下文与触发时机：
-
-| Hook | 接收的上下文 | 触发时机 |
+| Hook | 参数类型 | 用途 |
 | --- | --- | --- |
-| `idleStart` | `MachineBehaviorContext` | 进入 idle 状态的第一个 tick |
-| `idleEnd` | `MachineBehaviorContext` | 离开 idle 状态 |
-| `beforeStart` | `RecipeStartContext` | 配方启动前，可改 duration / requirements / outputs |
-| `recipeTick` | `RecipeTickContext` | 配方每 tick 触发 |
-| `beforeFinish` | `RecipeFinishContext` | 配方提交输出前，可改 outputs 或取消 |
+| `idleStart` / `idleEnd` | `MachineContext` | 进入 / 离开空闲状态 |
+| `beforeStart` | `RecipeStartContext` | 消耗启动输入前编辑运行参数 |
+| `recipeTick` | `RecipeTickContext` | 运行中读取进度、追加自定义逻辑 |
+| `beforeFinish` | `RecipeFinishContext` | 完成提交前编辑输出 |
+| `preServerTick` / `postServerTick` | `MachineContext` | 配方模式下的全局 Tick 前后逻辑，不限于运行配方时 |
 
-## Hook详解
+初始化文本中 `IN_LINE` 插在 `sp_line_1` 后面。不过 `appendAfter` 要求参考行存在于**同一 scope**；缺失或跨 scope 参考行时不操作，不能无条件保证最终出现 `BEFORE_LINE → IN_LINE → AFTER_LINE`。
 
-### `idleStart`：进入空闲
+## Hook 详解
+
+### idleStart：进入空闲
 
 ```java
-.idleStart(ctx -> {
+.idleStart((MachineContext ctx) -> {
     var screen = ctx.screenText();
-    screen.append(
-            ControllerScreenTextScope.OPERATION,
-            DISPLAY_WHEN_IDLE_EMPTY_LINE,
-            Component.literal(" "));
-    screen.append(
-            ControllerScreenTextScope.OPERATION,
-            DISPLAY_WHEN_IDLE,
+    screen.append(TextScope.OPERATION, DISPLAY_WHEN_IDLE_EMPTY_LINE, Component.literal(" "));
+    screen.append(TextScope.OPERATION, DISPLAY_WHEN_IDLE,
             Component.translatable("gui.mmcr.display_when_idle"));
 })
+.idleEnd(ctx -> { })
 ```
 
-这里的 `ctx` 是 [`MachineBehaviorContext`](../API/JavaAPI#machinebehaviorcontext)，没有 `currentTick()` / `recipe()` 这类"配方上下文"方法。写入 [`ControllerScreenTextScope.OPERATION`](../API/JavaAPI#controllerscreentextscope)：
+`MachineContext` 提供世界、位置、存储与文本，不提供 `currentTick()` 或当前配方编辑器。`CONTROLLER` 行由附属管理；`OPERATION` 行随操作生命周期重置。此处空闲提示放在 `OPERATION`，启动 Hook 也显式删除它们。
 
-| scope | 内容来源 | 重置时机 |
-| --- | --- | --- |
-| `CONTROLLER` | Mod 完全控制 | 由 Mod 自己管理 |
-| `OPERATION` | MMCR 自动 + Mod 追加 | 每个配方生命周期自动重置 |
-
-`idleStart` 写入 `OPERATION` scope 的内容，会在配方开始时被 MMCR 清掉，配合 `beforeStart` 里"清掉 idle 行"的写法，屏幕上不会同时出现"idle 提示"与"运行中提示"。
-
-### `beforeStart`
+### beforeStart：效果与安全需求替换
 
 ```java
-.beforeStart(ctx -> {
+.beforeStart((RecipeStartContext ctx) -> {
     var screen = ctx.machineContext().screenText();
-    screen.remove(ControllerScreenTextScope.OPERATION, DISPLAY_WHEN_IDLE_EMPTY_LINE);
-    screen.remove(ControllerScreenTextScope.OPERATION, DISPLAY_WHEN_IDLE);
+    screen.remove(TextScope.OPERATION, DISPLAY_WHEN_IDLE_EMPTY_LINE);
+    screen.remove(TextScope.OPERATION, DISPLAY_WHEN_IDLE);
 
-    var machineContext = ctx.machineContext();
+    MachineContext machineContext = ctx.machineContext();
     var level = machineContext.level();
     var controllerPos = machineContext.controllerPos();
     var area = new AABB(controllerPos.getX() - 2, level.getMinY(), controllerPos.getZ() - 2,
-                        controllerPos.getX() + 3, level.getMaxY() + 1, controllerPos.getZ() + 3);
+            controllerPos.getX() + 3, level.getMaxY() + 1, controllerPos.getZ() + 3);
     for (var entity : level.getEntitiesOfClass(LivingEntity.class, area)) {
-        entity.addEffect(new net.minecraft.world.effect.MobEffectInstance(
-                MobEffects.STRENGTH, 10000, 1));
+        entity.addEffect(new MobEffectInstance(MobEffects.STRENGTH, 10000, 1));
     }
-
-    var nextRequirements = new ArrayList<MachineRequirement>();
-    boolean changed = false;
-    for (var requirement : ctx.requirements()) {
-        if (!(requirement instanceof ItemRequirement itemRequirement)
-                || requirement.io() != RecipeModifier.IOType.INPUT) {
-            nextRequirements.add(requirement);
-            continue;
-        }
-        var possibleItems = ingredientItems(itemRequirement);
-        boolean isExactlyGold = itemRequirement.count() == 32
-                && possibleItems.size() == 1
-                && BuiltInRegistries.ITEM.getKey(possibleItems.get(0).value())
-                        .toString().equals("minecraft:gold_ingot");
-        if (isExactlyGold) {
-            nextRequirements.add(new ItemRequirement(
-                    itemRequirement.io(), itemRequirement.item(), 1,
-                    itemRequirement.stack(), itemRequirement.chance(),
-                    itemRequirement.tags(), itemRequirement.components(),
-                    itemRequirement.consumeChance()));
-            changed = true;
-        } else {
-            nextRequirements.add(requirement);
-        }
-    }
-    if (changed) ctx.setRequirements(nextRequirements);
+    ctx.replaceExactItemInputCount(Items.GOLD_INGOT, 32, 1);
 })
 ```
 
-[`RecipeStartContext`](../API/JavaAPI#recipestartcontext) 提供两个关键能力：
-
-- `ctx.machineContext()`：拿到 [`MachineBehaviorContext`](../API/JavaAPI#machinebehaviorcontext)，可读 `level()` / `controllerPos()` / `screenText()`。
-- `ctx.requirements()` 与 `ctx.setRequirements(...)` 读取 / 替换配方输入需求列表。
-
-上面这段：
-
-1. 把 `idleStart` 写入的两行清掉，避免同时显示"idle 提示"与"运行中提示"
-2. 给范围内所有 `LivingEntity` 加 10000 tick 的力量 II 效果
-3. **修改配方需求**：遍历 `ctx.requirements()`，如果某条 `ItemRequirement` 是"32 个金锭"，就替换成 1 个金锭
-
-`ctx.requirements()` 返回的是 `List<MachineRequirement>` 不可变副本，修改它不会影响底层 `MachineRecipe`，必须通过 `setRequirements(...)` 替换，MMCR 才会在 `beforeStart` 结束时统一应用。
-
-### `recipeTick`
+启动前对周围 5×5、贯穿世界高度区域内的生物施加力量 II，再替换金锭数量。**优先调用公共辅助方法，不再手动遍历并重建底层需求 record**：
 
 ```java
-.recipeTick(ctx -> {
+boolean replaceExactItemInputCount(Item item, int expectedCount, int replacementCount);
+```
+
+`Item` 来自 `net.minecraft.world.item`。当前实现只替换**首个**满足以下条件的需求：输入方向、数量等于 `expectedCount`、ingredient 恰好解析到一个物品且就是给定 `item`。不是把所有能匹配金锭的标签或多个候选物品需求都替换。
+
+返回值表示是否发生匹配替换；两个数量都必须大于零。方法沿用原需求的其他属性，由核心更新需求及相关输出数据。它编辑本次启动上下文，不改全局注册的配方。
+
+对于其他复杂编辑，公共层仍提供 `List<RequirementSpec> requirements()` 与 `void setRequirements(List<RequirementSpec>)`，以及 `List<OutputView> outputs()` / `setOutputs(...)`。这些是公共 spec/view，不能直接把底层 requirement record 当成公共类型使用；读取副本也不会自动写回。
+
+:::info
+这里的生物效果是世界副作用，发生在启动输入实际提交之前。后续配方启动失败或取消，不会自动撤销已经施加的效果。不要把 beforeStart 内全部操作当成同一可回滚事务。
+:::
+
+### recipeTick：运行中的文本
+
+```java
+.recipeTick((RecipeTickContext ctx) -> {
     var screen = ctx.machineContext().screenText();
-    screen.appendAfter(
-            ControllerScreenTextScope.OPERATION,
-            DISPLAY_WHEN_START_RECIPE,
-            id("in_line"),
-            Component.literal("文本"));
+    screen.appendAfter(TextScope.OPERATION, DISPLAY_WHEN_START_RECIPE,
+            id("in_line"), Component.literal("正在使用雷霆大猪咪暴力执行配方"));
 })
 ```
 
-[`RecipeTickContext`](../API/JavaAPI#recipetickcontext) 与 `RecipeStartContext`：
+`RecipeTickContext` 可以读取 `currentTick()` / `totalTick()` / `parallelism()`、需求与输出，以及 `IoSnapshot ioSnapshot()`。没有编辑需求、编辑输出或取消配方的方法；修改需求应放到 `beforeStart`，修改最终输出放到 `beforeFinish`。
 
-| 能力 | `RecipeStartContext` | `RecipeTickContext` |
-| --- | --- | --- |
-| `ctx.machineContext()` | ✓ | ✓ |
-| `ctx.currentTick()` / `ctx.totalTick()` | ✗ | ✓ |
-| `ctx.parallelism()` | ✗（在 `requestedParallelism()` / `effectiveParallelism()` 里） | ✓ |
-| `ctx.setRequirements(...)` / `setOutputs(...)` | ✓ | ✗（只读副本） |
-| `ctx.cancel()` | ✓ | ✗ |
+这段保留 builtin 的文本写法，但初始化的 `IN_LINE` 位于 `CONTROLLER`，这里却在 `OPERATION` 中引用同 ID。按当前 `ControllerText.appendAfter` 的同 scope 约束，**单靠前面的初始化不能保证插入这条运行文本**。实际需要 `OPERATION` 内已有同 ID 参考行；否则这次调用不操作。
 
-也就是说，`recipeTick` **不能修改配方需求 / 输出**，它只能读取 `currentTick()` 并基于此写屏幕文本 / 施加效果 / 调用其他游戏机制。
-
-如果想修改需求，应该在 `beforeStart` 里做，如果想在完成前改输出，应该在 `beforeFinish` 里做。
-
-[`ControllerScreenText.appendAfter(...)`](../API/JavaAPI#controllerscreentext) 把这条"文本"插到 `in_line` 之后，与 `registerDefinitions` 里的 `IN_LINE` 形成呼应：注册时在 `sp_line_1` 后插入 `IN_LINE`，运行时在 `IN_LINE` 后再追加运行信息。
-
-### `beforeFinish`
+### beforeFinish：完成前的世界效果
 
 ```java
-.beforeFinish(ctx -> {
-    var machineContext = ctx.machineContext();
+.beforeFinish((RecipeFinishContext ctx) -> {
+    MachineContext machineContext = ctx.machineContext();
     var level = machineContext.level();
     var controllerPos = machineContext.controllerPos();
     var area = new AABB(controllerPos.getX() - 2, level.getMinY(), controllerPos.getZ() - 2,
-                        controllerPos.getX() + 3, level.getMaxY() + 1, controllerPos.getZ() + 3);
+            controllerPos.getX() + 3, level.getMaxY() + 1, controllerPos.getZ() + 3);
     for (var entity : level.getEntitiesOfClass(LivingEntity.class, area)) {
-        entity.addEffect(new net.minecraft.world.effect.MobEffectInstance(
-                MobEffects.NIGHT_VISION, 10000, 1));
+        entity.addEffect(new MobEffectInstance(MobEffects.NIGHT_VISION, 10000, 1));
     }
 })
 ```
 
-[`RecipeFinishContext`](../API/JavaAPI#recipefinishcontext) 提供 `ctx.machineContext()` / `ctx.setOutputs(...)` / `ctx.discardOutputs()` / `ctx.cancel()`。
+完成前可 `setOutputs(...)`、`discardOutputs()`、`cancel()`。其中 `cancel()` 保留待完成工作，**不是丢弃配方进度**；`discardOutputs()` 则让本次完成不产生输出。生物效果同样不自动回滚，且不能把“完成前 Hook 已执行”理解为“输出一定已提交”。
 
 ## 结构
 
 ```java
-public static void registerStructures(MMCRMachineStructuresEvent event) {
+@SubscribeEvent
+public static void registerStructures(RegisterMachineStructuresEvent event) {
     if (!event.structures().containsKey(RECIPE_TICKER)) {
-        var structure = MachineStructureBuilder
-                .structure()
-                .fullStructure(s -> s
-                        .pattern(p -> p
-                                .layer("XXX", "AAA", "XXX")
-                                .layer("XXX", "A A", "X X")
-                                .layer("XXX", "ACA", "XXX")
-                                .where('X', block(Blocks.GREEN_TERRACOTTA))
-                                .where('A', any(
-                                        InterfacePredicates.anyOfItemInput(),
-                                        InterfacePredicates.anyOfItemOutput(),
-                                        InterfacePredicates.anyOfEnergyInput(),
-                                        InterfacePredicates.parallelControllers(),
-                                        block(Blocks.GREEN_WOOL)
-                                ))
-                                .controller('C')
-                        )
-                )
+        StructureSpec structure = Structures.structure()
+                .fullStructure(s -> s.pattern(p -> p
+                        .layer("XXX", "AAA", "XXX")
+                        .layer("XXX", "A A", "X X")
+                        .layer("XXX", "ACA", "XXX")
+                        .where('X', block(Blocks.GREEN_TERRACOTTA))
+                        .where('A', any(BlockConditions.itemInput(), BlockConditions.itemOutput(),
+                                BlockConditions.energyInput(), BlockConditions.parallelControllers(),
+                                block(Blocks.GREEN_WOOL)))
+                        .controller('C')))
                 .build(RECIPE_TICKER);
         event.registerStructure(structure);
     }
 }
 ```
 
-老演员不说了
+与纯 Tick 示例相比，此结构没有 `factoryController()` 条件。结构注册方法接收 `RegisterMachineStructuresEvent`，不是旧拼写的事件类。
 
-## 配方
+## 三条配方
 
 ```java
-public static void register(MMCRMachineRecipesEvent event) {
-    var recipe = MachineRecipeBuilder
-            .recipe(RECIPE_TICKER.withSuffix("_recipe_1"))
+@SubscribeEvent
+public static void register(RegisterMachineRecipesEvent event) {
+    RecipeSpec recipe = Recipes.recipe(RECIPE_TICKER.withSuffix("_recipe_1"))
             .recipePool(RECIPE_TICKER)
             .inputItem(Items.COAL, 10000)
             .inputItem(Items.DIAMOND, 8)
@@ -271,8 +198,7 @@ public static void register(MMCRMachineRecipesEvent event) {
             .build();
     event.registerRecipe(recipe);
 
-    recipe = MachineRecipeBuilder
-            .recipe(RECIPE_TICKER.withSuffix("_recipe_2"))
+    recipe = Recipes.recipe(RECIPE_TICKER.withSuffix("_recipe_2"))
             .recipePool(RECIPE_TICKER)
             .inputItem(Items.DIAMOND, 114514)
             .inputItem(Items.IRON_INGOT, 8)
@@ -282,8 +208,7 @@ public static void register(MMCRMachineRecipesEvent event) {
             .build();
     event.registerRecipe(recipe);
 
-    recipe = MachineRecipeBuilder
-            .recipe(RECIPE_TICKER.withSuffix("_recipe_3"))
+    recipe = Recipes.recipe(RECIPE_TICKER.withSuffix("_recipe_3"))
             .recipePool(RECIPE_TICKER)
             .inputItem(Items.GOLD_INGOT, 32)
             .inputItem(Items.STICK, 8)
@@ -295,43 +220,24 @@ public static void register(MMCRMachineRecipesEvent event) {
 }
 ```
 
-`recipe_3` 与 `beforeStart` Hook的联动：
+第三条配方声明 32 个金锭，Hook 将匹配到的本次启动需求替换成 1 个；8 根木棍、能量、结构和其他条件仍需满足。这个修改发生在候选进入启动 Hook 后，不能仅凭修改代码就保证“输入只放一个金锭必定能被配方搜索选中”。
 
-- 配方数据为 32 金锭
-- `beforeStart` 把"32 金锭且只匹配金锭"的需求替换成 1 金锭
-- 玩家实际只需在输入总线放 1 个金锭就能触发配方。
+## 三种上下文的准确能力
 
-## 特殊机制
-
-3 种上下文的能力差异：
-
-| 上下文 | 提供的能力 |
+| 上下文 | 公共能力 |
 | --- | --- |
-| [`RecipeStartContext`](../API/JavaAPI#recipestartcontext) | `recipe()` / `duration()` / `requirements()` / `outputs()` + `setDuration(...)` / `setRequirements(...)` / `setOutputs(...)` / `snapshot()` / `cancel()` |
-| [`RecipeTickContext`](../API/JavaAPI#recipetickcontext) | `recipe()` / `currentTick()` / `totalTick()` / `parallelism()` / 只读 `requirements()` / 只读 `outputs()` / `capabilitySnapshot()` |
-| [`RecipeFinishContext`](../API/JavaAPI#recipefinishcontext) | `recipe()` / `recipeId()` / `requestedParallelism()` / `effectiveParallelism()` / `outputs()` + `setOutputs(...)` / `discardOutputs()` / `cancel()` |
+| `RecipeStartContext` | `RecipeView recipe()`、ID、请求 / 有效并行、duration、`List<RequirementSpec>`、`List<OutputView>`；支持时长、需求、输出编辑、精确物品数量替换、`RecipeExecutionView snapshot()`、取消 |
+| `RecipeTickContext` | 配方、当前 / 总 tick、并行、需求与输出读取、`IoSnapshot ioSnapshot()`；无配方编辑或取消 setter |
+| `RecipeFinishContext` | 配方与 ID、请求 / 有效并行、输出读取 / 编辑、丢弃输出、取消及状态查询 |
 
-"启动前"要改需求、"执行中"不可以修改、"完成前"可以改输出。
+三者都通过 `MachineContext machineContext()` 访问服务端环境。输出视图里的栈是副本，修改读取的栈不会直接改配方，需显式 `setOutputs` 写回。`RecipeTickContext` 不再使用 `capabilitySnapshot()`；公共返回类型是 `IoSnapshot`。
 
-三者都通过 `ctx.machineContext()` 拿到 [`MachineBehaviorContext`](../API/JavaAPI#machinebehaviorcontext)，可读 `level()` / `controllerPos()` / `screenText()` / `gameTime()` / `machineId()`。
+配方机器的 IO 按配方需求由核心管理，不能照搬纯 Tick 的 `ioPlan()` 调用：`MachineContext` 本身没有该方法，只有 `TickContext` 新增了它。公共 `RecipeHooks` 提供 pre/post Tick，公共 `TickHooks` 仅提供 `serverTick`。
 
-:::info
-[`MachineIoPlan`](../API/JavaAPI#machineioplan) 只在 [`TickBehavior`](../API/JavaAPI#tickbehavior) 的 `serverTick` 里有意义
+Hook 中异常处理与失败状态由核心控制；不能据此承诺普通存储写入、实体效果或屏幕操作自动回滚。需要 IO 与数据一致提交时，参考直 Tick 的 `IoTransaction` 事务模式及明确的生命周期边界。
 
-[`RecipeBehavior`](../API/JavaAPI#recipebehavior) 的 `recipeTick` 等Hook**不需要手动调**，配方机器的 IO 由 MMCR 自动根据配方字段管理。
-:::
+## 延伸阅读
 
-`idleStart` / `idleEnd` / `preServerTick` / `postServerTick` 四个Hook的签名都是 `MachineCallback`，接收 [`MachineBehaviorContext`](../API/JavaAPI#machinebehaviorcontext)。**这 4 个Hook只在 `recipeBehavior(...)` 上下文里可用**，[`MachineBuilder.tickBehavior(...)`](../API/JavaAPI#machinebuilder) 之后再调用 `preServerTick` / `postServerTick` 会抛 `IllegalStateException`。
-
-5 个Hook抛出的异常都会被 MMCR 捕获并记录，机器进入失败状态。`beforeStart` 里如果 `setRequirements(...)` 抛了 `IllegalArgumentException`（比如把 32 金锭替换成 0 个，违反 `count >= 1` 的约束），机器同样会失败，修改需求时务必保证新参数满足 `MachineRequirement` 的构造约束。
-
-## RECIPE_TICK 和 PURE_TICK
-
-详见 [纯Tick测试机器 的对应章节](../JavaAPI/纯Tick测试机器#何时用-pure_tick-vs-recipe_tick)
-
-## 小结
-
-- 行为策略层：用 [`RecipeBehavior`](../API/JavaAPI#recipebehavior) 把 [`MachineBehavior.Kind.RECIPE`](../API/JavaAPI#machinebehavior) 切到"配方驱动 + 5 个Hook"
-- 5 个Hook的语义：`idleStart` / `idleEnd`、`beforeStart`、`recipeTick`、`beforeFinish`
-- 上下文层级：`RecipeStartContext` / `RecipeTickContext` / `RecipeFinishContext` 通过 `ctx.machineContext()` 获得 [`MachineBehaviorContext`](../API/JavaAPI#machinebehaviorcontext)
-- 屏幕文本：[`ControllerScreenText.appendAfter(...)`](../API/JavaAPI#controllerscreentext) 和 [`ControllerScreenTextScope.OPERATION`](../API/JavaAPI#controllerscreentextscope) 让"模板行 → 内容行"的展示顺序可控
+- [纯Tick测试机器的模式对比](./纯Tick测试机器#pure_tick-和-recipe_tick)。
+- [数据存储测试机器](./数据存储测试机器)：事务与非事务副作用。
+- [Java 公共 API 参考](../API/JavaAPI)。

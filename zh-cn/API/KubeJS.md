@@ -4,11 +4,15 @@ title: KubeJS API
 
 # KubeJS API
 
-本页是 MMCR 的 KubeJS 集成层的集中参考。内容以 `cn.howxu.mmcr.compat.kubejs` 当前源码为准，示例使用 KubeJS/Rhino 可接受的 JavaScript 写法。
+本页是 MMCR 的 KubeJS 集成层的集中参考，固定对应 **Minecraft 26.1.2、Java 25、KubeJS 26.1.2-8.0.6**，源码基线为提交 [`f234477b`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/gradle.properties)。示例使用 KubeJS/Rhino 的 JavaScript 写法。
 
-MMCR 的 KubeJS API 分为三个时序窗口：启动脚本中的机器、等级、修饰符和屏幕文本注册；服务端脚本加载中的结构注册；`ServerEvents.recipes` 中的数据驱动配方注册。启动注册与服务端结构注册由 `/reload` 之外的生命周期管理，配方事务则可以随服务器资源重载一起替换。
+MMCR 的 KubeJS API 分为三个声明窗口：启动脚本中的机器、等级、修饰符和屏幕文本注册；服务端脚本加载中的结构与编程式配方注册；`ServerEvents.recipes` 中的数据驱动配方注册。启动声明修改后需要重启；服务端结构与配方可随资源重载替换。此外还有客户端配方说明事件和运行时智能接口更新事件。
+
+KubeJS 桥接直接使用 `cn.howxu.mmcr.api` 底层类型；面向附属 Mod 的 `cn.howxu.mmcr.publicapi` 是另一层接口，不能把本文签名或 `Java.loadClass` 路径机械替换为 `publicapi`。本页保留有效的注册、结构、等级、行为、网络和文本章节，新增入口也按真实调用实现说明。
 
 本文中的 `String`、`List`、`Map`、`Consumer<T>` 等类型是 Java 签名中的类型名。Rhino 会把 JavaScript 字符串、数组、对象和回调转换为对应参数；如果某个重载标记为 `@HideFromJS`，它只保留给 Java 互操作或内部桥接使用，不是脚本调用入口。
+
+字段表有时用于解释构建器状态，不意味着字段全部公开：事件的 `api`、智能接口子构建器的字段、阶段构建器的状态字段和屏幕事件的 `context` 都是私有字段，应通过文中的方法配置/读取。`MachineBuilderJS`、`MachineStructureBuilderJS`、等级构建器则确实有表中所列的公开 transient 字段，仍优先使用方法以保持关联状态一致。
 
 ## 1. 顶层全局绑定
 
@@ -216,6 +220,37 @@ MMCREvents.client(event => {
 
 未加载 JEI 时，这两个方法忽略注册并只输出一次警告。
 
+### 智能接口更新事件
+
+源码：[SmartInterfaceEvents](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/compat/kubejs/SmartInterfaceEvents.java)、[SmartInterfaceUpdateEventJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/compat/kubejs/SmartInterfaceUpdateEventJS.java)。
+
+这是独立的服务端事件组 `mmcr.smart_interface`，事件 ID 为 `mmcr.smart_interface.updated`，不是 `MMCREvents` 上的第四个监听方法。监听写在 `server_scripts`：
+
+```javascript
+this["mmcr.smart_interface"].updated(event => {
+    console.log(String(event.machineId()), event.type(), event.oldValue(), event.newValue())
+    console.log("controllers:", event.controllerCount())
+})
+```
+
+KubeJS 26.1.2-8.0.6 的内置 binding 按 `group.name` 原样注入全局键；这里的点属于键名，不表示 `mmcr` 对象中有 `smart_interface` 属性。因此在脚本顶层以 `this["mmcr.smart_interface"]` 取得事件组包装器，再调用 `updated`。
+
+`SmartInterfaceUpdateEventJS` 是不可变 record，提供以下访问器：
+
+| 方法 | 返回类型 | 含义 |
+| --- | --- | --- |
+| `interfacePos()` | `BlockPos` | 发生更新的智能接口位置，不可变副本。 |
+| `machineId()` | `Identifier` | 接口所绑定机器的 ID。 |
+| `type()` | `String` | 更新的参数类型名。 |
+| `oldValue()` / `newValue()` | 可空 `Float` | 更新前后的值；记录类型允许 `null`，处理器应判空。 |
+| `controllerPositions()` | `List<BlockPos>` | 不可变位置列表，按 `BlockPos.asLong()` 排序；构造时传 `null` 得到空列表。 |
+| `controllerCount()` | `int` | 上述列表大小。 |
+| `controllerPos()` | 可空 `BlockPos` | 排序后首个控制器，没有控制器时为 `null`。 |
+
+触发范围必须按实现理解：[SmartInterfaceBlockEntity.setValue](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/internal/tile/SmartInterfaceBlockEntity.java#L99) 仅在已有参数的有限新值与旧值不同、且接口位于服务端并具有 `machineId` 时发布事件；相同值返回成功但不发布。`claimController`、`releaseController`、`syncTypes` 和能力事务的 `applyCapabilityValues` 并不直接发布此事件，因此不能保证每次绑定/解绑或每次能力输出都触发。事件组注册完成且存在监听器时才进行分发。
+
+`SmartInterfaceEvents.group()` / `post(event)` 是 Java 生命周期与分发辅助，脚本只订阅 `updated`。事件记录没有取消或修改方法，回调不会自动改写接口值。
+
 ## 2. 启动期回调
 
 ### `MMCRStartupEventJS`
@@ -247,9 +282,9 @@ MMCREvents.startup(event => {
 
 #### `registerControllerScreenText(String machineId, Consumer<ControllerScreenTextEventJS> handler) → void`
 
-- **参数表**：`machineId`（`String`）— 机器注册 ID，必须是带命名空间的合法 ID；`handler`（`Consumer<ControllerScreenTextEventJS>`）— 控制器屏幕文本回调。
+- **参数表**：`machineId`（`String`）— 机器注册 ID，建议显式命名空间；该入口用 `Identifier.tryParse`，没有强制字符串含冒号；`handler`（`Consumer<ControllerScreenTextEventJS>`）— 控制器屏幕文本回调。
 - **返回**：无；处理器被登记到控制器屏幕文本注册表。
-- **抛出**：`IllegalArgumentException`：机器 ID 为空、空白或不是合法命名空间 ID，或回调为 `null`；注册表的生命周期异常会继续向外传播。
+- **抛出**：`IllegalArgumentException`：机器 ID 为空、空白、格式非法，或回调为 `null`；注册表的生命周期异常继续向外传播。屏幕文本行 ID 的命名空间约束见第 10 节。
 - **默认值**：无默认处理器。
 - **示例**：
 
@@ -322,7 +357,7 @@ MMCREvents.startup(event => {
 
 #### `registerModifier(String id, ModifierDefinition definition) → void`
 
-- **参数表**：`id`（`String`）— 修饰器 ID；`definition`（`ModifierDefinition`）为 Java 公共 API 的修饰器定义对象，通常由 `event.getAPI().modifierDefinition(...)` 创建。
+- **参数表**：`id`（`String`）— 修饰器 ID；`definition`（`cn.howxu.mmcr.api.machine.definition.ModifierDefinition`）通常由 `event.getAPI().modifierDefinition(...)` 创建。
 - **返回**：无；把修饰器加入当前机器结构注册窗口。
 - **抛出**：`IllegalArgumentException`：ID 无法解析；注册器可能因重复 ID、空定义或生命周期状态抛异常。
 - **默认值**：无。
@@ -434,7 +469,7 @@ MMCREvents.server(event => {
 :::warning 注意事项
 
 - `build()` 必须在 `MMCREvents.server` 脚本加载期间调用；离开该回调后调用会抛 `IllegalStateException`。
-- 服务端重载事务会同时收集结构和编程式配方；脚本出现错误时，插件不会提交这一轮事务。
+- 服务端重载事务会同时收集结构和编程式配方。`Plugin.completeServerReload` 在错误数未增加，**或事务仍有可发布内容**时尝试提交；因此脚本报错后仍可能发布有效内容，不能把 `/reload` 理解为全轮原子回滚。无效配方会被校验、跳过并记录警告，详见内部事务章节。
 - 机器定义、等级类型和修饰器不应在此事件重复注册。
 :::
 ## 4. KubeJSApi 完整方法
@@ -443,7 +478,7 @@ MMCREvents.server(event => {
 
 > `cn.howxu.mmcr.compat.kubejs.KubeJSApi` 是由全局 `MMCR.getAPI()` 或事件 `getAPI()` 返回的脚本安全工厂门面。
 
-`KubeJSApi` 返回的结构谓词类型是 `cn.howxu.mmcr.api.machine.BlockPredicate`，与 Java 公共 API 包中的同名 `BlockPredicate` 不是同一个类。结构构建器接受前者；`modifierUse` 会把前者转换为公共 API 的替换谓词。
+`KubeJSApi` 返回的结构谓词类型是 `cn.howxu.mmcr.api.machine.BlockPredicate`。结构构建器接受它；`modifierUse` 把它转换为 `cn.howxu.mmcr.api.machine.definition.BlockPredicate`。这两个底层类也不是 `publicapi` 的谓词视图。
 
 **字段**
 
@@ -515,8 +550,10 @@ machine.durationByInterface("temperature", 0, 100, 2, 0.5, operation.ADD)
 
 | 名称 | 类型 | 值 |
 |------|------|------|
-| `INPUT` | `RecipeIo` | 配方输入方向。 |
-| `OUTPUT` | `RecipeIo` | 配方输出方向。 |
+| `INPUT` | `RecipeModifier.IOType` | 配方输入方向。 |
+| `OUTPUT` | `RecipeModifier.IOType` | 配方输出方向。 |
+
+完整方向类型为 `cn.howxu.mmcr.api.recipe.modifier.RecipeModifier.IOType`；`recipeIO()` 返回的是常量容器 `RecipeIoValues`，其字段才是这个枚举。它不是端口方向 `cn.howxu.mmcr.util.IOType`，也不是 `publicapi` 中的方向类型。
 
 #### `OutputPolicyValues`
 
@@ -536,7 +573,7 @@ machine.durationByInterface("temperature", 0, 100, 2, 0.5, operation.ADD)
 
 #### 字符串与数字
 
-这些方法是 `cn.howxu.mmcr.api.publicapi.ReadableNumber` 的 KubeJS 门面。所有方法
+这些方法是 `cn.howxu.mmcr.api.presentation.ReadableNumber` 的 KubeJS 门面。所有方法
 都拒绝负数；小数和 SI 数值统一向下截断，
 不是四舍五入。
 
@@ -944,13 +981,15 @@ const tiers = api.portTierRequirements([
 
 #### 配方输入输出
 
-注意，以下内容是提供给自定义 Tick 中调整合成计划使用的 API ，在 `ServerEvents.recipes()` 事件中调用是无法正常使用的。
+以下工厂创建 Java IO 声明，不会单独注册配方。需求与 `CustomRecipeIo` 可加入自定义 tick 的 `MachineIoPlan`，也可交给编程式 `MachineRecipeBuilderJS`；`MachineIngredient` 交给其 `inputs` / `addInput`。数据驱动 schema 接受 JSON，不能把这些 Java 对象直接当成 JSON 列表项。
+
+门面的物品/流体数量（包括 `fluidStack` 和相应 Requirement 工厂）经 `MachineOutput.recipeStackAmount(long)`：**小于 1 立即拒绝，大于 `Integer.MAX_VALUE` 饱和到该上限**。`int` 重载委托到 `long` 重载。这不是 FE/t 或化学品 `long` 数量的通用限制，后两者使用各自模型与校验。
 
 ##### `itemInput(String itemId, long count, float consumeChance) → MachineIngredient`
 
 - **参数表**：`itemId`（`String`）— 物品 ID；`count`（`long`）— 输入数量；`consumeChance`（`float`）— 每次消耗该输入的概率。另有 `int` 重载。
 - **返回**：物品 `MachineIngredient`；输入方向固定为 `INPUT`。
-- **抛出**：`IllegalArgumentException`：物品未知；物品 ID 无效。负数量会在配方构建校验时被拒绝，概率最终限制在 `0` 到 `1`。
+- **抛出**：`IllegalArgumentException`：物品未知、ID 无效或数量小于 1。超过 `int` 上限的数量饱和到上限；概率由输入模型规范化到 `0..1`。
 - **默认值**：无；组件谓词为空。
 - **示例**：
 
@@ -1095,21 +1134,21 @@ const energy = api.energyInput(32)
 const energy = api.energyOutput(8)
 ```
 
-##### `energyRequirement(RecipeIo io, long fePerTick) → MachineRequirement`
+##### `energyRequirement(RecipeModifier.IOType io, long fePerTick) → MachineRequirement`
 
-- **参数表**：`io`（`RecipeIo`）— 使用 `api.recipeIO().INPUT` 或 `OUTPUT`；`fePerTick`（`long`）— 每 tick FE 数量。
+- **参数表**：`io`（`RecipeModifier.IOType`）— 使用 `api.recipeIO().INPUT` 或 `OUTPUT`；`fePerTick`（`long`）— 每 tick FE 数量。
 - **返回**：可加入 `MachineIoPlan` 或编程式配方 `requirements` 的能量需求。
-- **抛出**：下游需求构造器可能因负数量抛异常；`io` 不是 `OUTPUT` 时源码按输入处理。
-- **默认值**：`io == null` 时也会按输入方向处理，这是源码分支的结果，不建议依赖。
+- **校验**：门面直接构造 `EnergyRequirement`，数量校验由后续配方/运行时执行负责。
+- **默认值**：`EnergyRequirement` 构造器把 `null` 方向规范化为 `INPUT`。
 - **示例**：
 
 ```javascript
 const requirement = api.energyRequirement(api.recipeIO().INPUT, 32)
 ```
 
-##### `customRecipeIo(String typeId, RecipeIo io, JsonElement payload) → CustomRecipeIo`
+##### `customRecipeIo(String typeId, RecipeModifier.IOType io, JsonElement payload) → CustomRecipeIo`
 
-- **参数表**：`typeId`（`String`）— 已注册的需求/输出类型 ID；`io`（`RecipeIo`）— 输入或输出方向；`payload`（`JsonElement`）— 该类型 codec 接受的 JSON 数据。
+- **参数表**：`typeId`（`String`）— 已注册的需求/输出类型 ID；`io`（`RecipeModifier.IOType`）— 输入或输出方向；`payload`（`JsonElement`）— 该类型 codec 接受的 JSON 数据。
 - **返回**：经过注册表和 codec 校验的 `CustomRecipeIo`。
 - **抛出**：`IllegalArgumentException`：类型未注册、方向或 payload 不符合类型 codec。
 - **默认值**：无。
@@ -1124,7 +1163,7 @@ const custom = api.customRecipeIo("neoforge:energy", api.recipeIO().INPUT, paylo
 
 - **参数表**：`itemId`（`String`）— 物品 ID；`count`（`long`）— 输出数量；`chance`（`float`）— 输出概率。另有 `int` 重载。
 - **返回**：方向为输出的物品需求。
-- **抛出**：`IllegalArgumentException`：物品未知；负数量由需求/配方校验拒绝。
+- **抛出**：`IllegalArgumentException`：物品未知、ID 无效或数量小于 1。
 - **默认值**：无；数据组件谓词为空。
 - **示例**：
 
@@ -1135,7 +1174,7 @@ const output = api.itemOutputRequirement("minecraft:iron_nugget", 10, 1.0)
 ##### `itemOutputRequirementWithComponents(String itemId, long count, JsonElement components, float chance) → MachineRequirement`
 
 - **参数表**：`itemId`（`String`）— 物品 ID；`count`（`long`）— 输出数量；`components`（`JsonElement`）— `DataComponentPredicateSet` codec 的 JSON；`chance`（`float`）— 输出概率。另有 `int` 重载。
-- **返回**：带数据组件匹配条件的物品输出需求。
+- **返回**：带 `DataComponentPredicateSet` 的物品输出需求；`ItemRequirement.resolvedStack()` 在栈副本上应用能解码的精确组件值，非精确谓词不自动变成具体组件。
 - **抛出**：`IllegalArgumentException` 或 codec 异常：物品未知、组件 JSON 无法解析或数量非法。
 - **默认值**：组件必须显式传入；概率由输出模型规范化。
 - **示例**：
@@ -1153,7 +1192,7 @@ const output = api.itemOutputRequirementWithComponents(
 
 - **参数表**：`itemId`（`String`）— 物品 ID；`count`（`long`）— 输入数量。另有 `int` 重载。
 - **返回**：方向为输入的物品需求，消耗概率为 `1`。
-- **抛出**：`IllegalArgumentException`：物品未知或数量在后续配方校验中非法。
+- **抛出**：`IllegalArgumentException`：物品未知、ID 无效或数量小于 1。
 - **默认值**：无组件谓词，完全消耗。
 - **示例**：
 
@@ -1165,7 +1204,7 @@ const input = api.itemInputRequirement("minecraft:iron_ingot", 1)
 
 - **参数表**：`fluidId`（`String`）— 流体 ID；`amount`（`long`）— 输入量。另有 `int` 重载。
 - **返回**：方向为输入的流体需求。
-- **抛出**：`IllegalArgumentException`：流体未知；负数量会在配方校验中拒绝。
+- **抛出**：`IllegalArgumentException`：流体未知、ID 无效或数量小于 1。
 - **默认值**：无。
 - **示例**：
 
@@ -1330,6 +1369,21 @@ const target = iface.connections().get(0)
 api.sendRequest(iface, target, "example:report", { power: 20 })
 ```
 
+实际回调中先检查接口列表和连接列表是否为空再取第一个元素。`sendRequest` 先把请求体转换为底层 `DataValue.MAP`，再解析 `requestId` 和入队；格式错误并不会返回一个异步失败结果。
+
+##### 网络 runtime 类型
+
+这些引用位于 `cn.howxu.mmcr.api.network`，由服务端创建，不用附属 Mod 的 `publicapi.network` 类型替换：
+
+| 类型 | 公开访问器与用途 |
+| --- | --- |
+| `NetworkInterfaceReference` | `position() → BlockPos`、`connections() → List<MachineReference>`。端点失效、维度缺失或区块未加载时连接列表为空；没有公开 `server()` / `source()` 方法，不能通过它绕过门面发送请求。 |
+| `MachineReference` | record：`type() → Identifier`、`hash() → long`；表示机器类型与稳定身份，而不是方块位置。 |
+| `RequestBody` | `values() → Map<String, DataValue>`、`get(String key) → Optional<DataValue>`；不可变请求体。`of(Map<String, DataValue>)` 拒绝空白键和空值，脚本通常交给 `sendRequest` 构造。 |
+| `RequestInfo` | record：`requestId() → Identifier`、`peer() → MachineReference`；成功回调通过它读取请求 ID 和对端身份。 |
+
+`requestFailed` 使用 `api.network.view` 下的 `RequestBody` / `RequestInfo` / `RequestFailureReason` 与 `api.data.view.DataStorage`；`requestProcess` 则使用上表底层对象与 `api.data.DataStorage`。它们在脚本里有相似访问器，但 Java 签名不同。
+
 ##### `dataValue(Object value) → DataValue`
 
 - **参数表**：`value`（`Object`）— `DataValue`、JavaScript 对象/映射、集合、数组、布尔、字符串、整数、浮点数、`BigInteger` 或 `BigDecimal`。
@@ -1364,7 +1418,7 @@ ctx.dataStorage().set("state", value)
 与写入类型对应的 `asXxx()`。
 
 KubeJS 门面声明的实现类是 `cn.howxu.mmcr.api.data.DataValue`；Java 公共 API
-中的 `cn.howxu.mmcr.api.publicapi.data.DataValue` 是另一个用于外部 Mod 的公共视图，
+中的 `cn.howxu.mmcr.publicapi.data.DataValue` 是另一个用于外部 Mod 的公共视图，
 两者不要在 Java 代码中混用。脚本端直接使用 `api.dataValue(...)` 返回的对象即可。
 
 ##### 支持的类型
@@ -1487,7 +1541,7 @@ const energy = state.asMap()
 
 **创建**
 
-公开构造器为 `MachineBuilderJS(Identifier id)` 和 `MachineBuilderJS(String id)`，均标记为 `@HideFromJS`。脚本通常不直接调用构造器，而使用 `event.createMachine(id)`。
+公开构造器为 `MachineBuilderJS(Identifier id)` 和 `MachineBuilderJS(String id)`，这两个构造器没有 `@HideFromJS`。脚本通常使用 `event.createMachine(id)`，让声明所处的启动窗口更清楚。
 
 **方法**
 
@@ -1714,6 +1768,14 @@ machine.allowModifiers()
 machine.allowModifiers(true)
 ```
 
+##### `allowParallelism()` / `allowParallelism(boolean allow) → MachineBuilderJS`
+
+启用或显式设置并行控制器支持，默认 `false`；无参重载等价于传 `true`。返回当前构建器，不立即调整并行数量。与 `maxParallelAmount(long)` 一起设置机器上限；配方是否可并行仍由配方的 `parallelized` 决定。
+
+```javascript
+machine.allowParallelism().maxParallelAmount(32)
+```
+
 #### 控制器与外观
 
 ##### `controllerSpec(MachineControllerSpec controllerSpec) → MachineBuilderJS`
@@ -1800,6 +1862,10 @@ machine.controllerTopTexture("example:block/controller_top")
 ```javascript
 machine.controllerBottomTexture("example:block/controller_bottom")
 ```
+
+##### `controllerTopTexture(String texture)` / `controllerBottomTexture(String texture) → MachineBuilderJS`
+
+分别设置控制器顶面和底面纹理 ID，解析后保存到对应字段并返回当前构建器；ID 语法错误抛异常。未设置时使用 `MachineControllerSpec.defaultsFor(id)` 的对应默认纹理。它们与前面/侧面方法一样各有被 `@HideFromJS` 隐藏的 `Identifier` 重载。
 
 ##### `controllerIdleOverlayTexture(String texture) → MachineBuilderJS`
 
@@ -1957,7 +2023,7 @@ machine.appearance("minecraft:green_terracotta")
 
 ```javascript
 machine.recipeBehavior(behavior => behavior.recipeTick(ctx => {
-    ctx.machineContext().screenText().append("operation", "example:running", Text.literal("Running"))
+    ctx.machineContext().screenText().append(api.screenScope().OPERATION, api.id("example:running"), Text.literal("Running"))
 }))
 ```
 
@@ -2000,7 +2066,7 @@ machine.preServerTick(ctx => {
 
 ```javascript
 machine.postServerTick(ctx => {
-    ctx.screenText().append("operation", "example:tick", Text.literal("Ticked"))
+    ctx.screenText().append(api.screenScope().OPERATION, api.id("example:tick"), Text.literal("Ticked"))
 })
 ```
 
@@ -2032,7 +2098,7 @@ machine.allowNetworkMachine("example:network_center")
 
 ##### `requestProcess(String requestId, RequestProcess process) → MachineBuilderJS`
 
-- **参数表**：`requestId`（`String`）— 请求 ID；`process`（`RequestProcess`）— 四参数回调 `(body, request, senderStorage, receiverStorage)`。`body` 是公共 [`RequestBody`](./JavaAPI#requestbody)，可通过 `body.get("power").flatMap(v => v.asDouble())` 取值；`request` 是公共 [`RequestInfo`](./JavaAPI#requestinfo)，可读取 `request.peer().hash()` 等字段；`senderStorage` / `receiverStorage` 为公共 [`DataStorage`](./JavaAPI#datastorage) 视图，对端未启用数据存储时为 `null`，需自行判空。
+- **参数表**：`requestId`（`String`）— 请求 ID；`process`（`cn.howxu.mmcr.api.network.RequestProcess`）— 四参数回调 `(body, request, senderStorage, receiverStorage)`。`body`、`request` 分别是 `api.network.RequestBody`、`api.network.RequestInfo`；`body.get("power").flatMap(v => v.asDouble())` 可取值，`request.peer().hash()` 可读对端标识。两个 storage 是 `api.data.DataStorage` 底层对象，没有数据存储时为 `null`，需判空。这条成功回调走 `requestProcessInternal`，并不是 `publicapi` 回调。
 - **返回**：当前构建器。
 - **抛出**：`IllegalArgumentException`：ID 无法解析、ID 为空，或同一 ID 重复注册；`NullPointerException`：处理器为空。
 - **默认值**：没有处理器。
@@ -2048,7 +2114,7 @@ machine.requestProcess("example:report", (body, request, senderStorage, receiver
 
 ##### `requestFailed(String requestId, RequestFailed failure) → MachineBuilderJS`
 
-- **参数表**：`requestId`（`String`）— 请求 ID；`failure`（`RequestFailed`）— 四参数失败回调 `(body, request, senderStorage, reason)`。`body`、`request`、`senderStorage` 同 `requestProcess`；`reason` 是 [`RequestFailureReason`](./JavaAPI#requestfailurereason) 枚举值。
+- **参数表**：`requestId`（`String`）— 请求 ID；`failure`（`cn.howxu.mmcr.api.network.view.RequestFailed`）— 四参数失败回调 `(body, request, senderStorage, reason)`。这里的 `body` / `request` / `reason` 是 `api.network.view` 下的视图，`senderStorage` 为可空的 `api.data.view.DataStorage`。成功回调与失败回调并不使用同一组 Java 类型。
 - **返回**：当前构建器。
 - **抛出**：`IllegalArgumentException`：ID 非法或重复；`NullPointerException`：失败处理器为空。
 - **默认值**：没有失败处理器。
@@ -2370,8 +2436,8 @@ machine
 | `anyOfItemPorts()` / `anyOfFluidPorts()` / `anyOfEnergyPorts()` | `BlockPredicate` | 对应端口族的输入与输出并集。 |
 | `anyOfChemicalPorts()` / `anyOfRadioactiveChemicalPorts()` / `anyOfHeatPorts()` | `BlockPredicate` | Mekanism 化学品、放射性化学品或热量端口并集。 |
 | `anyOfUpgradeBus()` | `BlockPredicate` | 所有升级总线并集。 |
-| `anyOfPort(String...)` / `anyOfPort(Identifier...)` / `anyOfPort(publicapi.BlockPredicate...)` | `BlockPredicate` | 指定端口的并集。 |
-| `parallelControllers()` / `factoryController()` | `BlockPredicate` | 内置并行控制器或工厂控制器。 |
+| `anyOfPort(String...)` / `anyOfPort(Identifier...)` / `anyOfPort(api.machine.definition.BlockPredicate...)` | `BlockPredicate` | 指定端口的并集，第三个重载接受另一种底层谓词。 |
+| `parallelControllers()` | `BlockPredicate` | 内置并行控制器。工厂控制器谓词使用 `api.factoryController()`，机器构建器没有该方法。 |
 | `smartInterfaceBlock()` / `smartInterface()` | `BlockPredicate` | 内置智能接口谓词。 |
 | `dataStorage()` | `BlockPredicate` | 内置数据存储谓词。 |
 | `itemInputTier(String)` 等 6 个端口等级工厂 | `PortTierRequirementSpec` | 按端口族构造最低等级需求。 |
@@ -2569,7 +2635,7 @@ structure.set("L", api.levelSlot("example:coil"))
 - **参数表**：`symbol`（`String`）— 控制器的字符。
 - **返回**：当前构建器。
 - **抛出**：`IllegalArgumentException`：符号不是单个非空格字符；`IllegalStateException`：符号未在 `pattern(...)` 中出现。
-- **默认值**：未设置控制器时按模式自动派生。
+- **默认值**：脚本构建器初始化时调用 `noController()`，不会自动猜测控制器字符；需要显式 `controller(symbol)`。
 - **示例**：
 
 ```javascript
@@ -2643,7 +2709,7 @@ event.createStructure("example:press")
 
 #### 阶段式声明
 
-`MachineStructureBuilderJS` 同时支持阶段式声明；阶段式 API 与扁平式 API 不能混用。
+`MachineStructureBuilderJS` 有顶层式和回调式两种模式。`pattern` / `set` / `controller` / `modifier` 与 `fullStructure(...)` 属于顶层式；`mainStructure` / `expandStructure` / `extension(Consumer)` 属于回调式，两种模式不能混用。`fullStructure` 可以把顶层已累积的模式封装为完整阶段。
 
 ##### `fullStructure(PortRequirementSpec ports, PortTierRequirementSpec tiers, List<DynamicPatternSpec> dynamicPatterns, MachineStructureRequirements requirements) → MachineStructureBuilderJS`
 
@@ -2671,7 +2737,7 @@ structure.fullStructure(blockArray)
 
 ##### `fullStructure(BlockArray pattern, PortRequirementSpec ports, PortTierRequirementSpec tiers, List<DynamicPatternSpec> dynamicPatterns, MachineStructureRequirements requirements) → MachineStructureBuilderJS`
 
-- **参数表**：见方法名；都允许 `null`。
+- **参数表**：`pattern` 不允许 `null`；其他参数由 `Declaration` 规范化和校验。
 - **返回**：当前构建器。
 - **抛出**：同前两个重载。
 - **默认值**：合并当前需求。
@@ -2710,9 +2776,9 @@ structure.mainStructure(stage => stage.pattern("X").set("X", "minecraft:iron_blo
        .expandStructure(stage => stage.pattern("XX").set("X", "minecraft:iron_block"))
 ```
 
-##### `extension(BlockArray pattern) → MachineStructureBuilderJS`
+##### `extension(BlockArray pattern) → MachineStructureBuilderJS`（Java 侧）
 
-- **参数表**：`pattern`（`BlockArray`）— 附属结构方块数组。
+- **参数表**：`pattern`（`BlockArray`）— 附属结构方块数组。该重载标记 `@HideFromJS`，脚本使用 `extension(stage => ...)`。
 - **返回**：当前构建器。
 - **抛出**：`IllegalStateException`：未先声明主结构或混用了回调式 API；`NullPointerException`：`pattern` 为空。
 - **默认值**：端口和动态模式需求为空。
@@ -2767,7 +2833,7 @@ structure.extension(stage => stage.pattern("Y").set("Y", "minecraft:iron_block")
 | `anyOfUpgradeBus()` | `BlockPredicate` | 所有升级总线并集。 |
 | `anyOfPort(String...)` | `BlockPredicate` | 指定端口 ID 列表的并集。 |
 | `anyOfPort(Identifier...)` | `BlockPredicate` | 同上，使用 `Identifier` 数组。 |
-| `anyOfPort(publicapi.BlockPredicate...)` | `BlockPredicate` | 使用 Java 公共 API 谓词列表的并集。 |
+| `anyOfPort(api.machine.definition.BlockPredicate...)` | `BlockPredicate` | 使用底层定义谓词列表的并集，返回 `api.machine.BlockPredicate`。 |
 | `factoryController()` | `BlockPredicate` | 内置工厂控制器。 |
 | `parallelControllers()` | `BlockPredicate` | 所有并行控制器。 |
 | `smartInterface()` | `BlockPredicate` | 内置智能接口。 |
@@ -2817,7 +2883,7 @@ structure.set("X", entry)
 - 模式字符必须是非空格单个字符；空格表示该位置不校验。
 - 不同 `pattern(...)` 调用必须保持相同宽度与高度，否则抛 `IllegalArgumentException`。
 - 阶段式 API 与扁平式 API 不能混用；一旦调用 `mainStructure` / `expandStructure` / `extension(Consumer)`，再调用 `pattern`/`set`/`controller`/`modifier` 也会抛 `IllegalStateException`。
-- `fullStructure(BlockArray)`/`extension(BlockArray)` 系列只暴露 `BlockArray` / 公共 API 类型；纯 `BlockArray.Builder` 调用需要 Java 互操作。
+- `fullStructure(BlockArray)` 系列使用底层 `api.machine` 类型，没有 `@HideFromJS`；`extension(BlockArray)` 的两个重载被隐藏，脚本使用回调重载。`pattern(List<String>)` 在顶层与阶段构建器上也被隐藏，脚本使用可变参数或 `patternAll`。
 - `PatternEntry` 不会修改需求（修饰器、等级槽位）；如果需要把同一字符绑定为多种替换，请多次调用 `modifier(symbol, use)`。
 :::
 ### `MachineStructureStageBuilderJS`
@@ -2891,7 +2957,7 @@ mainStructure(stage => stage.modifier("M", api.modifierUse("example:speed", api.
 - **参数表**：`symbol`（`String`）— 控制器字符。
 - **返回**：当前阶段构建器。
 - **抛出**：`IllegalArgumentException`：字符非法；`IllegalStateException`：字符未在 `pattern(...)` 中出现。
-- **默认值**：未调用时按模式自动派生。
+- **默认值**：阶段构建器初始化时调用 `noController()`；控制器字符需显式声明，扩展/附属阶段不需要时可不声明。
 - **示例**：
 
 ```javascript
@@ -2946,7 +3012,7 @@ mainStructure(stage => stage.dynamicPattern(myDynamicPattern))
 | `anyOfItemPorts()` / `anyOfFluidPorts()` / `anyOfEnergyPorts()` | `BlockPredicate` | 对应端口族的输入与输出并集。 |
 | `anyOfChemicalPorts()` / `anyOfRadioactiveChemicalPorts()` / `anyOfHeatPorts()` | `BlockPredicate` | Mekanism 化学品、放射性化学品或热量端口并集。 |
 | `anyOfUpgradeBus()` | `BlockPredicate` | 所有升级总线并集。 |
-| `anyOfPort(String...)` / `anyOfPort(Identifier...)` / `anyOfPort(publicapi.BlockPredicate...)` | `BlockPredicate` | 指定端口的并集。 |
+| `anyOfPort(String...)` / `anyOfPort(Identifier...)` / `anyOfPort(api.machine.definition.BlockPredicate...)` | `BlockPredicate` | 指定端口的并集。 |
 | `factoryController()` / `parallelControllers()` / `smartInterface()` | `BlockPredicate` | 内置控制器或智能接口谓词。 |
 | `itemInputTier(String)` 等 6 个端口等级工厂 | `PortTierRequirementSpec` | 按端口族构造最低等级需求。 |
 
@@ -2967,15 +3033,137 @@ stage.pattern("X").set("X", "minecraft:iron_block").controller("X")
 
 :::warning 注意事项
 
-- 阶段构建器在 `mainStructure` / `expandStructure` / `extension` 回调执行完后即失效。
+- 父构建器在 `mainStructure` / `expandStructure` / `extension` 回调结束时立即取出阶段声明；之后再修改保存的阶段构建器不会改变已取出的声明。
 - 同一个阶段内的字符必须通过 `pattern(...)` 声明，缺失字符不能 `set`。
 - 等级槽位通过 `set(symbol, levelSlot)` 自动登记在当前阶段的 `requirements` 中。
 :::
 ## 7. 配方
 
+### 两类配方构建器
+
+| 路径 | 对象与入口 | IO 参数 | 终结与发布 |
+| --- | --- | --- | --- |
+| 数据驱动 schema | `ServerEvents.recipes` 中 `event.custom({type: "mmcr:machine_recipe", ...})` 返回 KubeJS `KubeRecipe` | JSON；schema 的 `custom` 接受字符串方向 `"input"` / `"output"` | KubeJS 收集配方，再由数据包同步桥接进入 MMCR。 |
+| 编程式 JavaScript 桥接 | `new MachineRecipeBuilderJS(String/Identifier id)`，用 `Java.loadClass` 取得类 | `MachineIngredient`、`MachineRequirement`、`RecipeIoDeclaration`；`custom` 接受 `RecipeModifier.IOType` | `createObject()` 只构造，`build()` 在活动服务端事务内登记，否则走静态注册。 |
+
+两者的方法名并不完全相同。schema 有 `chemicalInputChance` 与 `smartInterfaceInputRange`；编程式构建器使用 `chemicalInput(..., consumeChance)` 与三参数 `smartInterfaceInput`。不要把 `MachineRecipeBuilderJS` 与 Java 底层 `api.recipe.MachineRecipeBuilder` 或附属 Mod 的 `publicapi.recipe.RecipeDraft` 混用。
+
+### `MachineRecipeBuilderJS`
+
+源码：[MachineRecipeBuilderJS.java](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineRecipeBuilderJS.java)。该类不继承 `BuilderBase`，没有机器注册构建器的 `register()`；`MMCRServerEventJS` 也没有 `createRecipe` 方法。
+
+#### 创建、字段与默认值
+
+公开构造器为 `MachineRecipeBuilderJS(String id)` 和 `MachineRecipeBuilderJS(Identifier id)`。ID 必须可解析；配方池必须随后调用 `recipePool`。公开字段为 `recipePoolId`、`tickTime=40`、`inputs`、`outputs`、`energyPerTick=0`、`cancelIfPerTickFails=false`、`requiredHostIds`。内部初值：`priority=0`、`maxThreads=1`、`parallelized=false`、`deriveRequirements=true`、`allowPartialOutputs=false`，流体输出、显式需求、自定义输出、条件列表为空。
+
+下面配置方法均返回当前构建器；只有 `createObject` 与 `build` 是终结方法。不要直接向 `outputs` 字段添加栈：输出概率是另一条内部列表，应使用方法保持数量对应。
+
+#### 基础设置与列表重载
+
+| 方法 | 行为与校验 |
+| --- | --- |
+| `id(String id)` | 替换配方 ID；解析失败抛异常。 |
+| `recipePool(String id)` | 设置单一配方池；当 `MachineRegistry.containsRecipePool` 为假时立即抛 `IllegalArgumentException`。 |
+| `tickTime(int ticks)` | 设置耗时；`createObject()` 要求至少 1 tick。 |
+| `priority(int priority)` | 设置配方优先级。 |
+| `maxThreads(int threads)` | 默认 1；构建时拒绝负数，源码允许 0。 |
+| `parallelized()` / `parallelized(boolean enabled)` | 无参设置 `true`，默认 `false`。 |
+| `cancelIfPerTickFails(boolean cancel)` | 设置每 tick 需求失败时的取消标志，默认 `false`。 |
+| `allowPartialOutputs()` / `allowPartialOutputs(boolean allow)` | 无参设置 `true`，默认 `false`。 |
+| `deriveRequirements(boolean derive)` | 是否把传统输入、物品输出、流体输出派生为需求，默认 `true`。 |
+| `inputs(List<MachineIngredient>)` / `addInput(MachineIngredient)` | 前者清空并替换传统输入，后者追加。 |
+| `outputs(List<ItemStack>)` / `addOutput(ItemStack, float chance)` | 前者清空物品输出、概率和暂存的组件输出，每项概率设为 1；后者追加栈及概率。 |
+| `fluidOutputs(List<FluidStack>)` | 替换流体输出列表，每项最终输出概率为 1；没有 `fluidOutput(...)` 快捷方法，使用 `api.fluidStack`。 |
+| `requirements(List<MachineRequirement>)` | 替换显式需求列表，不清空自定义输出列表。 |
+| `addRequirement(RecipeIoDeclaration)` | 追加底层需求；`CustomRecipeIo` 经底层 builder 解码到需求或自定义输出，其他实现被拒绝。 |
+| `custom(String typeId, RecipeModifier.IOType io, JsonElement payload)` | 构造 `CustomRecipeIo` 并交给 `addRequirement`；类型与 codec 必须匹配。 |
+| `conditions(List<MachineModifier>)` | 替换条件，通过 `MachineModifier.recipeModifiers` 转为配方修饰符；只保留 duration、energy、chemical、heat、output 数值目标，机器调度目标和布尔并行项会被忽略。 |
+
+`deriveRequirements(false)` 不会自动把传统 `inputs` 转为需求。只有显式添加的需求会进入这一部分；传统物品/流体输出仍被建立为 canonical outputs。该开关适合已经完整提供显式需求的脚本，不能用它表示“不消耗输入”。
+
+#### 物品与标签输入
+
+下表数量写作 `long` 的每个方法都还有同参数位置的 `int` 重载。输入组件使用 `DataComponentPredicateSet.CODEC`，是匹配条件；省略消耗概率时为 1，0 表示仍要求存在但不消耗。构建器的 `tagInput` 用内置注册表的标签集合，找不到时建立空 named set，不等于 API 门面的即时 `getOrThrow` 标签查找。
+
+| 方法 | 含义 |
+| --- | --- |
+| `itemInput(String itemId, long count)` | 具体物品输入，无组件匹配，完全消耗。 |
+| `tagInput(String tagId, long count)` | 标签输入，无组件匹配，完全消耗。 |
+| `itemInputWithComponents(String itemId, long count, JsonElement components)` | 组件匹配输入，概率 1。 |
+| `itemInputWithComponents(String itemId, long count, JsonElement components, float consumeChance)` | 组件匹配输入，显式消耗概率。 |
+| `tagInputWithComponents(String tagId, long count, JsonElement components, float consumeChance)` | 标签与组件同时匹配；没有省略概率的三参数重载。 |
+| `notConsumableItemInput(String itemId, long count)` | 消耗概率固定 0，输入仍参与存在性检查。 |
+| `chancedItemInput(String itemId, long count, float consumeChance)` | 无组件条件的概率消耗。 |
+
+#### 物品组件输出与普通输出
+
+| 方法 | 含义 |
+| --- | --- |
+| `itemOutput(String itemId, long count)` / 对应 `int` 重载 | 追加物品输出，概率 1。 |
+| `chancedItemOutput(String itemId, long count, float chance)` / 对应 `int` 重载 | 追加概率物品输出。 |
+| `itemOutputWithComponents(String itemId, long count, JsonElement components)` / 对应 `int` 重载 | 暂存带真实栈组件的 JSON 输出，数量必须为正，概率固定 1；没有四参数概率重载。 |
+
+**真实拼写与语义区分**：`api.itemOutputRequirementWithComponents(itemId, count, components, chance)` 是需求工厂；`builder.itemOutputWithComponents(itemId, count, components)` 是配方栈输出，两者都存在，不能相互改名。前者解析组件谓词并由需求解析输出栈，后者在 `createObject()` 中通过当前 `RecipesKubeEvent` 的 registry-aware ops 解码 `MachineOutput.RECIPE_ITEM_STACK_CODEC`。
+
+因此，只要使用构建器的 `itemOutputWithComponents`，就必须在 **`ServerEvents.recipes` 回调内完成 `createObject()` / `build()`**，否则抛 `IllegalStateException("Component item outputs must be built during the KubeJS recipe event")`。它保持与普通物品输出的相对顺序。可在配方事件中用 `createObject()` 检查构造，但这不会登记配方。
+
+#### 流体、能量、Mekanism
+
+| 方法 | 行为与重载 |
+| --- | --- |
+| `fluidInput(String fluidId, long amount)` | 流体输入，概率 1；另有 `int` 重载。 |
+| `fluidInput(String fluidId, long amount, double consumeChance)` | 流体概率消耗；另有 `int` 数量重载。 |
+| `energyPerTick(long fe)` | 设置额外能量输入；大于 0 时在构建时追加，不替换已有 `iFEt`。 |
+| `iFEt(long fePerTick)` | 追加能量输入到传统输入列表。 |
+| `oFEt(long fePerTick)` | 追加 OUTPUT 方向的能量声明，仍存于传统输入列表，再派生为方向正确的需求。 |
+| `chemicalInput(String chemicalId, long amount)` | 化学品输入，概率 1。 |
+| `chemicalInput(String chemicalId, long amount, double consumeChance)` | 化学品概率消耗。 |
+| `chemicalTagInput(String tagId, long amount)` | 标签化学品输入，概率 1。 |
+| `chemicalTagInput(String tagId, long amount, double consumeChance)` | 标签化学品概率消耗。 |
+| `chemicalOutput(String chemicalId, long amount, double chance)` | 具体化学品概率输出，不能用标签代替具体 ID。 |
+| `heatTemperatureInput(double temperature)` | 最低温度输入（K）。 |
+| `heatOutput(double heat)` | 输出热量声明。 |
+
+化学品/热量调用通过注册 codec 的 `custom` 路径，不是往物品栈列表放 Mekanism 对象。消费概率转为 `float`；类型 ID、数量、概率、温度和热量还需通过相应 payload 校验。数量传 `long` 不代表物品与流体底层栈无限大：这些栈调用 `MachineOutput.recipeStackAmount`，要求数量为正，并把超过 `Integer.MAX_VALUE` 的数量饱和到该上限。
+
+#### 智能接口、等级、阶段与宿主
+
+| 方法 | 行为 |
+| --- | --- |
+| `smartInterfaceInput(String type, float value)` | 固定值输入需求。 |
+| `smartInterfaceInput(String type, float min, float max)` | 范围输入需求；不是 schema 的 `smartInterfaceInputRange`。 |
+| `smartInterfaceOutput(String type, float value)` | 固定值输出需求。 |
+| `requiresLevel(String typeId, String levelId)` | 检查等级存在且属于类型，追加输入需求；失败抛 `IllegalArgumentException`。 |
+| `requiresStage(int minStage)` | 最低结构阶段需求，范围 1..64。 |
+| `requiredHost(String hostId)` | 向宿主 ID 集合追加一项。 |
+| `requiredHosts(String... hostIds)` | 追加多项，忽略 `null` 数组/元素；ID 集合去重。 |
+
+#### 终结与使用示例
+
+- `createObject() → cn.howxu.mmcr.api.recipe.MachineRecipe`：不注册。缺少 `recipePool` 抛 `IllegalStateException`；耗时小于 1、额外能量/线程数为负等抛 `IllegalArgumentException`。从传统 IO 派生需求后追加显式需求，建立 canonical outputs、条件和宿主集合，最后加入自定义输出。
+- `build() → void`：调用 `createObject()`；有 `KubeJSContentReloadTransaction.active()` 时登记到本轮事务，否则调用 `RecipeRegistry.registerStatic`。静态路径不是“下一轮自动热更新”，还受静态注册生命周期约束。
+
+```javascript
+// server_scripts：普通编程式配方随结构一起进入服务端内容事务
+const MachineRecipeBuilderJS = Java.loadClass("cn.howxu.mmcr.compat.kubejs.MachineRecipeBuilderJS")
+MMCREvents.server(event => {
+    new MachineRecipeBuilderJS("example:press_programmatic")
+        .recipePool("example:press")
+        .tickTime(200)
+        .itemInput("minecraft:iron_ingot", 1)
+        .notConsumableItemInput("minecraft:diamond", 1)
+        .fluidInput("minecraft:water", 1000, 0.5)
+        .iFEt(32)
+        .itemOutput("minecraft:iron_nugget", 10)
+        .build()
+})
+```
+
+对带栈组件的数据驱动输出，通常直接在 `ServerEvents.recipes` 的 JSON `outputs` 中提供栈组件更清楚。不要将 KubeJS 的 `.id(...)`、schema 函数和这条编程式链交叉使用。
+
 ### `MachineRecipeSchema`
 
-> `cn.howxu.mmcr.compat.kubejs.MachineRecipeSchema` 是 KubeJS 端数据驱动配方的 RecipeSchema 定义。通过 `event.custom({ type: 'mmcr:machine_recipe', ... })` 触发。RecipeKey 与 `RecipeFunction` 在编译期注入到 `RecipeSchemaRegistry` 中，运行时通过 `MachineRecipeSchema.register(registry)` 注册。
+> `cn.howxu.mmcr.compat.kubejs.MachineRecipeSchema` 是 KubeJS 数据驱动配方的 schema 定义。通过 `event.custom({ type: 'mmcr:machine_recipe', ... })` 使用。类初始化时建立 RecipeKey 与附加函数，KubeJS 插件注册阶段通过 `MachineRecipeSchema.register(registry)` 加入注册表，并非脚本编译时向 Java 注册表注入。
 
 **字段**
 
@@ -2985,7 +3173,7 @@ stage.pattern("X").set("X", "minecraft:iron_block").controller("X")
 | `RECIPE_POOL` | `RecipeKey<String>` | `recipe_pool` 字段，指定配方所属的配方池。 |
 | `TICK_TIME` | `RecipeKey<Integer>` | `tick_time` 字段，非负整数。 |
 | `OUTPUTS` | `RecipeKey<List<JsonElement>>` | `outputs` 字段，列表项是 JSON 元素；与 `requirements` 共享同类型。 |
-| `MODIFIERS` | `RecipeKey<List<JsonElement>>` | `modifiers` 字段，列表项是 JSON 元素；被 `exclude()` 标记为不在结果中包含。 |
+| `MODIFIERS` | `RecipeKey<List<JsonElement>>` | `modifiers` 字段，默认空列表，与 `OUTPUTS` 一样调用 `exclude()`，只从自动生成的构造器参数中排除，不删除 JSON 字段。 |
 | `REQUIREMENTS` | `RecipeKey<List<JsonElement>>` | `requirements` 字段，包含在结果中。 |
 | `MAX_THREADS` | `RecipeKey<Integer>` | `max_threads` 字段，默认 `1`。 |
 | `PARALLELIZED` | `RecipeKey<Boolean>` | `parallelized` 字段，默认 `false`。 |
@@ -3013,9 +3201,24 @@ stage.pattern("X").set("X", "minecraft:iron_block").controller("X")
 | `smartInterfaceInput(type, value)` | `(String, float)` | 追加一条输入型智能接口需求到 `requirements`。 |
 | `smartInterfaceInputRange(type, min, max)` | `(String, float, float)` | 追加一条范围型输入智能接口需求。 |
 | `smartInterfaceOutput(type, value)` | `(String, float)` | 追加一条输出型智能接口需求。 |
-| `custom(typeId, io, payload)` | `(String, String, JsonElement)` | 通过 `RecipeApi.custom(...)` 校验并把 codec 编码后的需求或输出追加到对应数组。`io` 取 `input` 或 `output`。 |
+| `custom(typeId, io, payload)` | `(String, String, JsonElement)` | 通过底层 `RecipeIoValidation.custom(...)` 校验并把 codec 编码后的需求或输出追加到对应数组。`io` 仅取小写 `input` 或 `output`。 |
 | `requiredHost(hostId)` | `(String)` | 把宿主机器 ID 追加到 `required_host_ids`。 |
 | `requiresLevel(typeId, levelId)` | `(String, String)` | 校验等级与类型匹配，并把等级需求追加到 `requirements`。 |
+| `chemicalInput(chemicalId, amount)` | `(String, long)` | 追加具体化学品输入，完全消耗。 |
+| `chemicalTagInput(tagId, amount)` | `(String, long)` | 追加标签化学品输入，完全消耗。 |
+| `chemicalInputChance(chemicalId, amount, consumeChance)` | `(String, long, double)` | 追加具体化学品概率输入；概率 0..1。 |
+| `chemicalTagInputChance(tagId, amount, consumeChance)` | `(String, long, double)` | 追加标签化学品概率输入；概率 0..1。 |
+| `chemicalOutput(chemicalId, amount, chance)` | `(String, long, double)` | 追加具体化学品输出到 `outputs`；概率 0..1。 |
+| `heatTemperatureInput(temperature)` | `(double)` | 追加最低温度输入，非负温度。 |
+| `heatOutput(heat)` | `(double)` | 注册输出 codec 时追加到 `outputs`，否则走需求解码；热量非负。 |
+
+源码：[MachineRecipeSchema.java](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineRecipeSchema.java)。以上是额外注册的全部 14 个 schema 函数。化学品数量的组件约束为正 `long`；温度和热量使用非负 `double` 组件，payload 继续校验有限值。不要据编程式构建器推导 schema 存在 `itemOutputWithComponents`、`requiresStage`、`requiredHosts` 或三参数 `chemicalInput`，源码未注册这些函数。
+
+schema 的必需键是 `recipe_pool`、`tick_time`、`requirements`；`outputs` 和 `modifiers` 默认空列表。`tick_time` 的 schema 组件允许非负整数，但合法机器配方仍受 MMCR 的执行/解码校验约束，示例使用正耗时。附加函数修改 `cx.recipe().json` 后调用 `save()`；它们操作的是 `KubeRecipe`，不是编程式 builder。
+
+此外 KubeJS 为未调用 `noFunctions()` 的键自动生成设置函数，可用的包括：`tickTime(int)`、`requirements(List<JsonElement>)`、`outputs(List<JsonElement>)`、`modifiers(List<JsonElement>)`、`maxThreads(int)`、`parallelized(boolean)`、`cancelIfPerTickFails(boolean)`。`recipe_pool` 调用了 `noFunctions()`，所以没有由此键生成的 `recipePool` 设置函数。这里的列表参数仍是 JSON，而不是 Java IO 对象。
+
+`allowPartialOutputs` 是同名覆盖的特例：KubeJS 26.1.2-8.0.6 的函数 map 先加入自动键 setter，再加入 MMCR 显式注册的无参 `allowPartialOutputs()`，后者覆盖前者。因此 schema 上**没有可用的布尔重载**；`.allowPartialOutputs(false)` 会忽略传入参数，仍写入 `allow_partial_outputs=true`。需要禁用时，在配方 JSON 中设置 `allow_partial_outputs: false`（默认也是 false），并且不再调用此函数。只有编程式 `MachineRecipeBuilderJS` 支持 `allowPartialOutputs(boolean)`，不能将其签名套用到 schema。
 
 #### Mekanism 配方 IO 类型
 
@@ -3048,7 +3251,7 @@ requirements: [
 :::warning 注意事项
 
 - `allowPartialOutputs` 函数无参，作用与设置字段 `allow_partial_outputs: true` 等价；字段默认 `false`。
-- `custom` 函数对 `input` 方向或未注册的输出类型使用 `MachineRecipeConverter.toRequirement`，对已注册的输出类型使用 `MachineRecipeConverter.toOutput`。
+- `custom` 函数对 `input` 方向或没有输出 codec 的类型使用 `RecipeIoValidation.decodeRequirement`，对已注册的输出类型使用 `MachineRecipeConverter.toOutput`。没有输出 codec 不代表允许未注册类型：声明仍必须通过需求 codec 校验。
 - `requiresLevel` 在等级类型不匹配时抛 `IllegalArgumentException`，由 KubeJS 捕获并写入配方控制台。
 :::
 #### 数据驱动配方最小示例
@@ -3112,7 +3315,7 @@ ServerEvents.recipes(event => {
 
 ```javascript
 machine.recipeBehavior(behavior => behavior.idleStart(ctx => {
-    ctx.screenText().append("operation", "example:idle", Text.literal("Idle"))
+    ctx.screenText().append(api.screenScope().OPERATION, api.id("example:idle"), Text.literal("Idle"))
 }))
 ```
 
@@ -3126,7 +3329,7 @@ machine.recipeBehavior(behavior => behavior.idleStart(ctx => {
 
 ```javascript
 behavior.idleEnd(ctx => {
-    ctx.screenText().remove("operation", "example:idle")
+    ctx.screenText().remove(api.screenScope().OPERATION, api.id("example:idle"))
 })
 ```
 
@@ -3154,7 +3357,7 @@ behavior.beforeStart(ctx => {
 
 ```javascript
 behavior.recipeTick(ctx => {
-    ctx.machineContext().screenText().append("operation", "example:tick", Text.literal("Working"))
+    ctx.machineContext().screenText().append(api.screenScope().OPERATION, api.id("example:tick"), Text.literal("Working"))
 })
 ```
 
@@ -3202,13 +3405,74 @@ const behavior = behaviorBuilder.build()
 
 :::warning 注意事项
 
-- `RecipeStartContext`、`RecipeTickContext`、`RecipeFinishContext`、`TickBehaviorContext` 等参数类型需要通过 `Java.loadClass` 或 KubeJS 自动解析传入。
+- `RecipeStartContext`、`RecipeTickContext`、`RecipeFinishContext`、`TickBehaviorContext` 均由运行时传给回调；脚本不需要先 `Java.loadClass` 或自行构造它们。
 - `RecipeTickContext` 不提供 `ioPlan`；只有 `TickBehaviorContext` 暴露 IO 计划。
 - 配方回调中的 `ctx.machineContext()` 返回 `MachineBehaviorContext`，可访问 `dataStorage`、`screenText`、`jadeText`、`level`、`controllerPos()` 等运行时状态。
 :::
+### 行为 runtime 类型
+
+本节的类型均位于 `cn.howxu.mmcr.api.machine.definition`，不是 `publicapi.machine`。源码：[MachineBehaviorContext](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/api/machine/definition/MachineBehaviorContext.java)、[TickBehaviorContext](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/api/machine/definition/TickBehaviorContext.java)、[RecipeStartContext](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/api/machine/definition/RecipeStartContext.java)、[RecipeTickContext](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/api/machine/definition/RecipeTickContext.java)、[RecipeFinishContext](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/api/machine/definition/RecipeFinishContext.java)。
+
+#### `MachineBehaviorContext`
+
+| 方法 | 返回与语义 |
+| --- | --- |
+| `controller()` | 底层控制器方块实体；优先使用上下文的明确访问器。 |
+| `level()` / `controllerPos()` / `machineId()` | `ServerLevel`、不可变 `BlockPos`、可空 `Identifier`。 |
+| `gameTime()` / `isDue(long period)` | 世界 tick 与 `floorMod(gameTime, period)==0`；周期必须为正，不是按每台机器启动时刻单独计时。 |
+| `screenText()` / `jadeText()` | `api.controller.ControllerScreenText` 与 `api.controller.JadeText` 句柄。运行时 `screenText` 不等于屏幕事件包装器，使用枚举作用域和 `Identifier` 行 ID。 |
+| `dataStorage()` | 可空 `api.data.view.DataStorage`，没有存储时返回 `null`。 |
+| `ioView()` | `MachineIoView` 只读聚合视图。 |
+| `upgradeItems()` | 返回升级物品栈的防御性副本列表。 |
+| `countStructureBlocks(Block block)` / `countStructureBlocks(String blockId)` | `long`；统计当前成型结构，未成型返回 0；字符串版本校验方块存在。 |
+
+`dataStorageForRuntime()` 是内部桥接，普通脚本使用 `dataStorage()`。其视图的 `get` 返回 `Optional<api.data.view.DataValue>`；`set(key, Object)` 支持普通脚本值，三参数事务版本接受 `api.data.view.DataStorage.Transaction`。不要把门面返回的 `api.data.DataValue` 与视图类型当成同一个 Java 类。
+
+```javascript
+machine.preServerTick(ctx => {
+    if (!ctx.isDue(20)) return
+    const storage = ctx.dataStorage()
+    if (storage != null) storage.set("formed_iron", ctx.countStructureBlocks("minecraft:iron_block"))
+})
+```
+
+#### `TickBehaviorContext`
+
+继承上述全部访问器，另有 `factoryThreadCount() → int`、`parallelism() → long`、`smartInterfaceValue(String) → Optional<Float>`、`smartInterfaceValues() → Map<String, Float>`、`ioPlan() → MachineIoPlan`、`capabilityTickContext(CapabilityTickPhase) → CapabilityTickContext`。`ioPlan()` **每次调用**都创建新 plan，哪怕在同一个回调内调用两次也不共享需求或模拟结果；请保存局部变量。
+
+#### `RecipeStartContext`
+
+`machineContext()`、`recipe()`、`recipeId()`、`requestedParallelism()`、`effectiveParallelism()`、`duration()` 提供本次启动信息。`setDuration(int)` 要求正数；`requirements()` 返回需求副本列表，`outputs()` 返回输出列表。`setRequirements(List<MachineRequirement>)` 会重新派生物品/流体输出，已有注册型自定义输出时拒绝这样做；此时应使用 `setOutputs(List<MachineOutput>)`，它通过输出注册表同时更新对应输出需求。
+
+`replaceExactItemInputCount(Item, int expectedCount, int replacementCount) → boolean` 只替换首个单一物品且数量匹配的输入，两个数量均需为正，不匹配返回 `false`。它最终调用 `setRequirements`，也受自定义输出限制。`snapshot()` 返回 `ExecutionSnapshot(duration, requirements, outputs)`；`cancel()` / `cancelled()` 控制本次启动取消标志。
+
+#### `RecipeTickContext`
+
+不可变 record 访问器为 `machineContext()`、`recipe()`、`currentTick()`、`totalTick()`、`parallelism()`、`requirements()`、`outputs()`、`capabilitySnapshot()`。构造时复制需求/输出；没有 `cancel`、`setDuration`、`setRequirements` 或 `ioPlan` 方法，不应把启动上下文的写接口套用到这里。
+
+#### `RecipeFinishContext`
+
+访问器为 `machineContext()`、`recipe()`、`recipeId()`、`requestedParallelism()`、`effectiveParallelism()`、`outputs()`。`setOutputs(List<MachineOutput>)` 复制列表并拒绝空物品/流体输出栈；`discardOutputs()` 清空列表并设置 `outputsDiscarded()` 标志；`cancel()` / `cancelled()` 是独立的取消标志。丢弃输出与取消不是同一操作；修改通过方法表达，避免直接修改返回列表绕过校验。
+
 ### `MachineIoView`
 
-> `ctx.machineContext().ioView()` 返回的只读能力视图。下列访问器可直接在 KubeJS 行为回调中调用；化学品与热量方法需要对应的 Mekanism 能力存在。
+> `cn.howxu.mmcr.api.machine.definition.MachineIoView` 是 `ctx.machineContext().ioView()`（配方回调）或 `ctx.ioView()`（机器/tick 回调）返回的只读能力视图。源码：[MachineIoView.java](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/api/machine/definition/MachineIoView.java)。
+
+#### 基础与筛选访问器
+
+| 方法 | 返回与语义 |
+| --- | --- |
+| `forTags(Set<String> requiredTags)` | 新视图，只包含满足全部标签的能力；空集合保留全部能力，不修改原视图。 |
+| `displays()` | `List<CapabilityDisplay>`，当前能力的展示条目。 |
+| `itemInputs()` / `fluidInputs()` | `List<ResourceAmount<ItemResource>>` / `List<ResourceAmount<FluidResource>>`，按资源身份（含组件）聚合正输入量。 |
+| `itemAmount(Ingredient)` / `fluidAmount(FluidIngredient)` | `long`，按输入谓词汇总数量，参数为 `null` 抛异常。 |
+| `energyInput()` | `long`，输入方向的长整数存储量聚合。 |
+| `itemOutputCapacity(ItemStack)` / `fluidOutputCapacity(FluidStack)` | `long`，匹配资源的输出剩余容量，空栈或 `null` 返回 0。 |
+| `energyOutputCapacity()` | `long`，输出长整数存储剩余容量。 |
+| `smartInterfaceValue(String name)` | `Optional<Float>`；缺失或名字为 `null` 时为空，优先取快照中首个匹配值。 |
+| `smartInterfaceValues()` | 不可变 `Map<String, Float>`，共享存储去重，同名值取首个。 |
+
+`ResourceAmount<R>` 提供 `resource()` 与 `amount()`；汇总溢出时饱和到 `Long.MAX_VALUE`。容量查询是只读估计，不能代替 plan 的联合模拟；多个输出会竞争同一容量。
 
 #### 新增化学品与热量访问器
 
@@ -3232,7 +3496,7 @@ const heatStates = view.heatInputs()
 
 ### `MachineIoPlan`
 
-> `cn.howxu.mmcr.api.publicapi.machine.MachineIoPlan` 是 `TickBehaviorContext.ioPlan()` 返回的 IO 计划入口。在 `tickBehavior(behavior => behavior.serverTick(ctx => ...))` 回调内通过 `ctx.ioPlan()` 取得；用于在每个服务端 tick 声明要消费/产出的 `RecipeRequirement`（通常使用 `MachineRequirement` 子类型），先 `simulate()` 预演再 `commit()`。每 `MachineBehaviorBuilderJS` 实例每次 tick 都返回新的 plan，多次调用之间状态不共享。
+> `cn.howxu.mmcr.api.machine.definition.MachineIoPlan` 是 `TickBehaviorContext.ioPlan()` 返回的 IO 计划入口。在直接 tick 回调中声明要消费/产出的 `cn.howxu.mmcr.api.recipe.RecipeIoDeclaration`（`MachineRequirement` 或 `CustomRecipeIo`），先 `simulate()` 再 `commit()`。每次调用 `ctx.ioPlan()` 都创建新对象。源码：[MachineIoPlan.java](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/api/machine/definition/MachineIoPlan.java)。
 
 **字段**
 
@@ -3240,9 +3504,13 @@ const heatStates = view.heatInputs()
 
 **方法**
 
-#### `addInput(RecipeRequirement requirement) → MachineIoPlan`
+#### `view() → MachineIoView`
 
-- **参数表**：`requirement`（`RecipeRequirement`）— 方向为输入的需求（`requirement.io() == INPUT`），通常来自 `api.itemInputRequirement(...)` / `api.fluidInputRequirement(...)` / `api.energyRequirement(...)` / `api.chemicalInput(...)` / `api.chemicalTagInput(...)` / `api.heatTemperatureInput(...)`。
+返回使用同一个能力快照的新只读视图，不添加需求，也不执行模拟或 IO。可用于决定计划数量；最终可执行性仍须通过 `simulate()` 检查。
+
+#### `addInput(RecipeIoDeclaration requirement) → MachineIoPlan`
+
+- **参数表**：`requirement`（`RecipeIoDeclaration`）— 方向为输入的声明（`requirement.io() == INPUT`），通常来自 `api.itemInputRequirement(...)` / `api.fluidInputRequirement(...)` / `api.energyRequirement(...)` / `api.chemicalInput(...)` / `api.chemicalTagInput(...)` / `api.heatTemperatureInput(...)`。经 `RecipeIoValidation.decodeIoRequirement` 解码后复制保存。
 - **返回**：当前 plan，支持链式调用。
 - **抛出**：`IllegalArgumentException`：`requirement.io()` 不为 `INPUT`。
 - **默认值**：无。
@@ -3253,12 +3521,12 @@ const plan = ctx.ioPlan()
     .addInput(api.itemInputRequirement("minecraft:iron_ingot", 1))
 ```
 
-#### `addOutput(RecipeRequirement requirement, OutputPolicy policy) → MachineIoPlan`
+#### `addOutput(RecipeIoDeclaration requirement, OutputPolicy policy) → MachineIoPlan`
 
-- **参数表**：`requirement`（`RecipeRequirement`）— 方向为输出的需求，通常来自 `api.itemOutputRequirement(...)` / `api.fluidOutputRequirement(...)` / `api.chemicalOutput(...)` / `api.heatOutput(...)`；`policy`（`OutputPolicy`）— 通过 `api.outputPolicy().REQUIRE_FULL` 或 `api.outputPolicy().ALLOW_PARTIAL` 取值。
+- **参数表**：`requirement`（`RecipeIoDeclaration`）— 输出声明，通常来自 `api.itemOutputRequirement(...)` / `api.fluidOutputRequirement(...)` / `api.chemicalOutput(...)` / `api.heatOutput(...)`；`policy`（`api.capability.plan.OutputPolicy`）通过 `api.outputPolicy()` 取值。
 - **返回**：当前 plan，支持链式调用。
-- **抛出**：`IllegalArgumentException`：`requirement.io()` 不为 `OUTPUT`；`NullPointerException`：`policy` 为 `null`。
-- **默认值**：无。
+- **抛出**：`IllegalArgumentException`：方向不是 `OUTPUT` 或声明解码失败；添加到已消耗 plan 时抛 `IllegalStateException`。
+- **默认值**：`policy == null` 时使用 `REQUIRE_FULL`。另有 `addOutput(RecipeIoDeclaration requirement)` 重载，也使用 `REQUIRE_FULL`。
 - **示例**：
 
 ```javascript
@@ -3267,9 +3535,9 @@ const plan = ctx.ioPlan()
                api.outputPolicy().ALLOW_PARTIAL)
 ```
 
-#### `add(RecipeRequirement requirement) → MachineIoPlan`
+#### `add(RecipeIoDeclaration requirement) → MachineIoPlan`
 
-- **参数表**：`requirement`（`RecipeRequirement`）— 按 `requirement.io()` 自动路由到 `addInput(...)` 或 `addOutput(requirement, REQUIRE_FULL)`。
+- **参数表**：`requirement`（`RecipeIoDeclaration`）— 按方向自动路由到 `addInput(...)` 或 `addOutput(requirement, REQUIRE_FULL)`。
 - **返回**：当前 plan。
 - **抛出**：与对应路径一致（输入错配抛 `IllegalArgumentException`，输出策略为隐式 `REQUIRE_FULL`）。
 - **默认值**：无。
@@ -3279,10 +3547,10 @@ const plan = ctx.ioPlan()
 const plan = ctx.ioPlan().add(api.energyRequirement(api.recipeIO().INPUT, 32))
 ```
 
-#### `requirements() → List<RecipeRequirement>`
+#### `requirements() → List<MachineRequirement>`
 
 - **参数表**：无。
-- **返回**：当前已添加的全部需求（按插入顺序）。模拟前需要的所有需求必须先加入。
+- **返回**：解码后的需求副本列表，**全部输入排在输出前**，输入组与输出组各自保留添加顺序。即使先加输出再加输入，也会把新输入插入首个输出之前并调整输出策略索引。模拟前先完成需求声明。
 - **抛出**：无。
 - **默认值**：空列表。
 - **示例**：
@@ -3301,7 +3569,7 @@ const all = plan.requirements()
 
 ```javascript
 const sim = plan.simulate()
-if (sim.inputsSatisfied() && sim.energySatisfied()) {
+if (sim.failure() == null) {
     plan.commit()
 }
 ```
@@ -3310,8 +3578,8 @@ if (sim.inputsSatisfied() && sim.energySatisfied()) {
 
 - **参数表**：无。
 - **返回**：`CommitResult`；`successful` 为 `true` 表示成功，`failure` 描述失败原因。
-- **抛出**：`IllegalStateException`：plan 已被 `commit(...)` 消耗。
-- **默认值**：等价于 `commit(ignored => {})`。
+- **失败返回**：重复提交返回 `CommitResult(false, null)`，不会因重复提交抛异常。没有缓存的成功模拟、模拟失败或没有实际 `CraftingPlan` 时也返回失败；**`commit()` 不会自动模拟**，即使失败也消耗 plan。
+- **默认值**：等价于 `commit(ignored => {})`；实际 IO 提交仍可能失败，应检查 `successful()`，不能只依据之前的输入检查。
 - **示例**：
 
 ```javascript
@@ -3325,20 +3593,20 @@ if (!result.successful()) {
 
 - **参数表**：`transactionWrites`（`Consumer<TransactionContext>`），事务回调；运行在 NeoForge transfer 事务上下文中。回调收到的是 NeoForge 的 `TransactionContext`；需要写入数据存储时，优先使用下方的 `commitData(...)`。
 - **返回**：`CommitResult`。
-- **抛出**：`IllegalStateException`：plan 已被 `commit(...)` 消耗；`NullPointerException`：`transactionWrites` 为 `null`。
+- **抛出**：`NullPointerException`：回调为 `null`；回调及底层事务异常可向外传播。重复提交和缺少成功模拟返回失败，语义同无参提交。
 - **默认值**：无。
 - **示例**：
 
 ```javascript
 plan.commit(transaction => {
     // 低层 NeoForge transfer 事务操作
-    if (energyShort) transaction.getSnapshotLedger().abort()
+    // 必须此前成功 simulate；脚本额外写入需使用此 transaction
 })
 ```
 
 #### `commitData(Consumer<DataStorage.Transaction> transactionWrites) → CommitResult`
 
-- **参数表**：`transactionWrites`（`Consumer<DataStorage.Transaction>`），公共数据存储事务回调；回调收到的事务可直接传给 `DataStorage.set(...)` 的事务重载。
+- **参数表**：`transactionWrites`（`Consumer<api.data.view.DataStorage.Transaction>`），数据存储视图事务回调，可传给 `ctx.dataStorage().set(...)` 的三参数重载；不等于 `publicapi` 的事务类型。
 - **返回**：`CommitResult`。
 - **抛出**：`NullPointerException`：`transactionWrites` 为 `null`；其余提交语义与 `commit(...)` 相同。
 - **示例**：
@@ -3356,12 +3624,12 @@ plan.commitData(transaction => {
 
 - **参数表**：无。
 - **返回**：便捷访问器；若尚未 `simulate()` 则自动调用一次，再返回对应字段。
-- **抛出**：与 `simulate()` 一致。
+- **缓存语义**：没有缓存时调用 `simulate()`，已消耗 plan 因而会抛异常；有缓存时直接读取原模拟结果，即使 plan 已提交也不会重新模拟。这是旧结果，不表示当前资源仍满足。
 - **默认值**：无。
 - **示例**：
 
 ```javascript
-if (plan.inputsSatisfied() && plan.energySatisfied()) {
+if (plan.simulate().failure() == null) {
     plan.commit()
 }
 ```
@@ -3371,13 +3639,15 @@ if (plan.inputsSatisfied() && plan.energySatisfied()) {
 - `Simulation` — `simulate()` 的返回值。字段：`inputsSatisfied`（`boolean`）、`energySatisfied`（`boolean`）、`outputs`（`List<OutputSimulation>`）、`failure`（`@Nullable ExecutionStatus`）。
 - `CommitResult` — `commit(...)` 的返回值。字段：`successful`（`boolean`）、`failure`（`@Nullable ExecutionStatus`）。
 
+记录字段通过同名方法读取。`OutputSimulation` 位于 `api.capability.plan`，访问器为 `requested() → long`、`accepted() → long`、`fit() → OutputFit`；只表示模拟数量和容纳分类，不执行产出。
+
 :::warning 注意事项
 
-- `MachineIoPlan` 是一次性的，`commit(...)` 后不可再用；多次调用 `commit(...)` 会返回 `successful=false`，`simulate()` / `inputsSatisfied()` / `energySatisfied()` / `outputSimulations()` 在已 commit 的 plan 上调用会抛 `IllegalStateException`。
+- `MachineIoPlan` 是一次性的，第一次提交尝试即消耗 plan，包括尚未模拟或模拟失败的尝试。重复提交返回 `successful=false`；之后不能添加需求或再次 `simulate()`。便捷访问器可能仍读到缓存，不能据此重复提交。
 - `addInput(...)` / `addOutput(...)` 会重置已缓存的 `Simulation`，不需要手动调用 `simulate()` 来清空。
-- `OutputPolicy.ALLOW_PARTIAL` 允许输出在容量受限时部分完成；`REQUIRE_FULL` 要求输出全部能放下，否则视为 commit 失败。
+- `OutputPolicy.ALLOW_PARTIAL` 允许输出在容量受限时部分完成；`REQUIRE_FULL` 要求全部容纳。`inputsSatisfied` 与 `energySatisfied` 只分类输入失败，不能证明输出通过；检查 `Simulation.failure()` 和最终 `CommitResult.successful()`。
 - `TransactionContext` 仅在 `commit(callback)` 的回调中可用——回调返回后事务上下文随之关闭，回调外访问会抛异常。
-- 非事务 `DataStorage.set(...)`（不带 `transaction`）一旦调用立即生效，`MachineIoPlan` 失败回滚时不会被撤销；要纳入回滚必须使用事务版本。
+- 非事务 `DataStorage.set(...)`（不带 `transaction`）与普通 `remove` 立即生效，不主动登记事务快照，也没有事务一致性保证。底层 `DataStorage` 的事务快照保存整张 Map；同一存储已有事务写入登记快照后，再进行普通写入或删除，失败回滚时也可能被整表恢复覆盖。不要据混用操作推断逐键回滚界限；需要与 IO 一致提交的写入必须使用事务版本。
 :::
 ## 9. 等级与等级类型
 
@@ -3563,8 +3833,8 @@ event.createLevel("example:coil_iron")
 :::warning 注意事项
 
 - 等级类型应先于具体等级注册；先注册具体等级会因为找不到类型而被拒绝。
-- 等级的 `priority` 不影响结构匹配合法性，只决定玩家放置多个等级时的优先级与连接方向。
-- `modifier` 字段中的乘数必须严格大于 `0`；`parallelismBonus` 与 `factoryThreadBonus` 缺省按 `IDENTITY` 取值。
+- 等级的 `priority` 用于同类型等级选择，不能用它替代结构或配方等级需求。
+- `modifier` 采用统一的 `ModifierDefinition(List<MachineModifier>)`；这里没有 `parallelismBonus` / `factoryThreadBonus` / `IDENTITY` 旧字段。数值项需为有限数，目标、作用域与概率开关受 `MachineModifier` 校验；不能把所有操作的值都解释为正乘数。
 :::
 ## 10. 控制器屏幕文本
 
@@ -3690,12 +3960,14 @@ text.replaceTranslatable("example:status", "gui.example.status")
 text.remove("operation", "example:status")
 ```
 
-#### 静态辅助
+#### Java 侧静态辅助
 
 - `parseIdentifier(String value, String name)`：解析命名空间 ID，异常时抛出包含字段名的 `IllegalArgumentException`。
 - `handler(Consumer<ControllerScreenTextEventJS> handler)`：把脚本回调包装为 `ControllerScreenTextHandler`。
 - `parseScope(String value)`：把字符串映射到 `ControllerScreenTextScope`，非 `controller`/`operation` 抛 `IllegalArgumentException`。
 - `parseNamespacedIdentifier(String value, String name)`：校验 `value` 含命名空间和路径后调用 `parseIdentifier`。
+
+以上不是公开脚本入口：`parseIdentifier` / `handler` 为包级方法，`parseScope` / `parseNamespacedIdentifier` 为私有方法。屏幕事件的 `context` 字段也为私有，不可直接访问。
 
 **注册入口**
 
@@ -3726,7 +3998,11 @@ MMCREvents.startup(event => {
 
 > `cn.howxu.mmcr.compat.kubejs.KubeJSInterfaceHelpers` 是 KubeJS 端方块谓词、端口等级与智能接口需求的内部工厂。所有 `KubeJSApi` 中的同名方法、`MachineBuilderJS`/`MachineStructureBuilderJS`/`MachineStructureStageBuilderJS` 的端口谓词和等级工厂都委托到这里；普通业务脚本不需要直接调用。
 
-内部方法覆盖以下几类：方块谓词工厂（`anyOfItemInput` 等 12 个）、`anyOfPort(...)` 的三重重载、`factoryController`、`parallelControllers`、`smartInterface`、`dataStorage`、`networkInterface`、`port(String)`/`port(Identifier)` 工厂；端口等级工厂（`itemInputTier` 等 6 个）；智能接口需求工厂（`smartInterfaceInput` 三重重载和 `smartInterfaceOutput` 单重载）；以及公共 API 谓词到内部 `BlockPredicate` 的 `convert(...)` 转换。
+该类虽为 public 工厂，但没有全局 binding，普通脚本优先使用门面/构建器。它提供物品、流体、能量、化学品、放射性化学品、热量各族的输入/输出/合并谓词，升级总线谓词、`ports()`、`anyOfPort(String...)` / `anyOfPort(Identifier...)` / `anyOfPort(api.machine.definition.BlockPredicate...)`，以及一个明确抛异常的零参数 `anyOfPort()`。还有 `factoryController`、`parallelControllers`、`smartInterface`、`dataStorage`、`networkInterface`、`port(String)` / `port(Identifier)`，六个端口等级工厂，两个 `smartInterfaceInput` 重载（固定值、范围）和一个 `smartInterfaceOutput`。`convert(...)` 是私有方法，转换底层定义谓词为 `api.machine.BlockPredicate`。
+
+注意门面与构建器没有自动暴露 helper 的所有方法：例如门面只暴露 Mekanism 合并端口谓词，未提供 `anyOfChemicalInput`；机器构建器没有 `factoryController`，阶段构建器没有 `dataStorage`。
+
+helper 的 Mekanism 方向工厂完整名称为 `anyOfChemicalInput()` / `anyOfChemicalOutput()`、`anyOfRadioactiveChemicalInput()` / `anyOfRadioactiveChemicalOutput()`、`anyOfHeatInput()` / `anyOfHeatOutput()`，均返回底层 `BlockPredicate`。`port(String)` / `port(Identifier)` 构造单个端口谓词；`anyOfPort` 不能传空列表。构建器上的六个等级工厂分别为 `itemInputTier`、`itemOutputTier`、`fluidInputTier`、`fluidOutputTier`、`energyInputTier`、`energyOutputTier`，参数为等级名称字符串，返回 `PortTierRequirementSpec`。
 
 ### `MachineRecipeFactory`
 
@@ -3735,7 +4011,7 @@ MMCREvents.startup(event => {
 - `TYPE`（`Identifier`）— 配方类型 ID `mmcr:machine_recipe`。
 - `INSTANCE`（`KubeRecipeFactory`）— KubeJS 端 `RecipeFactoryRegistry` 使用的工厂实例。
 
-以及三个供 `MachineRecipeSchema` 调用的内部方法 `allowPartialOutputs(KubeRecipe)`、`smartInterfaceInput(String, float)` 与 `smartInterfaceInput(String, float, float)`、`smartInterfaceOutput(String, float)`。脚本不直接调用这些方法。
+另有四个供集成层使用的静态辅助方法 `allowPartialOutputs(KubeRecipe) → boolean`、`smartInterfaceInput(String, float) → MachineRequirement`、`smartInterfaceInput(String, float, float) → MachineRequirement`、`smartInterfaceOutput(String, float) → MachineRequirement`。第一个读取 JSON 标志，并不是设置器；脚本通过 schema 的同名无参函数设置标志。
 
 ### `MachineRecipeSchema`
 
@@ -3743,9 +4019,13 @@ MMCREvents.startup(event => {
 
 `register(RecipeSchemaRegistry)` 在插件 `registerRecipeSchemas` 阶段被调用，类内部的 `JsonElementComponent` 提供了 JSON 元素与 KubeJS 类型系统之间的桥接。脚本不应直接构造 `MachineRecipeSchema`，只需通过 `event.custom({ type: "mmcr:machine_recipe", ... })` 使用其注册的字段与函数。
 
+组件内部的 `type()` 返回 `mmcr:json` 组件类型键，`codec()` 用 `Codec.PASSTHROUGH` 转换 JSON，`typeInfo()` 声明 `JsonElement`，`wrap(RecipeScriptContext, Object)` 通过 KubeJS `JsonUtils.of` 转换脚本值，`allowEmpty()` 返回 `true`。每个附加函数内部的 `arguments()` 声明参数组件，`execute(...)` 修改配方 JSON 并保存；这些是 KubeJS 执行接口，不是用户脚本的新方法。
+
 ### `Plugin`
 
-> `cn.howxu.mmcr.compat.kubejs.Plugin` 是 MMCR 提供的 `KubeJSPlugin` 实现，类路径为 `cn.howxu.mmcr.compat.kubejs.Plugin`。它在 `registerBindings` 中注入 `MMCR` 与 `MMCREvents` 绑定，在 `registerEvents` 中注册 `MMCREvents.GROUP`，在 `registerRecipeFactories`、`registerRecipeComponents`、`registerRecipeSchemas` 中分别注册 `MachineRecipeFactory.INSTANCE`、`JSON_ELEMENT` 与 `MachineRecipeSchema.SCHEMA`。
+> `cn.howxu.mmcr.compat.kubejs.Plugin` 是 MMCR 的 `KubeJSPlugin` 实现。它在 `registerBindings` 中注入 `MMCR` 与 `MMCREvents`，在 `registerEvents` 中注册 `mmcr` 和 `mmcr.smart_interface` 事件组；后三个注册方法分别提供 `MachineRecipeFactory.INSTANCE`、`JSON_ELEMENT` 与 `MachineRecipeSchema.SCHEMA`。
+
+具体方法为 `registerRecipeFactories(RecipeFactoryRegistry)`、`registerRecipeComponents(RecipeComponentTypeRegistry)`、`registerRecipeSchemas(RecipeSchemaRegistry)`，都由 KubeJS 调用，不是业务脚本注册入口。
 
 `beforeScriptsLoaded` 与 `afterScriptsLoaded` 还负责：
 
@@ -3754,21 +4034,25 @@ MMCREvents.startup(event => {
 - 在 `ScriptType.SERVER` 脚本加载后调用 `MMCREvents.postServer()` 并通过 `Plugin.completeServerReload(...)` 提交事务；
 - 在 `ScriptType.STARTUP` 脚本加载后调用 `MMCREvents.postStartup()` 并调用 `StartupContentRegistration.completeKubeJSStartupIfReady()`。
 
+客户端加载前记录错误数，加载后发布配方信息事件；仅在 JEI 可用且错误数未增加时替换该轮客户端说明。`startupScriptsLoaded() → boolean` 是 Java 侧状态查询，不是重新打开启动窗口的入口。
+
 脚本不需要直接引用 `Plugin`。
 
 ### `KubeJSContentReloadTransaction`
 
 > `cn.howxu.mmcr.compat.kubejs.KubeJSContentReloadTransaction` 是 `MMCREvents.server` 事务期间累计结构与配方的容器。`MachineStructureBuilderJS.build()` 与 `MachineRecipeBuilderJS.build()` 都通过 `KubeJSContentReloadTransaction.active()` 取得当前事务对象并调用 `registerStructure(...)` 或 `registerRecipe(...)`。
 
-每个 ID 在事务中只能注册一次；`commit()` 把事务中的结构与配方合并到 `MachineStructureRegistry.dynamicSnapshot()` 与 `RecipeRegistry.dynamicSnapshot()`，并把已发布快照保留用于后续重载的差异检测。该类是包私有，脚本不可见。
+同类内容的每个 ID 在事务中只能登记一次。准备候选内容时读取动态快照，移除上轮由本事务发布且仍与当前快照相等的条目，再加入本轮声明；同 ID 已属于其他配方池的配方会被跳过并记录错误。`RuntimeContentCoordinator.commitDynamicAndSnapshot` 统一校验、发布结构/配方快照，返回错误与实际快照；事务保存本轮有效配方，用于后续替换。
+
+源码：[KubeJSContentReloadTransaction](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/compat/kubejs/KubeJSContentReloadTransaction.java)、[Plugin.completeServerReload](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/compat/kubejs/Plugin.java#L127)。完成重载的条件是 `errorCount == initialErrorCount || transaction.hasPublishableContent()`。有可发布候选时，即使脚本控制台增加错误仍会尝试提交有效内容并同步实际快照；不能承诺“任何脚本错误都撤销整轮”。完成路径在 `finally` 清除活动事务，abort 路径则移除本轮事务并清除活动状态。该类包私有，脚本不可见。
 
 ### `KubeJSRecipeSync`
 
 > `cn.howxu.mmcr.compat.kubejs.KubeJSRecipeSync` 是 KubeJS 数据包配方重载 mixin（`RecipeManagerMixin`）调用的同步入口。`replaceDataPackRecipes(Iterable<RecipeHolder<?>>)` 会在每次 KubeJS 数据包配方完成加载后被调用：
 
 1. 遍历传入的 `RecipeHolder`，筛选出 `MachineRecipe` 类型的条目；
-2. 跳过 KubeJS 动态注册（事务中）和已经发布过的配方，避免与 `MMCREvents.server` 中的脚本覆盖；
-3. 把余下的条目合并到 `RuntimeContentSnapshot` 中，并触发 JEI 重新加载。
+2. 按 holder 的 ID 或配方内容，跳过当前活动事务拥有的配方，并校验其配方池已注册；并不是跳过所有历史上发布过的配方；
+3. 调用 `RuntimeContentCoordinator.replaceKubeJSRecipesAndSnapshot` 替换 KubeJS 数据包配方层，并在 JEI 可用时重新加载展示。
 
 该类是脚本不可见的内部桥接。
 
@@ -3778,12 +4062,22 @@ MMCREvents.startup(event => {
 
 ---
 
+## 附：固定源码索引
+
+以下索引覆盖本基线 `compat/kubejs` 下全部 24 个源文件，方便核对公开入口、隐藏重载和内部调用。链接均固定到 `f234477b`。
+
+- **全局与事件**：[MMCRKubeJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/compat/kubejs/MMCRKubeJS.java)、[MMCRValues](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/compat/kubejs/MMCRValues.java)、[MMCREvents](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/compat/kubejs/MMCREvents.java)、[MMCRStartupEventJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/compat/kubejs/MMCRStartupEventJS.java)、[MMCRServerEventJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/compat/kubejs/MMCRServerEventJS.java)、[RecipeInformationEventJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/compat/kubejs/RecipeInformationEventJS.java)。
+- **机器与结构**：[MachineBuilderJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineBuilderJS.java)、[MachineStructureBuilderJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineStructureBuilderJS.java)、[MachineStructureStageBuilderJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineStructureStageBuilderJS.java)、[MachineBehaviorBuilderJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineBehaviorBuilderJS.java)、[MachineLevelBuilderJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineLevelBuilderJS.java)、[LevelTypeBuilderJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/compat/kubejs/LevelTypeBuilderJS.java)。
+- **工厂与配方**：[KubeJSApi](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/compat/kubejs/KubeJSApi.java)、[KubeJSInterfaceHelpers](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/compat/kubejs/KubeJSInterfaceHelpers.java)、[MachineRecipeBuilderJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineRecipeBuilderJS.java)、[MachineRecipeSchema](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineRecipeSchema.java)、[MachineRecipeFactory](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineRecipeFactory.java)。
+- **文本与更新**：[ControllerScreenTextEventJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/compat/kubejs/ControllerScreenTextEventJS.java)、[SmartInterfaceEvents](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/compat/kubejs/SmartInterfaceEvents.java)、[SmartInterfaceUpdateEventJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/compat/kubejs/SmartInterfaceUpdateEventJS.java)。
+- **加载与同步**：[Plugin](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/compat/kubejs/Plugin.java)、[KubeJSContentReloadTransaction](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/compat/kubejs/KubeJSContentReloadTransaction.java)、[KubeJSRecipeSync](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/compat/kubejs/KubeJSRecipeSync.java)、[KubeJSReloadHooks](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/compat/kubejs/KubeJSReloadHooks.java)。
+
 ## 附：跨节注意事项
 
 - **生命周期**：MMCR 启动窗口由 `Plugin.beforeScriptsLoaded` 打开、`afterScriptsLoaded` 关闭；机器定义、等级、修饰符与控制器屏幕文本必须在 `MMCREvents.startup` 回调中完成注册。`MMCREvents.server` 回调在服务端 KubeJS 内容事务内运行，调用 `build()` 时若事务已结束会抛 `IllegalStateException`。
-- **块谓词类型**：`KubeJSApi` 返回的方块谓词类型是 `cn.howxu.mmcr.api.machine.BlockPredicate`，与 Java 公共 API 包 `cn.howxu.mmcr.api.publicapi.machine.BlockPredicate` 不同。`modifierUse(...)` 会自动从前者转换为后者；结构字符绑定只能使用前者或脚本能识别的 `BlockState`/`Block`/`LevelSlot`。
-- **配方多通道**：MMCR 配方有四条注册路径——`event.custom({ type: 'mmcr:machine_recipe' })` 数据驱动配方、`MachineRecipeBuilderJS` 编程式配方、`RecipeRegistry.registerStatic(...)` 静态注册（`Plugin.completeServerReload` 之外）、`MachineRecipeConverter` 转换的自定义 codec。同一 ID 在任意路径下只允许存在一次。
-- **网络请求**：`sendRequest` 找不到目标接口或目标不在 `source` 的连接表时会抛 `IllegalArgumentException`；送达后由目标机器在下一 tick 调用同 ID 的 `requestProcess`。若目标机器未注册对应 `requestId` 的处理器或任意中间检查失败，MMCR 会回调源机器通过 `requestFailed(...)` 注册的处理器，并传入 `RequestFailureReason` 枚举（`TARGET_HANDLER_MISSING`、`ALLOWLIST_REJECTED`、`HASH_MISMATCH` 等）。请求体根对象必须是字符串键映射，键不可为空或非字符串，值最终会被 [`api.dataValue(...)`](#datavalueobject-value--datavalue) 包装成 `DataValue`。
+- **块谓词类型**：门面返回 `cn.howxu.mmcr.api.machine.BlockPredicate`，`modifierUse` 转换为 `cn.howxu.mmcr.api.machine.definition.BlockPredicate`。两者都在底层 `api`；不能用 `publicapi` 视图替换脚本桥接参数。
+- **配方多通道**：数据驱动配方与编程式事务配方是不同收集路径；无活动事务时编程式 `build()` 走静态注册。`MachineRecipeConverter` 是 IO 转换桥接，不是独立配方注册渠道。避免跨层重复 ID；同一事务重复登记会被拒绝，跨层冲突由内容协调器校验，不能承诺所有路径一律立即抛相同异常。
+- **网络请求**：`sendRequest` 找不到目标接口或目标不在 `source` 的连接表时会抛 `IllegalArgumentException`；请求入队后由服务端网络处理触发同 ID 的 `requestProcess`。处理中检查失败会传入失败原因；失败回调必须已在源机器注册。请求体根对象必须是字符串键映射，键不可为空或非字符串，值最终会被 [`api.dataValue(...)`](#datavalueobject-value--datavalue) 包装成 `DataValue`。
 - **智能接口**：智能接口类型在 `MachineBuilderJS.smartInterface(type, ...)` 注册时是机器级声明，结构可以同时通过 `set(symbol, smartInterfaceBlock())` 决定哪些位置允许放置接口；接口值由智能接口方块保存并供绑定的控制器读取。
 - **可热加载范围**：机器定义、等级类型、等级、修饰符和控制器屏幕文本注册在启动脚本中，修改后必须重启游戏；结构、配方内容可随 `/reload` 重载。
-- **语言约定**：本文档中的 Java 类型在脚本里以相同名称使用；KubeJS 会把字符串、数组、对象和回调转换为对应参数；标记为 `@HideFromJS` 的重载（见 `MachineStructureBuilderJS` 多个 `extension`/`fullStructure` 与 `MachineBuilderJS` 的 `controllerSpec`/`runningSound(Identifier)` 等）保留给 Java 互操作或内部桥接，不应作为脚本入口。
+- **语言约定**：KubeJS 转换对应参数，不意味着不同 Java 包的同名类互换。`@HideFromJS` 的重载只供 Java 侧使用；本基线中 `extension(BlockArray...)`、`pattern(List<String>)` 和机器纹理/声音的 `Identifier` 重载被隐藏，而 `fullStructure(...)`、`controllerSpec(...)` 与机器构造器没有该注解。

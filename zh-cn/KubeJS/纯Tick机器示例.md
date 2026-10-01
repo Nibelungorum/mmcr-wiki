@@ -5,18 +5,20 @@ order: 12
 
 # 纯Tick型机器示例
 
-本文是 KubeJS 进阶示例的第三篇。我们将拆解 [`A_Pure_Tick_Machine.js`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/main/example/startup_scripts/advance/A_Pure_Tick_Machine.js) 与 [对应的结构脚本](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/main/example/server_scripts/structure/advance/A_Pure_Tick_Machine.js)。
+本文是 KubeJS 进阶示例的第三篇。
 
-本机器没有配方，完全靠 [`tickBehavior`](../API/KubeJS#tickbehaviorconsumer-machinebehaviorbuilderjs-builder--machinebuilderjs) + [`serverTick`](../API/KubeJS#servertickconsumer-tickbehaviorcontext-callback--machinebehaviorbuilderjs) 自驱。它是 [纯Tick测试机器](../JavaAPI/纯Tick测试机器) 的 KubeJS 版实现。
+脚本回调直接使用 `cn.howxu.mmcr.api.machine.definition` 下的底层上下文，不是 Java `publicapi` 的行为接口。`serverTick` 收到 `TickBehaviorContext`；其 `ioPlan()` 返回同包的 `MachineIoPlan`，`screenText()` 返回 `api.controller.ControllerScreenText`。
 
-它跟 [配方Tick示例](./配方Tick示例) 是同组对比：两者都"按 tick 自定义"，但本机器**完全没有配方**，所有逻辑都压缩到 `serverTick` 里。配方Tick示例 走 [`recipeBehavior`](../API/KubeJS#recipebehaviorconsumer-machinebehaviorbuilderjs-builder--machinebuilderjs)，在配方生命周期的 5 个钩子上插入回调。本教程会重点展开 [`MachineBehaviorBuilderJS`](../API/KubeJS#machinebehaviorbuilderjs) 的链式调用 + `idleStart` / `idleEnd` / `preServerTick` / `postServerTick` / `serverTick` 等钩子的可用范围，并区分 PURE_TICK vs RECIPE_TICK。
+本机器没有配方，完全靠 [`tickBehavior`](../API/KubeJS#tickbehaviorconsumermachinebehaviorbuilderjs-builder--machinebuilderjs) + [`serverTick`](../API/KubeJS#servertickconsumertickbehaviorcontext-callback--machinebehaviorbuilderjs) 自驱。它是 [纯Tick测试机器](../JavaAPI/纯Tick测试机器) 的 KubeJS 版实现。
+
+它跟 [配方Tick示例](./配方Tick示例) 是同组对比：两者都"按 tick 自定义"，但本机器**完全没有配方**，所有逻辑都压缩到 `serverTick` 里。配方Tick示例 走 [`recipeBehavior`](../API/KubeJS#recipebehaviorconsumermachinebehaviorbuilderjs-builder--machinebuilderjs)，在配方生命周期的 5 个钩子上插入回调。本教程会重点展开 [`MachineBehaviorBuilderJS`](../API/KubeJS#machinebehaviorbuilderjs) 的链式调用 + `idleStart` / `idleEnd` / `preServerTick` / `postServerTick` / `serverTick` 等钩子的可用范围，并区分 PURE_TICK vs RECIPE_TICK。
 
 ## 涉及的文件
 
 源码：
 
-- [`startup_scripts/advance/A_Pure_Tick_Machine.js`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/main/example/startup_scripts/advance/A_Pure_Tick_Machine.js) — 机器定义、tick 行为。
-- [`server_scripts/structure/advance/A_Pure_Tick_Machine.js`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/main/example/server_scripts/structure/advance/A_Pure_Tick_Machine.js) — 多方块结构。
+- [`startup_scripts/advance/A_Pure_Tick_Machine.js`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/example/startup_scripts/advance/A_Pure_Tick_Machine.js) — 机器定义、tick 行为。
+- [`server_scripts/structure/advance/A_Pure_Tick_Machine.js`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/example/server_scripts/structure/advance/A_Pure_Tick_Machine.js) — 多方块结构。
 
 ## API 跳转表
 
@@ -25,21 +27,21 @@ order: 12
 | `MMCR.getAPI()` | [链接](../API/KubeJS#getapi--kubejsapi) |
 | `event.createMachine(...)` | [链接](../API/KubeJS#createmachinestring-id--machinebuilderjs) |
 | `MachineBuilderJS.displayNameKey(...)` | [链接](../API/KubeJS#displaynamekeystring-key--machinebuilderjs) |
-| `MachineBuilderJS.recipePool(...)` | [链接](../API/KubeJS#recipepool-string-recipepoolids-%E2%86%92-machinebuilderjs) |
+| `MachineBuilderJS.recipePool(...)` | [链接](../API/KubeJS#recipepoolstring-recipepoolids--machinebuilderjs) |
 | `MachineBuilderJS.appearance(...)` | [链接](../API/KubeJS#appearancestring-machinebasicblock--machinebuilderjs) |
 | `MachineBuilderJS.allowMultithreading()` | [链接](../API/KubeJS#allowmultithreading--machinebuilderjs) |
 | `MachineBuilderJS.allowParallelism()` | [链接](../API/KubeJS#allowparallelism--machinebuilderjs) |
 | `MachineBuilderJS.maxParallelAmount(...)` | [链接](../API/KubeJS#maxparallelamountlong-amount--machinebuilderjs) |
-| `MachineBuilderJS.tickBehavior(...)` | [链接](../API/KubeJS#tickbehaviorconsumer-machinebehaviorbuilderjs-builder--machinebuilderjs) |
-| `MachineBehaviorBuilderJS.serverTick(...)` | [链接](../API/KubeJS#servertickconsumer-tickbehaviorcontext-callback--machinebehaviorbuilderjs) |
+| `MachineBuilderJS.tickBehavior(...)` | [链接](../API/KubeJS#tickbehaviorconsumermachinebehaviorbuilderjs-builder--machinebuilderjs) |
+| `MachineBehaviorBuilderJS.serverTick(...)` | [链接](../API/KubeJS#servertickconsumertickbehaviorcontext-callback--machinebehaviorbuilderjs) |
 | `TickBehaviorContext.ioPlan()` | [链接](../API/KubeJS#machineioplan) |
 | `MachineIoPlan.addInput(...)` / `addOutput(...)` / `add(...)` / `simulate()` / `commit()` | [链接](../API/KubeJS#machineioplan) |
 | `KubeJSApi.recipeIO()` | [链接](../API/KubeJS#recipeio--recipeiovalues) |
 | `KubeJSApi.id(...)` | [链接](../API/KubeJS#idstring-id--identifier) |
 | `KubeJSApi.screenScope()` | [链接](../API/KubeJS#screenscope--screenscopevalues) |
-| `KubeJSApi.energyRequirement(...)` | [链接](../API/KubeJS#energyrequirement-recipeio-io-long-fepertick-%E2%86%92-machinerequirement) |
-| `KubeJSApi.itemInputRequirement(...)` | [链接](../API/KubeJS#iteminputrequirementstring-itemid-int-count--machinerequirement) |
-| `KubeJSApi.itemOutputRequirement(...)` | [链接](../API/KubeJS#itemoutputrequirement-string-itemid-long-count-float-chance-%E2%86%92-machinerequirement) |
+| `KubeJSApi.energyRequirement(...)` | [链接](../API/KubeJS#energyrequirementrecipemodifieriotype-io-long-fepertick--machinerequirement) |
+| `KubeJSApi.itemInputRequirement(...)` | [链接](../API/KubeJS#iteminputrequirementstring-itemid-long-count--machinerequirement) |
+| `KubeJSApi.itemOutputRequirement(...)` | [链接](../API/KubeJS#itemoutputrequirementstring-itemid-long-count-float-chance--machinerequirement) |
 | `event.registerControllerScreenText(...)` | [链接](../API/KubeJS#registercontrollerscreentextstring-machineid-consumercontrollerscreentexteventjs-handler--void) |
 | `ControllerScreenTextEventJS.append(...)` | [链接](../API/KubeJS#appendstring-scope-string-lineid-component-text--void) |
 | `KubeJSApi.block(...)` / `anyOf(...)` | [链接](../API/KubeJS#blockstring-blockid--blockpredicate) / [链接](../API/KubeJS#anyofblockpredicate-children--blockpredicate) |
@@ -55,7 +57,7 @@ order: 12
 
 ## 机器定义
 
-[`A_Pure_Tick_Machine.js`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/main/example/startup_scripts/advance/A_Pure_Tick_Machine.js)：
+[`A_Pure_Tick_Machine.js`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/example/startup_scripts/advance/A_Pure_Tick_Machine.js)：
 
 ```javascript
 MMCREvents.startup(event => {
@@ -96,11 +98,11 @@ machine
 machine.register()
 ```
 
-[`.tickBehavior(behavior => behavior.serverTick(ctx => { ... }))`](../API/KubeJS#tickbehaviorconsumer-machinebehaviorbuilderjs-builder--machinebuilderjs) 是关键。它把机器行为从默认 `RecipeBehavior.defaults()` 切换成 `TickBehavior`。**从此该机器没有配方**，`MachineBehavior.kind() == TICK`，所有运行时行为由脚本内容定义。
+[`.tickBehavior(behavior => behavior.serverTick(ctx => { ... }))`](../API/KubeJS#tickbehaviorconsumermachinebehaviorbuilderjs-builder--machinebuilderjs) 是关键。它把机器行为从默认 `RecipeBehavior.defaults()` 切换成 `TickBehavior`。**从此该机器没有配方**，`MachineBehavior.kind() == TICK`，所有运行时行为由脚本内容定义。
 
 ## 结构详解
 
-[`structure/advance/A_Pure_Tick_Machine.js`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/main/example/server_scripts/structure/advance/A_Pure_Tick_Machine.js)：
+[`structure/advance/A_Pure_Tick_Machine.js`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/example/server_scripts/structure/advance/A_Pure_Tick_Machine.js)：
 
 ```javascript
 MMCREvents.server(event => {
@@ -142,7 +144,7 @@ MMCREvents.server(event => {
 if (!ctx.isDue(40)) return
 ```
 
-`ctx.isDue(40)` 返回当前 tick 是否对齐到 `40` 的整数倍，等价于 `(gameTime() % 40) == 0`。
+`ctx.isDue(40)` 判断 `Math.floorMod(gameTime(), 40) == 0`，对齐世界时间，不是从机器成型时开始累计 40 tick；周期必须大于 0。
 
 ### 2. FE 校验与 commit
 
@@ -176,12 +178,13 @@ if (!plan_fe.commit().successful()) {
 
 `ctx.ioPlan()` 返回一个全新的 [`MachineIoPlan`](../API/KubeJS#machineioplan)：
 
-- `simulate()` 返回 `Simulation`，其中 `energySatisfied()` 告诉调用者能量总线是否有足够的 10 FE。
-- `commit()` 产生消耗。`simulate()` 不会改动物品 / 能量，是一个只读模拟。
+- `simulate()` 返回 `MachineIoPlan.Simulation` 并缓存本次规划。当前只有能量输入，因此 `energySatisfied()` 可用于判断 10 FE 输入是否满足；混合计划还应检查 `inputsSatisfied()`、输出模拟和 `failure()`。
+- `commit()` 执行已缓存的规划，返回 `CommitResult`。它不自动调用 `simulate()`：未模拟、规划失败或计划已消费时，返回 `successful() == false`。
+- 模拟不提交资源变更，也不预留资源。规划成功不等于实际提交成功，仍须检查提交结果。
 
-[`api.energyRequirement(api.recipeIO().INPUT, 10)`](../API/KubeJS#energyrequirement-recipeio-io-long-fepertick-%E2%86%92-machinerequirement) 构造"10 FE 输入"需求。
+[`api.energyRequirement(api.recipeIO().INPUT, 10)`](../API/KubeJS#energyrequirementrecipemodifieriotype-io-long-fepertick--machinerequirement) 构造"10 FE 输入"需求。
 
-屏幕文本用 `ctx.screenText().replace(lineId, text)` 替换上一帧同 ID 的内容。这是 KubeJS 端 [`ControllerScreenTextEventJS.replace(...)`](../API/KubeJS#replacestring-lineid-component-text--void)。
+屏幕文本用 `ctx.screenText().replace(lineId, text)` 替换同 ID 的内容。这是底层 [`ControllerScreenText`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/api/controller/ControllerScreenText.java) 的方法；启动期文本注册回调里的 `text` 才是 `ControllerScreenTextEventJS`。
 
 :::warning 注意
 `ioPlan()` 每次返回**新**的 `MachineIoPlan`，两次调用之间的状态不共享。下面步骤还要重新 `ctx.ioPlan()` 才能加物品。
@@ -194,7 +197,7 @@ if (!plan_fe.commit().successful()) {
 ctx.screenText().replace(
     api.id("mmcr_kubejs:fe_status"),
     Text.literal("Machine do a run!")
-    // actually, because this is a tick function, you can only see this line for one tick
+    // 运行期替换会受后续注册文本刷新与同步影响，不是持久化状态
 )
 
 // some tricks...summon lighting bolt?
@@ -219,9 +222,9 @@ players.forEach(player => {
 })
 ```
 
-这一步演示了 `TickBehavior` 的关键灵活性：**tick 回调里能做任何想做的事**，不限于读写物品 / 能量，也能操作实体。
+这一步演示了 `TickBehavior` 可以调用世界与实体逻辑。闪电在 FE 提交成功之后、物品计划之前产生；后面的物品 IO 失败不会退回已消耗的 FE，也不会撤销闪电。不同计划和世界操作不构成一个原子事务。
 
-`ctx.level()` 获取服务端世界，`ctx.controllerPos()` 获取控制器方块位置。用 KubeJS 提供的 `AABB.of(minX, minY, minZ, maxX, maxY, maxZ)` 构造一个 2×全高度×2 的 AABB 范围，`level.getEntitiesOfClass(Player, area)` 获取范围内的所有玩家实例，`level.spawnLightning(x, y, z, isCosmetic)` 召唤一道闪电。
+`ctx.level()` 获取服务端世界，`ctx.controllerPos()` 获取控制器方块位置。用 KubeJS 提供的 `AABB.of(minX, minY, minZ, maxX, maxY, maxZ)` 构造一个 3×全高度×3 的 AABB 范围，`level.getEntitiesOfClass(Player, area)` 获取范围内的玩家实例，`level.spawnLightning(x, y, z, isCosmetic)` 召唤一道闪电。
 
 ### 4. 物品输入输出：`MachineIoPlan` 二次使用
 
@@ -261,25 +264,25 @@ simulation.outputs().forEach(output => {
 
 if (!outputAvailable) return
 
+// 官方脚本省略了提交结果检查；这里先确认成功，再显示状态
+if (!plan.commit().successful()) return
+
 ctx.screenText().replace(
     api.id("mmcr_kubejs:pure_tick_status"),
     Text.literal("Iron Ingot inputed")
-    // you can only see this line for one tick also
+    // 后续文本刷新可能覆盖这一提示
 )
-
-// if successed, commit it and we will get what we want
-plan.commit()
 ```
 
 **第二次**调用 `ctx.ioPlan()`，加入 1 个铁锭输入 + 1 个金粒输出：
 
 - `api.itemInputRequirement(itemId, count)` 构造"物品输入"需求。
-- `api.itemOutputRequirement(itemId, count, chance)` 构造"物品输出"需求，`chance = 1.0` 表示没有产生概率。
+- `api.itemOutputRequirement(itemId, count, chance)` 构造物品输出需求，`chance = 1.0` 表示必定尝试产出。
 - 注意 `plan.add(...)` 与 `plan.addInput(...)` / `plan.addOutput(...)` 的区别：`add(...)` 根据 `requirement.io()` 自动路由到 `addInput` 或 `addOutput`，是更通用的写法。
 
 模拟后通过 `simulation.inputsSatisfied()` 校验输入，再遍历 `simulation.outputs()` 检查每个输出项的 `accepted() >= requested()`，强制要求**全部输出能放下**，否则 `return`。
 
-最后 `plan.commit()` 真正消耗输入并产出。不需要接 `.successful()` ，前两段已经做了充分校验。
+最后 `plan.commit()` 尝试消耗输入并产出。官方示例省略结果检查，并在提交前显示成功提示；本文片段改为先检查 `plan.commit().successful()`，再更新成功文本。默认输出策略为 `REQUIRE_FULL`，模拟检查只是提交前的规划检查。
 
 ## 控制器屏幕静态文本
 
@@ -287,7 +290,7 @@ plan.commit()
 // register a static text line
 // NOTICE:
 // use static lines and ctx.screenText().replace() always depend on the actual situation
-// the static lines will refresh every client tick and replace is always the last one which is able to cover static lines
+// 服务端应用注册文本后再刷新 replace 请求；不是客户端直接执行脚本
 // If you want to make some differences, please use data storage and networks
 // Which will showed in 数据存储测试机器
 event.registerControllerScreenText(
@@ -319,28 +322,30 @@ event.registerControllerScreenText(
 
 [`MachineBehaviorBuilderJS`](../API/KubeJS#machinebehaviorbuilderjs) 在两种机器行为下可用的回调**完全不同**：
 
-> `MachineBuilderJS` 已经把 [`preServerTick`](../API/KubeJS#preservertickconsumer-machinebehaviorcontext-callback--machinebuilderjs) 与 [`postServerTick`](../API/KubeJS#postservertickconsumer-machinebehaviorcontext-callback--machinebuilderjs) 单独放在 `MachineBuilderJS` 上而不是 `MachineBehaviorBuilderJS` 上。它们是配方机器的"机器级全局 tick 钩子"，只能与 `recipeBehavior` 一起使用。`tickBehavior` 的等价物是 `serverTick`。
+> `MachineBuilderJS` 已经把 [`preServerTick`](../API/KubeJS#preservertickconsumermachinebehaviorcontext-callback--machinebuilderjs) 与 [`postServerTick`](../API/KubeJS#postservertickconsumermachinebehaviorcontext-callback--machinebuilderjs) 单独放在 `MachineBuilderJS` 上而不是 `MachineBehaviorBuilderJS` 上。它们是配方机器的"机器级全局 tick 钩子"，只能与 `recipeBehavior` 一起使用。`tickBehavior` 的等价物是 `serverTick`。
 
 具体可用钩子（详见 [`MachineBehaviorBuilderJS`](../API/KubeJS#machinebehaviorbuilderjs) 与 [`MachineBuilderJS`](../API/KubeJS#machinebuilderjs)）：
 
 | 钩子 | 位置 | 适用机器 | 触发时机 |
 | --- | --- | --- | --- |
-| [`idleStart`](../API/KubeJS#idlestartconsumer-machinebehaviorcontext-callback--machinebehaviorbuilderjs) | `MachineBehaviorBuilderJS` | `recipeBehavior` | 进入 idle 状态 |
-| [`idleEnd`](../API/KubeJS#idleendconsumer-machinebehaviorcontext-callback--machinebehaviorbuilderjs) | `MachineBehaviorBuilderJS` | `recipeBehavior` | 离开 idle 状态 |
-| [`beforeStart`](../API/KubeJS#beforestartconsumer-recipestartcontext-callback--machinebehaviorbuilderjs) | `MachineBehaviorBuilderJS` | `recipeBehavior` | 配方启动前，可改需求 / 输出 |
-| [`recipeTick`](../API/KubeJS#recipetickconsumer-recipetickcontext-callback--machinebehaviorbuilderjs) | `MachineBehaviorBuilderJS` | `recipeBehavior` | 配方执行中每 tick |
-| [`beforeFinish`](../API/KubeJS#beforefinishconsumer-recipefinishcontext-callback--machinebehaviorbuilderjs) | `MachineBehaviorBuilderJS` | `recipeBehavior` | 配方提交输出前 |
-| [`serverTick`](../API/KubeJS#servertickconsumer-tickbehaviorcontext-callback--machinebehaviorbuilderjs) | `MachineBehaviorBuilderJS` | `tickBehavior` | 每服务端 tick 一次（无配方） |
-| [`preServerTick`](../API/KubeJS#preservertickconsumer-machinebehaviorcontext-callback--machinebuilderjs) | `MachineBuilderJS` | `recipeBehavior` | 配方机器每次 server tick 前 |
-| [`postServerTick`](../API/KubeJS#postservertickconsumer-machinebehaviorcontext-callback--machinebuilderjs) | `MachineBuilderJS` | `recipeBehavior` | 配方机器每次 server tick 后 |
+| [`idleStart`](../API/KubeJS#idlestartconsumermachinebehaviorcontext-callback--machinebehaviorbuilderjs) | `MachineBehaviorBuilderJS` | `recipeBehavior` | 进入 idle 状态 |
+| [`idleEnd`](../API/KubeJS#idleendconsumermachinebehaviorcontext-callback--machinebehaviorbuilderjs) | `MachineBehaviorBuilderJS` | `recipeBehavior` | 离开 idle 状态 |
+| [`beforeStart`](../API/KubeJS#beforestartconsumerrecipestartcontext-callback--machinebehaviorbuilderjs) | `MachineBehaviorBuilderJS` | `recipeBehavior` | 配方启动前，可改需求 / 输出 |
+| [`recipeTick`](../API/KubeJS#recipetickconsumerrecipetickcontext-callback--machinebehaviorbuilderjs) | `MachineBehaviorBuilderJS` | `recipeBehavior` | 配方执行中每 tick |
+| [`beforeFinish`](../API/KubeJS#beforefinishconsumerrecipefinishcontext-callback--machinebehaviorbuilderjs) | `MachineBehaviorBuilderJS` | `recipeBehavior` | 配方提交输出前 |
+| [`serverTick`](../API/KubeJS#servertickconsumertickbehaviorcontext-callback--machinebehaviorbuilderjs) | `MachineBehaviorBuilderJS` | `tickBehavior` | 每服务端 tick 一次（无配方） |
+| [`preServerTick`](../API/KubeJS#preservertickconsumermachinebehaviorcontext-callback--machinebuilderjs) | `MachineBuilderJS` | `recipeBehavior` | 配方机器每次 server tick 前 |
+| [`postServerTick`](../API/KubeJS#postservertickconsumermachinebehaviorcontext-callback--machinebuilderjs) | `MachineBuilderJS` | `recipeBehavior` | 配方机器每次 server tick 后 |
 
 > 重要规则：`tickBehavior(...)` 之后再调用 `preServerTick` / `postServerTick` 会抛 `IllegalStateException`。`recipeBehavior(...)` 之后再调用 `serverTick` 同理会抛 `IllegalStateException`。两条路径互斥。
 
-本机器只用到 [`serverTick`](../API/KubeJS#servertickconsumer-tickbehaviorcontext-callback--machinebehaviorbuilderjs)；[`idleStart`](../API/KubeJS#idlestartconsumer-machinebehaviorcontext-callback--machinebehaviorbuilderjs) / [`idleEnd`](../API/KubeJS#idleendconsumer-machinebehaviorcontext-callback--machinebehaviorbuilderjs) / [`preServerTick`](../API/KubeJS#preservertickconsumer-machinebehaviorcontext-callback--machinebuilderjs) / [`postServerTick`](../API/KubeJS#postservertickconsumer-machinebehaviorcontext-callback--machinebuilderjs) 都不可用（强行调用会抛 `IllegalStateException`），因为 `MachineBehavior.kind() == TICK`。
+本机器只用到 [`serverTick`](../API/KubeJS#servertickconsumertickbehaviorcontext-callback--machinebehaviorbuilderjs)；[`idleStart`](../API/KubeJS#idlestartconsumermachinebehaviorcontext-callback--machinebehaviorbuilderjs) / [`idleEnd`](../API/KubeJS#idleendconsumermachinebehaviorcontext-callback--machinebehaviorbuilderjs) / [`preServerTick`](../API/KubeJS#preservertickconsumermachinebehaviorcontext-callback--machinebuilderjs) / [`postServerTick`](../API/KubeJS#postservertickconsumermachinebehaviorcontext-callback--machinebuilderjs) 都不可用（强行调用会抛 `IllegalStateException`），因为 `MachineBehavior.kind() == TICK`。
 
 ### `MachineIoPlan` 的一次性原则
 
-`MachineIoPlan` 在示例中使用了两次：一次接收 FE，一次接收物品与输出物品。**两次必须新建 plan**。`commit()` 后 plan 失效，如果第二次复用同一个 plan 引用，会抛异常。
+`MachineIoPlan` 在示例中使用了两次：一次接收 FE，一次接收物品与输出物品。两组操作分别新建 plan。任何一次 `commit()` 尝试都会消费该 plan，包括失败提交；之后再次 `commit()` 返回失败，继续 `add` 或 `simulate` 才会抛 `IllegalStateException`。失败后重试应创建新 plan 并重新模拟。
+
+底层实现见 [`MachineIoPlan`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/api/machine/definition/MachineIoPlan.java) 与 [`CraftingPlan`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/api/capability/plan/CraftingPlan.java)：提交使用 NeoForge 根事务，回滚只覆盖参与该事务的 journal 状态；普通数据写入、屏幕修改与世界操作不会因此自动回滚。
 
 两次写法为：
 
@@ -361,20 +366,22 @@ plan.commit()
 
 ### 屏幕文本：`replace(...)` vs `append(...)`
 
-[`ControllerScreenTextEventJS`](../API/KubeJS#controllerscreentexteventjs) 暴露 `append` / `appendAfter` / `remove` / `clear` / `replace`。本机器在 [`registerControllerScreenText(...)`](../API/KubeJS#registercontrollerscreentextstring-machineid-consumercontrollerscreentexteventjs-handler--void) 注册时用 `append(...)` 写初始两行（`controller` scope，静态），之后在 `serverTick` 里改写时用 [`replace(lineId, text)`](../API/KubeJS#replacestring-lineid-component-text--void)。
+启动期的 [`ControllerScreenTextEventJS`](../API/KubeJS#controllerscreentexteventjs) 使用字符串 scope / ID；运行期的 `ControllerScreenText` 使用 `ControllerScreenTextScope` / `Identifier`。本机器注册时用 `append(...)` 写初始两行（`controller` scope），之后在 `serverTick` 里通过 `api.id(...)` 构造 ID，调用底层 `replace(lineId, text)`。
 
 两者关键区别（[`KubeJS.md`](../API/KubeJS#controllerscreentexteventjs) 中详细列出）：
 
 | 方法 | 是否要 scope | 行为 |
 | --- | --- | --- |
 | `append(scope, lineId, text)` | 是 | 同 scope 内相同 `lineId` 会被替换，但其他 scope 不受影响 |
-| `replace(lineId, text)` | 否 | 跨 scope 替换同 ID 的行 |
+| `replace(lineId, text)` | 否 | 缓存替换请求，刷新时优先替换 `CONTROLLER`，其次 `OPERATION` 中找到的一行 |
+
+准确地说，`replace` 先缓存替换请求，刷新时优先找到 `CONTROLLER` 中的同 ID 行，其次找 `OPERATION`，只替换找到的一行；不存在时忽略，不会创建新行，也不是替换所有 scope 的同名行。`appendAfter` 只查同 scope 的锚点，锚点不存在时不追加。源码见 [ControllerScreenTextState](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/internal/runtime/ControllerScreenTextState.java)。
 
 之所以 `replace(...)` 更适合，是因为 `fe_status` 与 `pure_tick_status` 这两个 `lineId` 在改写时不需要再考虑它们属于 `controller` 还是 `operation`。
 
 ### `allowMultithreading()` / `allowParallelism()` 对纯 tick 机器的影响
 
-`serverTick` 内部并不会真的"按并行度循环执行"。如果想做"按并行度循环"的逻辑，要在 [`recipeBehavior`](../API/KubeJS#recipebehaviorconsumer-machinebehaviorbuilderjs-builder--machinebuilderjs) 和 [`recipeTick`](../API/KubeJS#recipetickconsumer-recipetickcontext-callback--machinebehaviorbuilderjs)注入自定义tick。
+`serverTick` 不会自动按并行度或工厂线程数循环执行。纯 tick 上下文仍提供 `parallelism()`、`factoryThreadCount()`、`smartInterfaceValue(name)` 等数据，脚本可以据此自行缩放请求数量或定义执行节奏；`ioPlan()` 本身按并行度 1 规划。只有需要配方生命周期时，才选择 `recipeBehavior`。
 
 ## PURE_TICK 和 RECIPE_TICK
 
@@ -396,7 +403,7 @@ plan.commit()
 - [纯Tick测试机器](../JavaAPI/纯Tick测试机器) — 本机器的 Java 端实现。
 - [配方Tick测试机器](../JavaAPI/配方Tick测试机器) — `recipeBehavior` 在 Java 端的完整演示。
 - [KubeJS API](../API/KubeJS) — 本教程引用 API 的集中参考。
-- [KubeJS API#tickBehavior](../API/KubeJS#tickbehaviorconsumer-machinebehaviorbuilderjs-builder--machinebuilderjs) — 直 tick 模式入口。
-- [KubeJS API#serverTick](../API/KubeJS#servertickconsumer-tickbehaviorcontext-callback--machinebehaviorbuilderjs) — 每 tick 一次的回调。
+- [KubeJS API#tickBehavior](../API/KubeJS#tickbehaviorconsumermachinebehaviorbuilderjs-builder--machinebuilderjs) — 直 tick 模式入口。
+- [KubeJS API#serverTick](../API/KubeJS#servertickconsumertickbehaviorcontext-callback--machinebehaviorbuilderjs) — 每 tick 一次的回调。
 - [KubeJS API#MachineIoPlan](../API/KubeJS#machineioplan) — `ctx.ioPlan()` 返回的 IO 计划入口。
 - [KubeJS API#MachineBehaviorBuilderJS](../API/KubeJS#machinebehaviorbuilderjs) — 行为构建器的钩子清单。

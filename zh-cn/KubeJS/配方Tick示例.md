@@ -5,7 +5,9 @@ order: 13
 
 # 配方Tick示例 — KubeJS 配方 tick 机器
 
-本文是 KubeJS 进阶示例的第四篇。我们逐段拆解 [`A_Recipe_Tick_Machine.js`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/main/example/startup_scripts/advance/A_Recipe_Tick_Machine.js) 与 [对应的结构脚本](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/main/example/server_scripts/structure/advance/A_Recipe_Tick_Machine.js)。
+本文是 KubeJS 进阶示例的第四篇。
+
+KubeJS 的行为桥直接传入 `cn.howxu.mmcr.api.machine.definition` 下的上下文；本文的同名类型均指底层类型，不能套用 Java `publicapi` 的签名或只读约束。
 
 本机器**有配方**，但在配方生命周期的 5 个阶段（`idleStart` / `idleEnd` / `beforeStart` / `recipeTick` / `beforeFinish`）都插入自定义回调。
 
@@ -13,8 +15,9 @@ order: 13
 
 源码位置：
 
-- [`startup_scripts/advance/A_Recipe_Tick_Machine.js`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/main/example/startup_scripts/advance/A_Recipe_Tick_Machine.js) — 机器定义、5 个Hook、静态屏幕文本、3 条配方。
-- [`server_scripts/structure/advance/A_Recipe_Tick_Machine.js`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/main/example/server_scripts/structure/advance/A_Recipe_Tick_Machine.js) — 多方块结构。
+- [`startup_scripts/advance/A_Recipe_Tick_Machine.js`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/example/startup_scripts/advance/A_Recipe_Tick_Machine.js) — 机器定义、5 个Hook、静态屏幕文本。
+- [`server_scripts/structure/advance/A_Recipe_Tick_Machine.js`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/example/server_scripts/structure/advance/A_Recipe_Tick_Machine.js) — 多方块结构。
+- [`server_scripts/recipe/advance/A_Recipe_Tick_Machine.js`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/example/server_scripts/recipe/advance/A_Recipe_Tick_Machine.js) — `ServerEvents.recipes` 中注册 3 条配方。
 
 ## API 跳转表
 
@@ -23,14 +26,16 @@ order: 13
 | `MMCR.getAPI()` | [链接](../API/KubeJS#getapi--kubejsapi) |
 | `event.createMachine(...)` | [链接](../API/KubeJS#createmachinestring-id--machinebuilderjs) |
 | `MachineBuilderJS.displayNameKey(...)` | [链接](../API/KubeJS#displaynamekeystring-key--machinebuilderjs) |
-| `MachineBuilderJS.recipePool(...)` | [链接](../API/KubeJS#recipepool-string-recipepoolids-%E2%86%92-machinebuilderjs) |
+| `MachineBuilderJS.recipePool(...)` | [链接](../API/KubeJS#recipepoolstring-recipepoolids--machinebuilderjs) |
 | `MachineBuilderJS.appearance(...)` | [链接](../API/KubeJS#appearancestring-machinebasicblock--machinebuilderjs) |
-| `MachineBuilderJS.recipeBehavior(...)` | [链接](../API/KubeJS#recipebehaviorconsumer-machinebehaviorbuilderjs-builder--machinebuilderjs) |
-| `MachineBehaviorBuilderJS.idleStart(...)` | [链接](../API/KubeJS#idlestartconsumer-machinebehaviorcontext-callback--machinebehaviorbuilderjs) |
-| `MachineBehaviorBuilderJS.idleEnd(...)` | [链接](../API/KubeJS#idleendconsumer-machinebehaviorcontext-callback--machinebehaviorbuilderjs) |
-| `MachineBehaviorBuilderJS.beforeStart(...)` | [链接](../API/KubeJS#beforestartconsumer-recipestartcontext-callback--machinebehaviorbuilderjs) |
-| `MachineBehaviorBuilderJS.recipeTick(...)` | [链接](../API/KubeJS#recipetickconsumer-recipetickcontext-callback--machinebehaviorbuilderjs) |
-| `MachineBehaviorBuilderJS.beforeFinish(...)` | [链接](../API/KubeJS#beforefinishconsumer-recipefinishcontext-callback--machinebehaviorbuilderjs) |
+| `MachineBuilderJS.recipeBehavior(...)` | [链接](../API/KubeJS#recipebehaviorconsumermachinebehaviorbuilderjs-builder--machinebuilderjs) |
+| `MachineBehaviorBuilderJS.idleStart(...)` | [链接](../API/KubeJS#idlestartconsumermachinebehaviorcontext-callback--machinebehaviorbuilderjs) |
+| `MachineBehaviorBuilderJS.idleEnd(...)` | [链接](../API/KubeJS#idleendconsumermachinebehaviorcontext-callback--machinebehaviorbuilderjs) |
+| `MachineBehaviorBuilderJS.beforeStart(...)` | [链接](../API/KubeJS#beforestartconsumerrecipestartcontext-callback--machinebehaviorbuilderjs) |
+| `MachineBehaviorBuilderJS.recipeTick(...)` | [链接](../API/KubeJS#recipetickconsumerrecipetickcontext-callback--machinebehaviorbuilderjs) |
+| `MachineBehaviorBuilderJS.beforeFinish(...)` | [链接](../API/KubeJS#beforefinishconsumerrecipefinishcontext-callback--machinebehaviorbuilderjs) |
+| `RecipeStartContext.requirements()` / `setRequirements(...)` / `replaceExactItemInputCount(...)` | [底层上下文源码](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/api/machine/definition/RecipeStartContext.java) |
+| `RecipeTickContext` / `RecipeFinishContext` | [tick 源码](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/api/machine/definition/RecipeTickContext.java) / [finish 源码](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/api/machine/definition/RecipeFinishContext.java) |
 | `KubeJSApi.id(...)` | [链接](../API/KubeJS#idstring-id--identifier) |
 | `KubeJSApi.screenScope()` | [链接](../API/KubeJS#screenscope--screenscopevalues) |
 | `event.registerControllerScreenText(...)` | [链接](../API/KubeJS#registercontrollerscreentextstring-machineid-consumercontrollerscreentexteventjs-handler--void) |
@@ -50,11 +55,13 @@ order: 13
 | --- | --- |
 | `net.minecraft.world.entity.LivingEntity` | 在范围内搜生物用于加效果 |
 | `net.minecraft.world.effect.MobEffects` | `STRENGTH` / `NIGHT_VISION` 效果常量 |
-| `net.minecraft.world.item.Items` | `GOLD_INGOT` 等物品常量 |
+| `cn.howxu.mmcr.api.recipe.requirement.ItemRequirement` | 重建物品输入需求 |
+| `java.util.ArrayList` | 收集整份替换需求列表 |
+| `net.minecraft.core.registries.BuiltInRegistries` | 比较物品注册 ID |
 
 ## 机器定义
 
-打开启动期脚本 [`A_Recipe_Tick_Machine.js`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/main/example/startup_scripts/advance/A_Recipe_Tick_Machine.js)：
+打开启动期脚本 [`A_Recipe_Tick_Machine.js`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/example/startup_scripts/advance/A_Recipe_Tick_Machine.js)：
 
 ```javascript
 MMCREvents.startup(event => {
@@ -65,7 +72,9 @@ MMCREvents.startup(event => {
     const MobEffects = Java.loadClass("net.minecraft.world.effect.MobEffects")
 
     // Some Class
-    const Items = Java.loadClass("net.minecraft.world.item.Items")
+    const ItemRequirement = Java.loadClass("cn.howxu.mmcr.api.recipe.requirement.ItemRequirement")
+    const ArrayList = Java.loadClass("java.util.ArrayList")
+    const BuiltInRegistries = Java.loadClass("net.minecraft.core.registries.BuiltInRegistries")
 
     const machine = event
         .createMachine("mmcr_kubejs:kubejs_recipe_ticker")
@@ -87,24 +96,24 @@ MMCREvents.startup(event => {
 
 链式调用：
 
-- `.displayNameKey(...)` / `.recipePool(...)` / `.appearance("minecraft:green_terracotta")`：配方池 ID。
-- [`.recipeBehavior(behavior => behavior.xxx(...))`](../API/KubeJS#recipebehaviorconsumer-machinebehaviorbuilderjs-builder--machinebuilderjs) 注入点
+- `.displayNameKey(...)`：本地化键；`.recipePool(...)`：配方池 ID；`.appearance("minecraft:green_terracotta")`：外观方块。
+- [`.recipeBehavior(behavior => behavior.xxx(...))`](../API/KubeJS#recipebehaviorconsumermachinebehaviorbuilderjs-builder--machinebuilderjs) 注入点
 
 [`MachineBehaviorBuilderJS`](../API/KubeJS#machinebehaviorbuilderjs) 提供 5 个Hook：
 
 | Hook | 接收的上下文 | 触发时机 |
 | --- | --- | --- |
-| [`idleStart`](../API/KubeJS#idlestartconsumer-machinebehaviorcontext-callback--machinebehaviorbuilderjs) | `MachineBehaviorContext` | 进入 idle 状态 |
-| [`idleEnd`](../API/KubeJS#idleendconsumer-machinebehaviorcontext-callback--machinebehaviorbuilderjs) | `MachineBehaviorContext` | 离开 idle 状态 |
-| [`beforeStart`](../API/KubeJS#beforestartconsumer-recipestartcontext-callback--machinebehaviorbuilderjs) | `RecipeStartContext` | 配方启动前，可改需求 / 输出 |
-| [`recipeTick`](../API/KubeJS#recipetickconsumer-recipetickcontext-callback--machinebehaviorbuilderjs) | `RecipeTickContext` | 配方执行中每 tick |
-| [`beforeFinish`](../API/KubeJS#beforefinishconsumer-recipefinishcontext-callback--machinebehaviorbuilderjs) | `RecipeFinishContext` | 配方提交输出前 |
+| [`idleStart`](../API/KubeJS#idlestartconsumermachinebehaviorcontext-callback--machinebehaviorbuilderjs) | `MachineBehaviorContext` | 进入 idle 状态 |
+| [`idleEnd`](../API/KubeJS#idleendconsumermachinebehaviorcontext-callback--machinebehaviorbuilderjs) | `MachineBehaviorContext` | 离开 idle 状态 |
+| [`beforeStart`](../API/KubeJS#beforestartconsumerrecipestartcontext-callback--machinebehaviorbuilderjs) | `RecipeStartContext` | 配方启动前，可改需求 / 输出 |
+| [`recipeTick`](../API/KubeJS#recipetickconsumerrecipetickcontext-callback--machinebehaviorbuilderjs) | `RecipeTickContext` | 配方执行中每 tick |
+| [`beforeFinish`](../API/KubeJS#beforefinishconsumerrecipefinishcontext-callback--machinebehaviorbuilderjs) | `RecipeFinishContext` | 配方提交输出前 |
 
-末尾在 `MMCREvents.startup` 之外另有配方注册段，详见后文"配方详解"。
+启动期脚本不含配方注册。配方已移到 `server_scripts/recipe/advance`，见下文“配方数据”。
 
 ## 结构
 
-[`structure/advance/A_Recipe_Tick_Machine.js`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/main/example/server_scripts/structure/advance/A_Recipe_Tick_Machine.js)：
+[`structure/advance/A_Recipe_Tick_Machine.js`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/example/server_scripts/structure/advance/A_Recipe_Tick_Machine.js)：
 
 ```javascript
 MMCREvents.server(event => {
@@ -155,12 +164,12 @@ MMCREvents.server(event => {
 
 | scope | 内容来源 | 重置时机 |
 | --- | --- | --- |
-| `CONTROLLER` | Mod 完全控制 | 由 Mod 自己管理 |
-| `OPERATION` | MMCR 自动 + Mod 追加 | 每个配方生命周期自动重置 |
+| `CONTROLLER` | 控制器注册文本或行为写入 | 由文本状态 / 结构 / lane 清理逻辑管理 |
+| `OPERATION` | 行为回调写入的操作文本 | 运行时操作结束、无活动操作等清理路径会清空 |
 
-`idleStart` 写入 `OPERATION` scope 的内容，会在配方开始时被 MMCR 清掉，配合 `beforeStart` 里"清掉 idle 行"的写法，屏幕上不会同时出现"idle 提示"与"运行中提示"。
+`idleStart` 演示空闲提示，`beforeStart` 演示按 scope / ID 移除行。运行时还会清理操作文本，且配方 lane 可以使用独立文本状态；不能仅凭这两段代码保证屏幕必然出现或切换这些行。
 
-[`idleEnd`](../API/KubeJS#idleendconsumer-machinebehaviorcontext-callback--machinebehaviorbuilderjs) 是空实现：MMCR 已经在配方开始时清掉 idle 行，无需在 `idleEnd` 再手动 `remove(...)`。
+[`idleEnd`](../API/KubeJS#idleendconsumermachinebehaviorcontext-callback--machinebehaviorbuilderjs) 是空实现：示例在 `beforeStart` 移除 idle 行，运行时也会按操作状态清理 `OPERATION` 文本；不要把空闲与配方 lane 的文本句柄假定为同一个对象。
 
 源码里两行 idle 文本：
 
@@ -204,33 +213,55 @@ MMCREvents.server(event => {
         entity.potionEffects.add(MobEffects.STRENGTH, 10000, 1)
     })
 
-    // declare if there are 32 gold ingots, if true set the actual input to 1
-    // Here is one example you can reproduce with just kubejs
-    // I suggest to use Java API if you want more complex tick
-    //
-    // Public RecipeStartContext exposes replaceExactItemInputCount(item, expected, replacement)
-    // which replaces the manual iteration / ItemRequirement reconstruction / setRequirements pattern
-    // used in older examples. It only matches the FIRST input whose Ingredient resolves to exactly
-    // the given Item and whose count equals `expected`; everything else stays untouched.
-    ctx.replaceExactItemInputCount(Items.GOLD_INGOT, 32, 1)
+    const nextRequirements = new ArrayList()
+    let changed = false
+    ctx.requirements().forEach(requirement => {
+        if (!(requirement instanceof ItemRequirement)
+                || String(requirement.io().getKey()) !== "input") {
+            nextRequirements.add(requirement)
+            return
+        }
+        const possibleItems = requirement.item().getStackArray()
+        const isExactlyGold = requirement.count() === 32
+            && possibleItems.length === 1
+            && BuiltInRegistries.ITEM.getKey(possibleItems[0].getItem())
+                .toString() === "minecraft:gold_ingot"
+        if (isExactlyGold) {
+            nextRequirements.add(new ItemRequirement(
+                requirement.io(), requirement.item(), 1, requirement.stack(),
+                requirement.chance(), requirement.tags(), requirement.components(),
+                requirement.consumeChance()
+            ))
+            changed = true
+        } else {
+            nextRequirements.add(requirement)
+        }
+    })
+    if (changed) ctx.setRequirements(nextRequirements)
 })
 ```
 
 `RecipeStartContext` 提供两个关键能力：
 
 - `ctx.machineContext()`：拿到 [`MachineBehaviorContext`](../API/KubeJS)，可读 `level()` / `controllerPos()` / `screenText()`。这是 `beforeStart` / `recipeTick` / `beforeFinish` 共用的"返回机器上下文"路径。
-- `ctx.replaceExactItemInputCount(item, expected, replacement)`：把第一条"原料能解析到指定物品、且数量等于 `expected`"的输入需求替换为 `replacement`，未命中时返回 `false` 不报错。
-    它是 [`RecipeStartContext`](../API/JavaAPI#recipestartcontext) 公共 API 内置的便捷方法，等价于老示例里手动遍历 `ctx.requirements()` + 重新 `new ItemRequirement(...)` + `ctx.setRequirements(...)` 的写法。
+- `ctx.requirements()` / `ctx.setRequirements(list)`：读出复制的需求列表，再提交整份替换列表。官方脚本保留非匹配项，只重建精确匹配的金锭输入，并保留其标签、组件条件和消耗概率。
 
 上述代码的核心：
 
-1. **清理 idle 行**：把 `idleStart` 写入的两行 `remove(...)`，避免同时显示"idle 提示"与"运行中提示"。
+1. **请求清理 idle 行**：在当前机器上下文文本句柄上移除两个 scope / ID；若行不在该句柄中，移除没有效果。
 2. **加效果**：给范围内所有 `LivingEntity` 加 10000 tick 的力量 II 效果。
-3. **修改配方需求**：调用 `ctx.replaceExactItemInputCount(Items.GOLD_INGOT, 32, 1)`，把第一条"原料能解析到 `minecraft:gold_ingot`、且数量等于 32"的输入需求替换成"1 个金锭"。
+3. **修改配方需求**：把所有“候选物品恰好只有金锭、且数量为 32”的物品输入需求改为 1 个金锭。这是改写配方声明，不是检测库存是否已有 32 个金锭；真正输入检查在后续 IO 规划中进行。
 
-`replaceExactItemInputCount(...)` 只改内置物品输入需求（数量精确等于 `expected` 时才命中），自定义需求 / 流体 / 能量 / 输出不会被改动；返回 `false` 时不抛异常，`beforeStart` 会照常进入下一个Hook。
+底层 [`RecipeStartContext.replaceExactItemInputCount(...)`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/api/machine/definition/RecipeStartContext.java) 仍存在，可作为简化写法：
 
-需要更复杂的改写时，再回到 `ctx.requirements()` + `ctx.setRequirements(...)` 手动操作——前者是公共视图的不可变副本，必须整体替换，MMCR 才会在 `beforeStart` 结束时统一应用。
+```javascript
+const Items = Java.loadClass("net.minecraft.world.item.Items")
+const changed = ctx.replaceExactItemInputCount(Items.GOLD_INGOT, 32, 1)
+```
+
+它只替换**第一条**匹配的内置物品输入，未命中返回 `false`；与官方手动遍历可能替换多条的行为并不完全等价。两个数量参数必须为正。它也通过 `setRequirements(...)` 应用修改，不能绕过该方法对自定义输出的限制。
+
+`requirements()` 使用 `MachineRequirement.copyList(...)`，返回按注册需求类型复制的不可修改列表；修改容器后必须调用 `setRequirements(...)`。该方法会由需求重新推导内置物品 / 流体输出；若当前输出包含注册的自定义输出类型，它会抛 `IllegalStateException`，不能泛化为任意输出的重建工具。
 
 ### `recipeTick`：配方每 tick 触发
 
@@ -246,7 +277,7 @@ MMCREvents.server(event => {
         api.id("mmcr_kubejs:in_line"),
         // Just Text.literal is allowed
         // For this fully custom usage, I even provide sprintf
-        Text.literal("XXXX")
+        Text.literal("正在使用雷霆大猪咪暴力执行配方")
     )
 })
 ```
@@ -262,9 +293,9 @@ MMCREvents.server(event => {
 | `ctx.setRequirements(...)` / `setOutputs(...)` | ✓ | ✗（只读副本） |
 | `ctx.cancel()` | ✓ | ✗ |
 
-也就是说，`recipeTick` **不能修改配方需求 / 输出**，它只能读取 `currentTick()` 并基于此写屏幕文本 / 施加效果 / 调用其他游戏机制。如果想修改需求，应该在 `beforeStart` 里做。如果想在完成前改输出，应该在 `beforeFinish` 里做。这样区分是因为"配方执行中"如果改需求 / 输出，会破坏 MMCR 的并行执行，所以 `recipeTick` 的需求 / 输出字段是只读副本。
+底层 `RecipeTickContext` 是 record，需求 / 输出容器由复制列表构成，没有 `setRequirements` / `setOutputs` / `cancel`。应在 `beforeStart` 改需求，在 `beforeFinish` 改完成输出；它还提供 `recipe()`、`capabilitySnapshot()` 等读取入口。其触发点在配方每 tick 输入计划之前，因此回调执行不代表这一 tick 的 FE 等输入一定提交成功。
 
-[`ControllerScreenText.appendAfter(...)`](../API/KubeJS#appendafterstring-scope-string-lineid-string-afterlineid-component-text--void) 把这条信息插到 `in_line` 之后，与下文"静态屏幕文本"里的 `IN_LINE` 形成呼应：注册时在 `sp_line_1` 后插入 `IN_LINE`，运行时在 `IN_LINE` 后再追加运行信息。
+底层 `ControllerScreenText.appendAfter(...)` 需要同 scope 的锚点。脚本意图是在 `in_line` 后显示信息，但这里使用 `OPERATION`，静态行使用 `CONTROLLER`，查找不会跨 scope；详见下文“静态屏幕文本”。
 
 ### `beforeFinish`：配方提交输出前的Hook
 
@@ -295,7 +326,7 @@ MMCREvents.server(event => {
 })
 ```
 
-[`RecipeFinishContext`](../API/KubeJS#recipefinishcontext) 提供 `ctx.machineContext()` / `ctx.setOutputs(...)` / `ctx.discardOutputs(...)` / `ctx.cancel()`。
+[`RecipeFinishContext`](../API/KubeJS#recipefinishcontext) 提供 `ctx.machineContext()` / `ctx.setOutputs(...)` / `ctx.discardOutputs()` / `ctx.cancel()`；`discardOutputs` 不接收参数。
 
 ## 静态屏幕文本
 
@@ -328,12 +359,14 @@ event.registerControllerScreenText("mmcr_kubejs:kubejs_recipe_ticker", text => {
 [`event.registerControllerScreenText(...)`](../API/KubeJS#registercontrollerscreentextstring-machineid-consumercontrollerscreentexteventjs-handler--void) 注册 3 行静态文本：
 
 - [`appendTranslatable("controller", "mmcr_kubejs:before_line", "gui.mmcr_kubejs.before_line")`](../API/KubeJS#appendtranslatablestring-scope-string-lineid-string-key-object-args--void) — `before_line` 行。
-- [`appendAfterTranslatable("controller", "mmcr_kubejs:in_line", "mmcr_kubejs:sp_line_1", "gui.mmcr_kubejs.in_line")`](../API/KubeJS#appendaftertranslatablestring-scope-string-lineid-string-afterlineid-string-key-object-args--void) — 把 `in_line` 插到 `sp_line_1`（MMCR 自动生成的内部分隔行）之后。
+- [`appendAfterTranslatable("controller", "mmcr_kubejs:in_line", "mmcr_kubejs:sp_line_1", "gui.mmcr_kubejs.in_line")`](../API/KubeJS#appendaftertranslatablestring-scope-string-lineid-string-afterlineid-string-key-object-args--void) — 仅在 `CONTROLLER` 已有 `sp_line_1` 时把 `in_line` 插到其后；本脚本没有创建锚点。
 - [`appendTranslatable("controller", "mmcr_kubejs:after_line", "gui.mmcr_kubejs.after_line")`](../API/KubeJS#appendtranslatablestring-scope-string-lineid-string-key-object-args--void) — `after_line` 行。
 
-最终屏幕上按 `before_line → sp_line_1 → in_line → after_line` 排列。recipeTick` 里再在 `in_line` 后追加"XXX"信息，运行时屏幕就是 `before_line → sp_line_1 → in_line → XXXX → after_line`。
+`appendAfter` 表达相对行的排序意图，锚点不存在时不追加。`sp_line_1` 是示例指定的 ID，不能据此承诺它始终存在或完整屏幕始终按固定序列排列。
 
-静态行每次客户端 tick 都会重新执行，**独立于配方生命周期**。
+注册回调由服务端控制器应用，随后刷新 `replace` 请求，再同步文本状态；不是客户端每 tick 直接执行 KubeJS 回调。
+
+底层 `appendAfter` 仅在同 scope 已有 `afterLineId` 时追加。这里静态的 `in_line` 属于 `CONTROLLER`，而 `recipeTick` 向 `OPERATION` 写入并以 `in_line` 为锚点；单有静态行并不能满足该查找，因此不能保证这段示例文字出现。需要可靠显示时，可改用 `screen.append(OPERATION, id, text)`，或先在 `OPERATION` 创建锚点。静态 `sp_line_1` 也不是本脚本注册的行。
 
 ## 特殊机制
 
@@ -353,11 +386,11 @@ event.registerControllerScreenText("mmcr_kubejs:kubejs_recipe_ticker", text => {
 
 > 配方回调中的 `ctx.machineContext()` 返回 `MachineBehaviorContext`，可访问 `dataStorage`、`screenText`、`jadeText`、`level`、`controllerPos()` 等运行时状态。
 
-源码里 `idleStart` 用 `ctx.screenText()`、`beforeStart` 用 `ctx.machineContext().screenText()`，这两条规则必须严格遵守，写反会抛 `IllegalStateException`。
+源码里 `idleStart` 用 `ctx.screenText()`、`beforeStart` 用 `ctx.machineContext().screenText()`，因为二者的上下文方法不同。写反属于调用不存在的方法，不应描述为行为构建器固定抛出 `IllegalStateException`。运行期返回的是底层 `ControllerScreenText`，启动期注册回调才使用 `ControllerScreenTextEventJS`。
 
 ### `ctx.requirements()` 的不可变副本语义
 
-本机器走的是 `ctx.replaceExactItemInputCount(item, expected, replacement)` 路线——它内部就处理了"只改第一条匹配项、其他保持原样"的语义，**直接返回 `boolean` 告知是否命中**。如果你的需求改写更复杂（比如替换流体 / 能量 / 多个物品 / 同时改输出），再回到 `ctx.requirements()` + `ctx.setRequirements(...)` 的手动模式：
+官方脚本走 `ctx.requirements()` + `ctx.setRequirements(...)` 的手动路线；便捷方法只改第一条匹配项，是补充选择。两者使用的都是底层上下文：
 
 `ctx.requirements()` 返回**不可变副本**，只能读取，不能 `add()` / `remove()`。要修改需求，必须构造一个 `ArrayList` 把想要保留 / 替换的需求放进去，再调用 `ctx.setRequirements(list)` 提交：
 
@@ -367,7 +400,7 @@ const nextRequirements = new ArrayList()
 if (changed) ctx.setRequirements(nextRequirements)
 ```
 
-如果 `changed === false`（没有改任何需求），**不调用** `ctx.setRequirements` 是正确做法，调用空 set 反而可能影响并行执行的状态机。
+没有改动时不必调用 `setRequirements`。传入空列表代表删除全部需求，不是“保持不变”；它还会重新推导输出。
 
 ### 配方数据 + 运行时调整
 
@@ -379,7 +412,41 @@ if (changed) ctx.setRequirements(nextRequirements)
 
 ### 修改需求时务必满足构造约束
 
-无论是 `ctx.replaceExactItemInputCount(...)` 还是手动 `ctx.setRequirements(...)`，底层都按 [`ItemRequirement`](../API/JavaAPI#itemrequirement) 的构造约束校验：物品输入 `count >= 1`、输出栈非空、`chance` 在 `[0, 1]`。如果构造参数非法（最常见的是把 32 金锭替换成 0 个），`beforeStart` 会抛 `IllegalArgumentException`，机器进入失败状态。本机器的 `count = 1` 替换是合法构造，没有问题。
+重建需求时应遵守底层 `ItemRequirement` 的构造约束，保留原条目的组件条件、标签、输出概率与消耗概率。便捷方法显式要求 `expectedCount >= 1`、`replacementCount >= 1`，把 32 金锭替换成 0 会抛 `IllegalArgumentException`，不能用它表达免材料配方。
+
+### 可变输出与副作用边界
+
+底层 `RecipeStartContext.outputs()` 返回其当前输出列表，`RecipeFinishContext.outputs()` 返回内部可变 `ArrayList`；不能套用 `publicapi` 的只读视图说明。教学中建议通过 `setOutputs(List<MachineOutput>)` 显式替换：start 阶段会同步需求中的输出条目，finish 阶段会复制并校验内置输出非空。start 另有 `duration()` / `setDuration(int)`，start / finish 都有 `requestedParallelism()` / `effectiveParallelism()`。
+
+`beforeStart` 的力量效果和 `beforeFinish` 的夜视效果属于世界副作用。后续规划 / 提交失败或调用 `cancel()` 不会自动撤销这些效果；生命周期钩子不是包住所有脚本操作的原子事务。
+
+## 配方数据
+
+三条配方在 [`server_scripts/recipe/advance/A_Recipe_Tick_Machine.js`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/example/server_scripts/recipe/advance/A_Recipe_Tick_Machine.js) 的 `ServerEvents.recipes` 中注册：
+
+| tick 时间 | 物品输入 | 物品输出 | 每 tick FE |
+| --- | --- | --- | --- |
+| 500 | 10000 煤炭 + 8 钻石 | 9 金锭 | 20 |
+| 300 | 114514 钻石 + 8 铁锭 | 18 煤炭 | 20 |
+| 300 | 32 金锭 + 8 木棍 | 3 钻石 | 20 |
+
+第三条用于观察 `beforeStart` 把 32 金锭改为 1 的效果。原始配方数据仍保留 32，JEI 与数据包声明不会被这次运行上下文修改。
+
+```javascript
+ServerEvents.recipes(event => {
+    event.custom({
+        type: 'mmcr:machine_recipe',
+        recipe_pool: 'mmcr_kubejs:kubejs_recipe_ticker',
+        tick_time: 300,
+        requirements: [
+            { type: 'minecraft:item', io: 'input', item: 'minecraft:gold_ingot', count: 32 },
+            { type: 'minecraft:item', io: 'input', item: 'minecraft:stick', count: 8 },
+            { type: 'minecraft:item', io: 'output', stack: { id: 'minecraft:diamond', count: 3 } },
+            { type: 'neoforge:energy', io: 'input', fe_per_tick: 20 }
+        ]
+    })
+})
+```
 
 ### 5 个Hook的能力差异（综合）
 
@@ -405,7 +472,7 @@ if (changed) ctx.setRequirements(nextRequirements)
 | 配方机器的"每 tick 强制副作用"（无论配方是否在跑：屏幕、`dataStorage`、网络探测） | `MachineBuilderJS.preServerTick` / `MachineBuilderJS.postServerTick` | `recipeTick` 只在配方运行中触发；要做"配方未启动也要每 tick 跑"的全局逻辑，写在这两个 `MachineBuilderJS` Hook里 |
 | 自定义复杂合成的节奏（多阶段、跨配方共享需求修改） | `recipeBehavior` | 仍需要配方数据来定义"做什么"，但每个阶段需要插入自定义回调 |
 
-本机器是"`recipeBehavior` 5 个Hook全用上"的完整样本，对应 [纯Tick测试机器 的"何时用 PURE_TICK vs RECIPE_TICK"](../JavaAPI/纯Tick测试机器#何时用-pure_tick-vs-recipe_tick) 章节的第二种用法。
+本机器是"`recipeBehavior` 5 个Hook全用上"的完整样本，可与 [纯Tick测试机器](../JavaAPI/纯Tick测试机器) 的无配方方案对照阅读。
 
 ## 延伸阅读
 
@@ -417,10 +484,10 @@ if (changed) ctx.setRequirements(nextRequirements)
 - [纯Tick测试机器](../JavaAPI/纯Tick测试机器) — `tickBehavior` 在 Java 端的完整演示。
 - [KubeJS API](../API/KubeJS) — 本教程引用 API 的集中参考。
 - [KubeJS API#MachineBehaviorBuilderJS](../API/KubeJS#machinebehaviorbuilderjs) — 5 个Hook的签名与触发时机。
-- [KubeJS API#recipeBehavior](../API/KubeJS#recipebehaviorconsumer-machinebehaviorbuilderjs-builder--machinebuilderjs) — `recipeBehavior` 入口。
+- [KubeJS API#recipeBehavior](../API/KubeJS#recipebehaviorconsumermachinebehaviorbuilderjs-builder--machinebuilderjs) — `recipeBehavior` 入口。
 - [KubeJS API#ControllerScreenTextEventJS](../API/KubeJS#controllerscreentexteventjs) — 屏幕文本注册的所有方法。
-- [KubeJS API#preServerTick](../API/KubeJS#preservertickconsumer-machinebehaviorcontext-callback--machinebuilderjs) / [postServerTick](../API/KubeJS#postservertickconsumer-machinebehaviorcontext-callback--machinebuilderjs) — 配方机器的"每 tick 全局注入"。
-- [KubeJS API#RecipeStartContext](../API/JavaAPI#recipestartcontext) — `beforeStart` Hook上下文，`replaceExactItemInputCount(...)` 等便捷方法的归属。
+- [KubeJS API#preServerTick](../API/KubeJS#preservertickconsumermachinebehaviorcontext-callback--machinebuilderjs) / [postServerTick](../API/KubeJS#postservertickconsumermachinebehaviorcontext-callback--machinebuilderjs) — 配方机器的"每 tick 全局注入"。
+- [底层 RecipeStartContext](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/api/machine/definition/RecipeStartContext.java) — `beforeStart` 上下文及 `replaceExactItemInputCount(...)` 的实现。
 
 ## 未在 KubeJS.md 中覆盖的 API
 
@@ -429,4 +496,4 @@ if (changed) ctx.setRequirements(nextRequirements)
 - **`net.minecraft.world.entity.LivingEntity`** — Minecraft 原版"活体生物"基类；KubeJS 端通过 `Java.loadClass` 拿，作为 `level.getEntitiesOfClass(LivingEntity, area)` 的过滤类型。
 - **`net.minecraft.world.effect.MobEffects`** — 原版药水效果常量（`STRENGTH` / `NIGHT_VISION`），用 `Java.loadClass` 拿。
 - **`net.minecraft.world.phys.AABB`** — KubeJS 提供 `AABB.of(...)` 工厂；但 AABB 的内部字段与方法在 [KubeJS.md](../API/KubeJS) 中没有独立条目。
-- **`net.minecraft.world.item.Items`** — 原版物品常量（`GOLD_INGOT` 等），用 `Java.loadClass` 拿，作为 [`RecipeStartContext.replaceExactItemInputCount(...)`](../API/JavaAPI#recipestartcontext) 的入参。
+- **`net.minecraft.world.item.Items`** — 补充便捷写法使用的原版物品常量（`GOLD_INGOT`），官方脚本的手动写法用 `BuiltInRegistries` 比较注册 ID。

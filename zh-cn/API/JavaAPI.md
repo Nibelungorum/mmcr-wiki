@@ -52,7 +52,7 @@ public interface MachineDefinitionProvider {
 }
 ```
 
-定义注册有两种受支持的方式：实现 Provider，或订阅定义事件。生产启动先调用 `ServiceLoader.load(MachineDefinitionProvider)` 中的 Provider，再发布**同一个**定义事件到 `NeoForge.EVENT_BUS`，随后注册动态控制器并冻结窗口。不要在两条路径中重复提交同一 ID。
+定义注册需要实现 Provider。生产启动先调用 `ServiceLoader.load(MachineDefinitionProvider)` 中的 Provider，随后注册动态控制器并冻结窗口。不要在两条路径中重复提交同一 ID。
 
 Provider 示例：
 
@@ -76,15 +76,7 @@ public final class MyMachinesProvider implements MachineDefinitionProvider {
 com.example.MyMachinesProvider
 ```
 
-事件方式则在注册窗口发布前挂接监听器，例如在附属 Mod 初始化时调用：
-
-```java
-NeoForge.EVENT_BUS.addListener(MyRegistrations::definitions);
-NeoForge.EVENT_BUS.addListener(MyRegistrations::structures);
-NeoForge.EVENT_BUS.addListener(MyRegistrations::recipes);
-```
-
-对应方法参数分别为下述三个事件。也可使用 NeoForge 的 `@SubscribeEvent` 订阅方式。事件方式不需要 ServiceLoader 文件；Provider 只收集定义，结构和配方仍在各自事件中注册。启动声明变更需要重启游戏。
+Provider 只收集定义，结构和配方仍在各自事件中注册。启动声明变更需要重启游戏。
 
 源码：[Provider](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/publicapi/registration/MachineDefinitionProvider.java)、[生产启动顺序](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/internal/registration/StartupContentRegistration.java)。
 
@@ -105,7 +97,7 @@ void registerMachine(MachineSpec definition);
 Map<Identifier, MachineSpec> definitions();
 ```
 
-回调方式自动执行构建；直接方式接受 `Machines.machine(id)...build()` 产生的 `MachineSpec`。`definitions()` 返回不可变映射快照，可用于检查已有 ID，但不要借此默默覆盖别的 Mod 的声明。事件的公开构造器不表示可以自行创建窗口并让生产注册系统采用它；附属 Mod 应使用 MMCR 发布的事件。
+回调方式自动执行构建；直接方式接受 `Machines.machine(id)...build()` 产生的 `MachineSpec`。`definitions()` 返回不可变映射快照，可用于检查已有 ID，但不要借此默默覆盖别的 Mod 的声明。事件的公开构造器不表示可以自行创建窗口并让生产注册系统采用它。
 
 ### `RegisterMachineStructuresEvent` 与 `StructureRegistrar`
 

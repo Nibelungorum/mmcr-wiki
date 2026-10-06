@@ -172,29 +172,13 @@ com.example.myfirstmachine.MyFirstMachineProvider
 
 MMCR 启动时遍历声明的 Provider，逐个调用 `register` 方法。Provider 应是可由 ServiceLoader 实例化的公共类，并具有公共无参构造器；上面的类使用隐式公共无参构造器即可。确认资源文件被打入附属 Mod 的 JAR。
 
-### 3. 可选：改用定义事件
-
-若更习惯事件订阅，可以不创建 SPI 文件，将以下方法加入后文的 `MyFirstMachineRegistrar` 类，用它替代 Provider 注册：
-
-```java
-@SubscribeEvent
-public static void registerDefinitions(RegisterMachineDefinitionsEvent event) {
-    event.registerMachine(Machines.machine(MY_FIRST_MACHINE)
-            .recipePool(MY_FIRST_MACHINE)
-            .displayNameKey("machine.my_mod.my_first_machine")
-            .appearance(a -> a.machineBasicBlock("minecraft:purpur_block"))
-            .build());
-}
-```
-
-此时补充导入 `cn.howxu.mmcr.publicapi.Machines` 与 `cn.howxu.mmcr.publicapi.event.RegisterMachineDefinitionsEvent`。监听器必须在 MMCR 发布定义事件之前就已注册；后文使用的自动订阅类用于这一点。
+监听器必须在 MMCR 发布定义事件之前就已注册。
 
 ### 字段说明
 
 示例中调用的接口含义：
 
 - `MachineDefinitionProvider.register(RegisterMachineDefinitionsEvent)`：Provider 的启动期注册回调。
-- `RegisterMachineDefinitionsEvent.definitions()`：返回已收集定义的只读快照，可用于检查 ID；不要用检查静默掩盖不同 Mod 的 ID 冲突。
 - `RegisterMachineDefinitionsEvent.registerMachine(MachineSpec)`：提交机器声明。也可用 `registerMachine(Identifier, Consumer<MachineDraft>)` 在事件内直接配置。
 - `Machines.machine(Identifier)`：以命名空间 ID 创建 `MachineDraft`。
 - `MachineDraft.recipePool(Identifier...)`：声明机器使用的配方池。本教程让池 ID 与机器 ID 相同，但它们是不同概念，多个机器可以共享池。

@@ -77,23 +77,11 @@ MMCREvents.startup(event => {
 
 本阶段的代码全部在`server_scripts`目录下。
 
-首先创建 `kubejs/server_scripts/structure/my_first_machine.js`，也可以使用其它 `.js` 文件名。
+沿用上一章节导出的**机器结构**和上一阶段使用的**机器注册名**`"my_mod:my_first_machine"`。
 
-接下来沿用上一章节导出的**机器结构**和上一阶段使用的**机器注册名**`"my_mod:my_first_machine"`。
+如果上一章节导出了结构，可以直接把导出文件移到 `server_scripts/structure/` 目录下，它的命名一定为"导出时间+js后缀"。
 
-如果上一章节导出了结构，可以把导出文件移到 `server_scripts/structure/`，将 `.txt` 后缀改为 `.js`，再按下文补齐事件包装。导出文本中的 `.pattern(...)` 与 `.set(...)` 是构建链片段，不能只改后缀就当成完整脚本运行：
-
-![](/kubejs/2.png)
-
-修改其名称后:
-
-![](/kubejs/3.png)
-
-接下来在你的编辑器中打开它。为了使教程更容易理解，我这里换了一个更小和更简单的结构:
-
-![](/kubejs/4.png)
-
-`.pattern(...)` 与 `.set(...)` 都返回当前 `MachineStructureBuilderJS`，可以继续链式调用。每次 `.pattern([...])` 添加一个二维切片；先声明所有切片，再绑定出现的字符。例如下面是本教程使用的 3×3×3 模式片段（还需要加上事件开头与 `.build()` 结尾）：
+接下来在你的编辑器中打开它。为了使教程更容易理解，我这里换了一个更小和更简单的结构，专门用来进行解释:
 
 ```js
 .pattern(['XXX', 'XHX', 'XXX'])
@@ -104,50 +92,16 @@ MMCREvents.startup(event => {
 .controller('C')
 ```
 
-因此，我们只需要做出一些很小的修改就可以完成结构的注册:
+`.pattern(...)` 与 `.set(...)` 都返回当前 `MachineStructureBuilderJS`，可以继续链式调用。每次 `.pattern([...])` 添加一个二维切片；先声明所有切片，再绑定出现的字符。
 
-首先，在第一个 `.pattern(...)` 前插入以下内容：
-
+导出工具自动生成了整个完整的JS事件，因此，我们只需要修改结构对应的机器id就可以了(是的，就改这么一行):
 ```js
-MMCREvents.server(event => {
-    const api = event.getAPI()
     event.createStructure("my_mod:my_first_machine")
 ```
 
-可以看到这是一个不完整的 JS 脚本片段，其作用是：**监听 `MMCREvents.server` 事件，创建 api 对象，向事件注册 `my_mod:my_first_machine` 这台机器的结构**。这是一个模板开头，只需修改其中出现的机器注册名。
-
-随后，在脚本末尾加入以下内容:
-
-```js
-        .build()
-})
-```
-
-这也是一个不全的js脚本语段，但是和前者放到一起用就是一个完整的js脚本了。
-
-以下是添加模版开头和模版结尾之后的示例代码:
-
-![](/kubejs/5.png)
-
-接下来，确认导出模式中的控制器字符。本例为 `C`，如果导出链中仍有 `.set('C', api.block(...))`，用 `.controller('C')` 替换；若导出结果已经包含 `.controller('C')`，保留即可。控制器字符必须在整个模式中恰好出现一次：
+改完之后就是这个样子:
 
 ![](/kubejs/6.png)
-
-补齐后的完整结构脚本如下，可直接放入上述文件。若使用自己的导出模式，替换切片及字符绑定即可：
-
-```js
-MMCREvents.server(event => {
-    const api = event.getAPI()
-    event.createStructure("my_mod:my_first_machine")
-        .pattern(['XXX', 'XHX', 'XXX'])
-        .pattern(['XHX', 'HCH', 'XHX'])
-        .pattern(['XXX', 'XHX', 'XXX'])
-        .set('X', api.block('minecraft:purpur_pillar'))
-        .set('H', api.block('minecraft:purpur_pillar'))
-        .controller('C')
-        .build()
-})
-```
 
 - `MMCREvents.server`：在服务端资源加载/重载时收集结构声明。
 - `event.getAPI()`：返回 `KubeJSApi`，提供方块条件、接口族条件等帮助方法。
@@ -157,7 +111,7 @@ MMCREvents.server(event => {
 - `.controller('C')`：绑定目标机器的控制器，不需要手写控制器方块 ID。
 - `.build()`：完成并提交结构声明。本教程使用顶层 `.pattern/.set` 写法，不与阶段回调写法混用。
 
-以下是开始时导出建筑的示例代码，你可以发现也是以上的格式:
+以下是开始时导出建筑的示例代码，同样只需要修改一行id就可以直接使用:
 
 ![](/kubejs/7.png)
 

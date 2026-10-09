@@ -81,27 +81,26 @@ MMCREvents.startup(event => {
 
 如果上一章节导出了结构，可以直接把导出文件移到 `server_scripts/structure/` 目录下，它的命名一定为"导出时间+js后缀"。
 
-接下来在你的编辑器中打开它。为了使教程更容易理解，我这里换了一个更小和更简单的结构，专门用来进行解释:
+![alt text](/kubejs/16.png)
+
+![alt text](/kubejs/17.png)
+
+![alt text](/kubejs/18.png)
+
+接下来在你的编辑器中打开它。导出工具自动生成了整个完整的JS脚本，因此，我们只需要修改结构对应的机器id就可以了(是的，就改这么一行):
 
 ```js
-.pattern(['XXX', 'XHX', 'XXX'])
-.pattern(['XHX', 'HCH', 'XHX'])
-.pattern(['XXX', 'XHX', 'XXX'])
-.set('X', api.block('minecraft:purpur_pillar'))
-.set('H', api.block('minecraft:purpur_pillar'))
-.controller('C')
-```
-
-`.pattern(...)` 与 `.set(...)` 都返回当前 `MachineStructureBuilderJS`，可以继续链式调用。每次 `.pattern([...])` 添加一个二维切片；先声明所有切片，再绑定出现的字符。
-
-导出工具自动生成了整个完整的JS事件，因此，我们只需要修改结构对应的机器id就可以了(是的，就改这么一行):
-```js
-    event.createStructure("my_mod:my_first_machine")
+    // 这是原本的
+    const structure = event.createStructure("mmcr_kubejs:exported_structure")
+    // 换成下面这一行
+    const structure = event.createStructure("my_mod:my_first_machine")
 ```
 
 改完之后就是这个样子:
 
 ![](/kubejs/6.png)
+
+具体的说明如下:
 
 - `MMCREvents.server`：在服务端资源加载/重载时收集结构声明。
 - `event.getAPI()`：返回 `KubeJSApi`，提供方块条件、接口族条件等帮助方法。
@@ -111,17 +110,13 @@ MMCREvents.startup(event => {
 - `.controller('C')`：绑定目标机器的控制器，不需要手写控制器方块 ID。
 - `.build()`：完成并提交结构声明。本教程使用顶层 `.pattern/.set` 写法，不与阶段回调写法混用。
 
-以下是开始时导出建筑的示例代码，同样只需要修改一行id就可以直接使用:
-
-![](/kubejs/7.png)
-
 注意：**不要**让 `.set('C', xxxx)` 和 `.controller('C')` 同时存在。
 
 随后，你可以在启动游戏之前先在`kubejs`目录的`assets`的任意命名空间内新建一个i18n翻译键文件，然后为你的机械创建一些翻译键。
 
 当前生成的控制器实际注册在 MMCR 的命名空间中，本例的方块/物品 ID 为 `mmcr:my_first_machine_controller`。对应键为 `item.mmcr.my_first_machine_controller` 和 `block.mmcr.my_first_machine_controller`；机器与配方池的翻译键则使用 `my_mod`。
 
-(位于.minecraft/kubejs/assets/kubejs/lang/zh_cn.json):
+位于.minecraft/kubejs/assets/kubejs/lang/zh_cn.json:
 ```json
 {
     "machine.my_mod.my_first_machine": "我的第一台MMCR机械",
@@ -154,14 +149,14 @@ MMCREvents.startup(event => {
 打开之前**注册结构**的 JS 脚本，寻找一个合适的预留位置，本例选择紫珀柱绑定的 `H`：
 
 ```js
-.set('H', api.block('minecraft:purpur_pillar'))
+.set('H', api.state('minecraft:purpur_pillar[axis=y]'))
 ```
 
 把它修改为:
 
 ```js
 .set('H', api.anyOf(
-    api.block('minecraft:purpur_pillar'),
+    api.state('minecraft:purpur_pillar[axis=y]'),
     api.anyOfItemInput(),
     api.anyOfItemOutput(),
     api.anyOfEnergyInput()

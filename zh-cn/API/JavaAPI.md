@@ -6,8 +6,6 @@ title: JavaAPI
 
 本页集中列出 Java 公共层的入口、声明、运行时视图和扩展契约。文中的签名以该提交的实现为准，不代表某个尚未确认的 Maven 发布版本。
 
-端口数量与等级约束部分已按提交 [`c2563c41`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/commit/c2563c4110cd15bad0218dc4fa5a4f091fbccc87) 更新，包含 Mekanism 化学品、放射性化学品与热量端口；其余章节仍以 `f234477b` 为基准。
-
 ## 包路径与边界
 
 公共 API 根包为 **`cn.howxu.mmcr.publicapi`**。下文每节注明包名；节内的简单类型名与该包拼接即为完整类名，嵌套类型按 `外层类型.内层类型` 引用。签名块省略 import 和实现体；接口方法隐含 `public`，工厂方法标明 `static`，可空值用 `@Nullable` 标出。
@@ -24,6 +22,8 @@ title: JavaAPI
 | `behavior` `runtime` | 行为钩子、上下文、IO 快照和事务、运行状态 |
 | `data` `network` | 数据值/存储/仓库契约、排队请求 |
 | `presentation` | 控制器文本、Jade 文本、IO 展示 |
+| `ui` | 控制器 UI 快照、类型化协议、服务端请求与状态提供器 |
+| `client.ui` | 完整屏幕工厂、打开上下文、会话、槽位显隐与订阅 |
 | `client.render` `client.jei` | 客户端渲染与 JEI 注册 |
 
 [`apiJar` 的包含规则](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/gradle/scripts/publishing.gradle)仅为 `cn/howxu/mmcr/publicapi/**/*.class`。Minecraft、NeoForge、Gson、Mojang Codec 等签名依赖仍需由调用方的开发环境提供。
@@ -35,7 +35,7 @@ title: JavaAPI
 - `Draft`、`Options`、`Spec`、`View`、注册器等标有 `@ApiStatus.NonExtendable` 的接口由 MMCR 创建。通过工厂或回调取得，**不要自行实现、继承或强转到底层类型**。
 - `Draft` 是可变配置句柄，链式方法返回当前句柄；`build()` 产生声明视图，并不等于注册。注册回调内部由 MMCR 自动构建，不要求回调返回构建器。
 - `Spec` 是声明视图；运行中的配方使用 `RecipeView`，机器使用 `MachineView`。它们不是可用 `new` 构造的公共 record。
-- 真正可由附属 Mod 实现的 SPI 包括 `MachineDefinitionProvider`、行为/网络/文本/渲染回调、`Repository`、`Reservation`、`RequirementExtension`、`RequirementExecution`、`OutputExtension`、`RecipeOperation`、`OperationPlanner`、`ReservationPlanner`、`SyncPayloadCodec`。
+- 真正可由附属 Mod 实现的 SPI 包括 `MachineDefinitionProvider`、行为/网络/文本/渲染回调、`Repository`、`Reservation`、`RequirementExtension`、`RequirementExecution`、`OutputExtension`、`RecipeOperation`、`OperationPlanner`、`ReservationPlanner`、`SyncPayloadCodec`、`ControllerUiFactory`、`UiRequestHandler`、`UiStateProvider`。
 - 公共 record 用于明确的数据载体，例如 `RepositoryContext`、`RepositoryRequest`、`ResourceAmount`、`HeatState` 和扩展规划结果。
 
 ## 1. 注册事件与 Provider
@@ -153,7 +153,7 @@ void registerRecipe(Identifier id, Consumer<RecipeDraft> configuration);
 Map<Identifier, RecipeSpec> recipes();
 ```
 
-配方 ID 全局唯一；配方必须声明一个配方池。`recipes()` 是不可变声明快照，不是运行中的合成列表。客户端渲染和 JEI 的三个注册事件见后文。
+配方 ID 全局唯一；配方必须声明一个配方池。`recipes()` 是不可变声明快照，不是运行中的合成列表。客户端渲染、JEI 和完整控制器 UI 的注册事件见后文。
 
 ### `RegistrationException`
 
@@ -2267,13 +2267,267 @@ static void information(RegisterJeiRecipeInformationEvent event) {
 
 这些事件在 JEI 集成收集阶段发布，不是通用机器定义 Provider 的附加方法。注册返回列表只用于查看条目，不表示 JEI 已经完成解析和渲染。
 
-## 19. 使用与迁移自检
+## 19. 完整控制器 UI {#controller-ui}
+
+协议与快照位于 `cn.howxu.mmcr.publicapi.ui`，客户端接入位于 `cn.howxu.mmcr.publicapi.client.ui`，注册事件位于 `.event`。
+
+此扩展允许为一台机器注册完整的控制器屏幕。MMCR 管理原菜单、会话身份、状态同步与请求传输；附属 Mod 提供屏幕、纯数据 Codec 和服务端业务回调。可以使用原生 Minecraft UI 或 Modern UI 等框架，公共接口不依赖 Modern UI 的控件类型。接入示例见 [UI 测试机器](../JavaAPI/UI测试机器)。
+
+### 注册事件与窗口
+
+```java
+// event.RegisterControllerUiProtocolsEvent extends Event implements IModBusEvent
+public RegisterControllerUiProtocolsEvent(Collection<Identifier> machineIds);
+public UiProtocolRegistrar registrar();
+
+// ui.UiProtocolRegistrar
+<Q, R> void request(Identifier machineId, UiRequestType<Q, R> type,
+        UiRequestHandler<Q, R> handler);
+<T> void state(Identifier machineId, UiStateType<T> type, UiStateProvider<T> provider);
+
+// event.RegisterControllerUisEvent extends Event implements IModBusEvent
+public RegisterControllerUisEvent(Collection<Identifier> machineIds);
+public RegisterControllerUisEvent.Registrar registrar();
+public void register(Identifier machineId, ControllerUiFactory factory);
+
+// event.RegisterControllerUisEvent.Registrar
+void register(Identifier machineId, ControllerUiFactory factory);
+```
+
+两个事件均通过 **Mod 事件总线**发布：
+
+| 事件 | 发布阶段与侧别 | 注册内容 |
+| --- | --- | --- |
+| `RegisterControllerUiProtocolsEvent` | 网络 payload 注册阶段，客户端与服务端均收集。 | 机器 ID 对应的请求处理器与状态提供器。 |
+| `RegisterControllerUisEvent` | 客户端菜单屏幕注册阶段，仅客户端。 | 每个已知物理机器 ID 的完整屏幕工厂。 |
+
+机器必须先完成定义注册。事件分发结束后注册器冻结，即使监听器抛异常也会关闭窗口；保留事件或注册器不能延迟追加。未知机器、重复注册、窗口关闭后写入等拒绝通过公共层抛出 `RegistrationException`。公开构造器不表示附属 Mod 可以自行发布一个事件来替换生产注册结果。
+
+请求与状态共享同一台机器的协议 ID 空间，每台机器最多注册 64 项。相同协议 ID 可供多台机器使用，但必须复用相同版本及 Codec 实例；不能把同一个 ID 同时作为请求和状态，也不能用不同 Codec 静默覆盖已有声明。建议将类型描述符与 Codec 定义为共享静态常量，并在两端注册一致的定义。
+
+客户端屏幕工厂按物理机器 ID 路由，不按配方池或运行通道注册。未注册工厂时使用默认屏幕；工厂抛出 `RuntimeException`、返回的屏幕没有实现 `MenuAccess` 或绑定了错误菜单时，运行时记录错误、恢复玩家背包可见性并回退到默认屏幕。
+
+### `UiRequestType<Q, R>` 与 `UiStateType<T>`
+
+```java
+// UiRequestType<Q, R>：Q 为请求体，R 为成功响应体
+static <Q, R> UiRequestType<Q, R> of(Identifier id, int version,
+        StreamCodec<RegistryFriendlyByteBuf, Q> requestCodec,
+        StreamCodec<RegistryFriendlyByteBuf, R> responseCodec);
+Identifier id();
+int version();
+
+// UiStateType<T>：T 为自定义状态快照
+static <T> UiStateType<T> of(Identifier id, int version,
+        StreamCodec<RegistryFriendlyByteBuf, T> codec);
+Identifier id();
+int version();
+```
+
+这些描述符由 MMCR 工厂创建，不能自行实现。`version` 必须为正数；ID 与 Codec 不得为 null。`StreamCodec` 和 `RegistryFriendlyByteBuf` 分别来自 Minecraft 的 `net.minecraft.network.codec` 与 `net.minecraft.network`。
+
+Codec 只处理协议数据，不读取 Minecraft 实例、玩家、世界或可变菜单。客户端 `request` 会在返回前编码并冻结请求体，因此 Codec 可能在调用者所在的 UI 线程执行；不要把服务端上下文或客户端控件放进载荷。协议版本应随不兼容的载荷变化更新。
+
+### `UiRequestHandler<Q, R>`、`UiServerContext` 与 `UiStateProvider<T>`
+
+```java
+// UiRequestHandler<Q, R>
+UiResult<R> handle(UiServerContext context, Q request);
+
+// UiServerContext
+ServerPlayer player();
+MachineContext machine();
+Optional<String> laneId();
+
+// UiStateProvider<T>
+long revision(UiServerContext context);
+T snapshot(UiServerContext context);
+```
+
+请求处理器同步运行于服务端线程。`machine()` 是公共 `MachineContext`，`machine().dataStorage()` 仍可能为 null；`laneId()` 表示请求可选的执行通道。不要保存上下文供异步世界访问。普通存储写入立即生效，回调异常不会自动回滚已执行的写入或任意世界副作用。
+
+状态提供器用于发布**最新值**，不是每次请求都必须收到的响应。`revision` 必须非负，在同一个会话内随状态变化单调递增；首次采集及修订号变化时调用 `snapshot`。状态变了却不更新修订号，不会触发新快照；客户端会忽略旧修订号。两次回调应读取同一份权威状态，自定义状态与基础 UI 快照使用各自的修订号。
+
+服务端在当前有效的菜单会话中采集状态；提供器 / 编码失败会记录诊断，不会把错误值推送为新状态。一次失败的修订号不会持续重试，修复状态后应推进修订号。
+
+### `UiResult<R>`
+
+```java
+enum Status {
+    SUCCESS, REJECTED, UNSUPPORTED, VERSION_MISMATCH, INVALID_REQUEST,
+    CLOSED, TIMEOUT, BUSY, HANDLER_FAILED
+}
+static <R> UiResult<R> success(R value);
+static <R> UiResult<R> reject(Component reason);
+Status status();
+Optional<R> value();
+Optional<Component> message();
+```
+
+处理器使用 `success` 返回非 null 的成功响应，或用 `reject` 返回非 null 的拒绝原因；其他状态由运行时产生。只有 `SUCCESS` 包含 `value()`，其他状态为空。拒绝消息按公共边界复制，建议使用 `Component.translatable`。
+
+| 状态 | 含义 |
+| --- | --- |
+| `SUCCESS` | 服务端处理成功，带有响应体。 |
+| `REJECTED` | 业务处理器主动拒绝，通常带原因。 |
+| `UNSUPPORTED` | 当前机器 / 会话不支持该协议。 |
+| `VERSION_MISMATCH` | 请求版本与服务端协议版本不一致。 |
+| `INVALID_REQUEST` | 请求数据无效、编码 / 解码失败、快照尚未就绪或通道无效。 |
+| `CLOSED` | 请求所属菜单会话已关闭或失效。 |
+| `TIMEOUT` | 等待响应超时。 |
+| `BUSY` | 待处理请求已达到运行时限额。 |
+| `HANDLER_FAILED` | 处理、响应编码或传输路径失败。 |
+
+成功响应是请求反馈，不会代替基础快照或自定义状态流。需要显示机器当前数值时，以服务端同步的状态为准，不要只把提交的输入当作已同步状态。
+
+### `ControllerUiFactory` 与 `ControllerUiOpenContext`
+
+```java
+// client.ui.ControllerUiFactory（用户函数式接口）
+Screen create(ControllerUiOpenContext context);
+
+// client.ui.ControllerUiOpenContext
+AbstractContainerMenu menu();
+Inventory inventory();
+Component title();
+ControllerUiSession session();
+```
+
+工厂在客户端主线程执行。返回的 `Screen` 必须实现 Minecraft 的 `MenuAccess`，且 `getMenu()` 必须返回**同一个 `context.menu()` 实例**；可以继承满足该契约的容器屏幕。不能另建菜单、仅返回没有菜单绑定的普通屏幕，或把 `menu()` 强转为 MMCR 内部菜单类型。
+
+`menu` / `inventory` 是打开屏幕时的原生对象，只在客户端主线程使用；`title` 为复制的组件。不同 UI 框架通过 `session` 读取发布后的数据并发送请求，不应跨线程直接读取原生菜单、背包或世界。
+
+### `ControllerUiSession`
+
+```java
+UUID id();
+boolean isOpen();
+ControllerUiSnapshot snapshot();
+ControllerUiSlots slots();
+boolean supports(UiRequestType<?, ?> type);
+boolean supports(UiStateType<?> type);
+<Q, R> CompletionStage<UiResult<R>> request(UiRequestType<Q, R> type, Q body);
+<Q, R> CompletionStage<UiResult<R>> request(UiRequestType<Q, R> type, String laneId, Q body);
+UiSubscription subscribe(Executor executor, Consumer<ControllerUiSnapshot> listener);
+<T> UiSubscription subscribe(UiStateType<T> type, Executor executor, Consumer<T> listener);
+<T> Optional<T> state(UiStateType<T> type);
+UiSubscription onClosed(Executor executor, Runnable listener);
+void close();
+```
+
+一次菜单打开对应一个会话 UUID。`snapshot`、`state`、`supports`、请求和订阅入口可在 UI 线程使用；底层将传输与菜单生命周期操作调度回客户端主线程。槽位操作另有主线程要求，见下节。
+
+- `snapshot()` 初始返回打开信息，`ready()` 为 false；收到首份服务端完整快照后才为 true。显示时可先用打开标题，请求应等待就绪。
+- `supports(...)` 检查服务端打开信息中的协议能力与本地注册的类型、版本及 Codec 是否匹配；同 ID 不代表自动兼容。
+- 无 `laneId` 的请求针对控制器；带通道的重载必须使用当前快照中的有效执行通道 ID，不接受空白值。普通配方通道为 `base`，纯 Tick 机器没有配方通道；工厂空闲展示占位通道不能作为实际请求目标。
+- `request(...)` 返回 `CompletionStage`，不阻塞等待。请求结果在客户端主线程完成；若要更新 Modern UI 等框架的控件，使用 `thenAcceptAsync` / `whenCompleteAsync` 并明确传入该框架的 UI executor。
+- 基础快照订阅会交付当前值；自定义状态订阅在已有状态时交付当前值，否则等待首份状态。`state(type)` 在不支持、未收到值或会话关闭时返回空。
+- 回调运行于传入的 executor，同一个订阅内串行交付；积压的最新值可以合并，不能把订阅当作逐条事件日志。自定义状态值在读取 / 交付时独立解码，不共享可变载荷。
+- `onClosed` 监听会话结束；为已关闭会话注册时，也会通过 executor 安排结束通知。界面销毁时释放订阅，避免待执行回调访问旧控件。
+- `close()` 调度关闭当前会话及仍与它匹配的菜单。更换菜单、登出或绑定失效也会结束旧会话；旧会话不能关闭后来打开的菜单，未完成请求以 `CLOSED` 结束。
+
+### `ControllerUiSlots` 与 `UiSubscription`
+
+```java
+// client.ui.ControllerUiSlots
+boolean isPlayerInventoryVisible();
+void setPlayerInventoryVisible(boolean visible);
+
+// client.ui.UiSubscription extends AutoCloseable
+void close();
+```
+
+槽位句柄控制原菜单中玩家背包槽位的显隐，不创建、删除或重新编号槽位。读写都要求客户端主线程，写入还要求有效且匹配的菜单会话；可在屏幕工厂或原生屏幕初始化时设置，不能在 Modern UI 的 UI 线程直接切换。
+
+`UiSubscription.close()` 取消后续交付，包括已经排队但尚未开始的回调；已经执行中的回调不能被中断。关闭某个订阅不等于关闭整个菜单会话。
+
+### `ControllerUiSnapshot`
+
+```java
+enum Kind { NORMAL, TICK, FACTORY }
+enum Role { NORMAL, HOST, MODULE }
+UUID sessionId();
+long revision();
+boolean ready();
+ResourceKey<Level> dimension();
+BlockPos controllerPos();
+Identifier machineId();
+Kind kind();
+Role role();
+Component machineName();
+boolean formed();
+boolean active();
+boolean redstonePaused();
+int installedModuleCount();
+Optional<Identifier> connectedHostId();
+int matchedStage();
+int stageCount();
+List<Identifier> foundLevelIds();
+int parallelSlots();
+long maxParallelism();
+int threadLimit();
+int activeThreadCount();
+List<Identifier> recipePoolIds();
+Optional<Identifier> currentRecipePoolId();
+Optional<RuntimeFailure> failure();
+boolean hasDataStorage();
+Map<String, DataKey> dataStorageValues();
+List<TextLine> lines();
+List<Lane> lanes();
+```
+
+这是由运行时发布的只读展示视图，没有服务器世界、可变控制器实体或实时 `DataStore`。`dimension()` 是维度键，不是 `Level` 对象。`dataStorageValues()` 是已同步的数据值，修改本地值不会回写服务端；要修改存储需声明请求并在服务端处理。
+
+`Kind` 区分普通配方、纯 Tick 与工厂执行形态，`Role` 区分普通、宿主与模块角色，两者不能混用。`ready()` 只表示首份权威快照已经到达，不等于结构已成型或配方正在执行；分别检查 `formed()`、`active()` 等字段。基础快照修订号在当前会话内用于区分新旧版本，不能与自定义状态的修订号比较。
+
+### `ControllerUiSnapshot.Lane` 与配方展示
+
+```java
+// ControllerUiSnapshot.Lane
+String id();
+int index();
+boolean base();
+boolean core();
+boolean active();
+Optional<Identifier> recipeId();
+int tick();
+int totalTick();
+long parallelism();
+Optional<RuntimeFailure> failure();
+List<TextLine> lines();
+RecipePresentation recipe();
+
+// ControllerUiSnapshot.RecipePresentation
+List<Output> outputs();
+long energyInputPerTick();
+long energyOutputPerTick();
+double heatOutputPerTick();
+int durationTicks();
+long parallelism();
+
+// ControllerUiSnapshot.Output
+OutputView resource();
+long amount();
+
+// ControllerUiSnapshot.TextLine
+enum Scope { CONTROLLER, OPERATION }
+Identifier id();
+Scope scope();
+Component text();
+```
+
+`Lane.id()` 是请求用的稳定通道标识，`index()` 是展示索引；不要自行用索引拼通道 ID。普通配方使用基础通道，工厂可包含多条执行通道及空闲展示占位，纯 Tick 不提供配方执行通道。配方与失败都可缺失，绘制进度前应检查 `totalTick()`，不要除以零。
+
+`RecipePresentation` 提供已按并行数缩放的预期输出与每 tick 能量 / 热量展示，不要再次乘 `parallelism()`。`Output.resource()` 是公共 `runtime.OutputView`，`amount()` 单独给出预期总量，不应从图标堆栈数量推算产量；这些都是展示数据，不证明输出已经提交。
+
+全局 `lines()` 与通道 `lines()` 保留来自控制器 / 操作逻辑的外部文本；`TextLine.text()`、`machineName()` 等组件读取返回副本。`TextLine.Scope` 是 UI 快照中的枚举，与文本写入入口使用的 `presentation.TextScope` 分属不同类型。
+
+## 20. 使用与迁移自检
 
 - import 从 `cn.howxu.mmcr.publicapi` 及本页列出的子包选择；Java 公共示例不引入 MMCR 底层 `api`/内部适配类型。
 - 机器、结构、配方分别通过 `Machines`、`Structures`、`Recipes` 工厂声明，并在相应事件窗口提交。`Consumer<Draft>` 配置完成后由 MMCR 构建。
 - 声明视图、运行视图和自定义载荷 SPI 有不同所有权：只实现明确开放的 SPI，复制堆栈/载荷后修改不会自动回写。
 - 直接 tick IO 先模拟再一次性提交；同步数据变更用带事务的 `DataStore.set`，网络回调普通写入不隐式回滚。
 - 客户端渲染读取已发布状态，26.1.2 渲染签名使用提交节点；JEI 注册工作台与说明各有窗口。
+- 完整 UI 的协议在两端注册，屏幕工厂仅在客户端注册；保留原菜单，通过会话读取快照与发送请求，并在界面销毁时释放订阅。
 - 扩展需求/输出同时提供序列化、复制、规划及输出需求转换契约；底层端口能力实现不包含在公共 API jar 中。
-
-端口数量与等级约束部分以 `c2563c41` 为基准，其余签名与源码链接以 `f234477b` 为基准。升级源码后应重新核对公共层声明及底层执行语义，而不是仅替换包名前缀。

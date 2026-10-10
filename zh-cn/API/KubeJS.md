@@ -6,6 +6,8 @@ title: KubeJS API
 
 本页是 MMCR 的 KubeJS 集成层的集中参考，固定对应 **Minecraft 26.1.2、Java 25、KubeJS 26.1.2-8.0.6**，源码基线为提交 [`f234477b`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/gradle.properties)。示例使用 KubeJS/Rhino 的 JavaScript 写法。
 
+端口数量需求、等级需求及相关快捷工厂已按提交 [`c2563c41`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/commit/c2563c4110cd15bad0218dc4fa5a4f091fbccc87) 更新，包含 Mekanism 化学品、放射性化学品与热量端口。
+
 MMCR 的 KubeJS API 分为三个声明窗口：启动脚本中的机器、等级、修饰符和屏幕文本注册；服务端脚本加载中的结构与编程式配方注册；`ServerEvents.recipes` 中的数据驱动配方注册。启动声明修改后需要重启；服务端结构与配方可随资源重载替换。此外还有客户端配方说明事件和运行时智能接口更新事件。
 
 KubeJS 桥接直接使用 `cn.howxu.mmcr.api` 底层类型；面向附属 Mod 的 `cn.howxu.mmcr.publicapi` 是另一层接口，不能把本文签名或 `Java.loadClass` 路径机械替换为 `publicapi`。本页保留有效的注册、结构、等级、行为、网络和文本章节，新增入口也按真实调用实现说明。
@@ -945,39 +947,138 @@ structure.set("T", api.factoryController())
 structure.set("N", api.networkInterface())
 ```
 
-#### 端口等级与端口需求
+#### 端口等级与端口需求 {#port-requirements}
+
+数量需求在结构成型前统计端口；等级需求要求结构中**至少存在一个同族、同方向且达到最低等级的端口**，并不是要求该族的每个端口都达到此等级。两种需求可同时配置，但都不会自动为结构模式添加端口安装位，仍需用 `set(...)` 绑定对应方块谓词。
 
 ##### `portRequirements(Map<String, Object> ranges) → PortRequirementSpec`
 
-- **参数表**：`ranges`（`Map<String,Object>`）— 键为端口 ID；值为单个数字表示最低数量，或 `[min, max]` 表示闭区间。
+- **参数表**：`ranges`（`Map<String,Object>`）— 键为下表的端口族统计别名或具体端口种类 ID；值为单个数字表示最低数量，或 `[min, max]` 表示闭区间。
 - **返回**：不可变端口数量需求对象。
-- **抛出**：`IllegalArgumentException`：值不是数字或二元数字数组、数字不是有限整数、超出 `int` 范围、数量为负或最大值小于最小值。
+- **抛出**：`IllegalArgumentException`：键为空白、值不是数字或二元数字数组、数字不是有限整数、超出 `int` 范围、数量为负或最大值小于最小值。
 - **默认值**：空映射产生无端口数量要求的 `PortRequirementSpec.none()`。
 - **示例**：
 
 ```javascript
 const ports = api.portRequirements({
     item_input_bus: [1, 2],
-    energy_input_hatch: 1
+    energy_input_hatch: 1,
+    chemical_input_hatch: [1, 2],
+    chemical_output_hatch_ultimate: 1,
+    radioactive_chemical_input_hatch: 1,
+    heat_output_hatch: [1, 1]
 })
 ```
 
+**端口族统计别名（完整列表）**
+
+别名统计同族、同方向的端口总数，不区分具体型号或等级。
+
+| 端口族 | 输入别名 | 输出别名 |
+| --- | --- | --- |
+| 物品 | `item_input_bus` | `item_output_bus` |
+| 流体 | `fluid_input_hatch` | `fluid_output_hatch` |
+| 能量 | `energy_input_hatch` | `energy_output_hatch` |
+| Mekanism 普通化学品 | `chemical_input_hatch` | `chemical_output_hatch` |
+| Mekanism 放射性化学品 | `radioactive_chemical_input_hatch` | `radioactive_chemical_output_hatch` |
+| Mekanism 热量 | `heat_input_hatch` | `heat_output_hatch` |
+
+物品、流体别名也计入具有对应族声明的复合端口、扩展端口和 AE2 接口；能量别名也计入扩展能量仓与 Applied Flux 接口。普通化学品与放射性化学品分开统计，输入与输出分开统计。一个复合端口可分别为物品、流体各贡献 1 个计数。
+
+**具体端口种类 ID（该提交提供的完整列表）**
+
+具体 ID 只统计该型号。下表所有 ID 均不带 `mmcr:` 命名空间；联动端口只有在相应 Mod 加载并注册后才有可统计的方块。
+
+| 型号 | 输入 ID | 输出 ID |
+| --- | --- | --- |
+| 普通物品 | `item_input_bus_tiny`、`item_input_bus_small`、`item_input_bus`、`item_input_bus_reinforced`、`item_input_bus_big`、`item_input_bus_huge`、`item_input_bus_ludicrous` | `item_output_bus_tiny`、`item_output_bus_small`、`item_output_bus`、`item_output_bus_reinforced`、`item_output_bus_big`、`item_output_bus_huge`、`item_output_bus_ludicrous` |
+| 普通流体 | `fluid_input_hatch_tiny`、`fluid_input_hatch_small`、`fluid_input_hatch`、`fluid_input_hatch_reinforced`、`fluid_input_hatch_big`、`fluid_input_hatch_huge`、`fluid_input_hatch_ludicrous`、`fluid_input_hatch_vacuum` | `fluid_output_hatch_tiny`、`fluid_output_hatch_small`、`fluid_output_hatch`、`fluid_output_hatch_reinforced`、`fluid_output_hatch_big`、`fluid_output_hatch_huge`、`fluid_output_hatch_ludicrous`、`fluid_output_hatch_vacuum` |
+| 普通能量 | `energy_input_hatch_tiny`、`energy_input_hatch_small`、`energy_input_hatch`、`energy_input_hatch_reinforced`、`energy_input_hatch_big`、`energy_input_hatch_huge`、`energy_input_hatch_ludicrous`、`energy_input_hatch_ultimate` | `energy_output_hatch_tiny`、`energy_output_hatch_small`、`energy_output_hatch`、`energy_output_hatch_reinforced`、`energy_output_hatch_big`、`energy_output_hatch_huge`、`energy_output_hatch_ludicrous`、`energy_output_hatch_ultimate` |
+| 扩展物品 | `extended_item_input_bus_basic`、`extended_item_input_bus_advanced`、`extended_item_input_bus_reinforced`、`extended_item_input_bus_ultimate` | `extended_item_output_bus_basic`、`extended_item_output_bus_advanced`、`extended_item_output_bus_reinforced`、`extended_item_output_bus_ultimate` |
+| 扩展流体 | `extended_fluid_input_hatch_basic`、`extended_fluid_input_hatch_advanced`、`extended_fluid_input_hatch_reinforced`、`extended_fluid_input_hatch_ultimate` | `extended_fluid_output_hatch_basic`、`extended_fluid_output_hatch_advanced`、`extended_fluid_output_hatch_reinforced`、`extended_fluid_output_hatch_ultimate` |
+| 扩展能量 | `extended_energy_input_hatch_reinforced`、`extended_energy_input_hatch_ultimate` | `extended_energy_output_hatch_reinforced`、`extended_energy_output_hatch_ultimate` |
+| 普通复合 | `combined_input_basic`、`combined_input_advanced`、`combined_input_reinforced`、`combined_input_ultimate` | `combined_output_basic`、`combined_output_advanced`、`combined_output_reinforced`、`combined_output_ultimate` |
+| 扩展复合 | `extended_combined_input_advanced`、`extended_combined_input_reinforced`、`extended_combined_input_ultimate` | `extended_combined_output_advanced`、`extended_combined_output_reinforced`、`extended_combined_output_ultimate` |
+| Mekanism 普通化学品 | `chemical_input_hatch_basic`、`chemical_input_hatch_advanced`、`chemical_input_hatch_elite`、`chemical_input_hatch_ultimate` | `chemical_output_hatch_basic`、`chemical_output_hatch_advanced`、`chemical_output_hatch_elite`、`chemical_output_hatch_ultimate` |
+| Mekanism 放射性化学品 | `radioactive_chemical_input_hatch` | `radioactive_chemical_output_hatch` |
+| Mekanism 热量 | `heat_input_hatch` | `heat_output_hatch` |
+| AE2 接口 | `ae2_me_input_interface`、`ae2_me_stocking_input_interface` | `ae2_me_output_interface`、`ae2_me_async_output_interface` |
+| Applied Flux 接口（需要 AE2 与 Applied Flux） | `appflux_me_flux_input_interface` | `appflux_me_flux_output_interface` |
+
+AE2 另有 `ae2_me_pattern_interface`，同一个端口提供物品、流体的输入与返回输出族声明，因此可计入这四个方向别名。
+
+注意普通物品、流体、能量的 `normal` 型号使用不带后缀的 ID，如 `item_input_bus`，没有 `item_input_bus_normal`。这些无后缀 ID 同时是族别名，因此在数量需求中会统计整个族，不能用它单独限定 `normal` 型号的数量。
+
+键按字符串**区分大小写、不会去除空格、不会解析命名空间或通配符**。构建时只检查键非空白，不检查是否已注册；拼错或使用 `mmcr:item_input_bus` 等未被统计的键时，实际数量为 0，正数下限会让结构成型失败。附属 Mod 新增的端口种类 ID / 统计别名也可使用，以其实际注册声明为准。`upgrade_bus_*`、`parallel_controller_*`、`factory_controller`、`smart_interface`、`data_storage`、`network_interface` 不是这里统计的 IO 端口。
+
+数值 `0` 表示不设数量下限，也不设上限；要禁止某类端口，使用 `[0, 0]`。`[n, n]` 表示恰好 `n` 个。
+
 ##### `portTierRequirements(List<String> minimums) → PortTierRequirementSpec`
 
-- **参数表**：`minimums`（`List<String>`）— 每项格式为 `item_input_bus>=normal`、`fluid_output_hatch>=big` 或 `energy_input_hatch>=ultimate`。
+- **参数表**：`minimums`（`List<String>`）— 每项使用下表的完整写法；有等级的端口族写作 `端口族>=等级`，单等级的放射性化学品与热量端口只写端口族。
 - **返回**：不可变端口最低等级需求对象。
-- **抛出**：`IllegalArgumentException`：格式不是三段、类别未知、输入输出方向未知、端口族错误或等级名称不在允许列表中。
+- **抛出**：`IllegalArgumentException`：格式无效、端口族不在允许列表中、等级为空白或名称不属于对应端口族。
 - **默认值**：空列表返回 `PortTierRequirementSpec.none()`。
 - **示例**：
 
 ```javascript
 const tiers = api.portTierRequirements([
     "item_input_bus>=normal",
-    "energy_input_hatch>=small"
+    "energy_input_hatch>=small",
+    "chemical_input_hatch>=advanced",
+    "chemical_output_hatch>=ultimate",
+    "radioactive_chemical_input_hatch",
+    "heat_output_hatch"
 ])
 ```
 
-端口等级名称按类别分别为：物品 `tiny`、`small`、`normal`、`reinforced`、`big`、`huge`、`ludicrous`；流体额外有 `vacuum`；能量额外有 `ultimate`。
+**允许的写法与等级（完整列表）**
+
+`<tier>` 是占位符，必须替换为该行列出的一个等级；等级按从低到高排列。
+
+| 端口族与方向 | 字符串写法 | `<tier>` 的全部可选值 |
+| --- | --- | --- |
+| 物品输入 | `item_input_bus>=<tier>` | `tiny`、`small`、`normal`、`reinforced`、`big`、`huge`、`ludicrous` |
+| 物品输出 | `item_output_bus>=<tier>` | `tiny`、`small`、`normal`、`reinforced`、`big`、`huge`、`ludicrous` |
+| 流体输入 | `fluid_input_hatch>=<tier>` | `tiny`、`small`、`normal`、`reinforced`、`big`、`huge`、`ludicrous`、`vacuum` |
+| 流体输出 | `fluid_output_hatch>=<tier>` | `tiny`、`small`、`normal`、`reinforced`、`big`、`huge`、`ludicrous`、`vacuum` |
+| 能量输入 | `energy_input_hatch>=<tier>` | `tiny`、`small`、`normal`、`reinforced`、`big`、`huge`、`ludicrous`、`ultimate` |
+| 能量输出 | `energy_output_hatch>=<tier>` | `tiny`、`small`、`normal`、`reinforced`、`big`、`huge`、`ludicrous`、`ultimate` |
+| Mekanism 普通化学品输入 | `chemical_input_hatch>=<tier>` | `basic`、`advanced`、`elite`、`ultimate` |
+| Mekanism 普通化学品输出 | `chemical_output_hatch>=<tier>` | `basic`、`advanced`、`elite`、`ultimate` |
+| Mekanism 放射性化学品输入 | `radioactive_chemical_input_hatch` | 无等级参数，不写 `>=`。 |
+| Mekanism 放射性化学品输出 | `radioactive_chemical_output_hatch` | 无等级参数，不写 `>=`。 |
+| Mekanism 热量输入 | `heat_input_hatch` | 无等级参数，不写 `>=`。 |
+| Mekanism 热量输出 | `heat_output_hatch` | 无等级参数，不写 `>=`。 |
+
+端口族部分必须按表中小写字符串精确匹配；等级名称**不区分大小写**，如 `chemical_input_hatch>=ADVANCED` 有效。解析不会去除空格，不接受命名空间、具体型号 ID、通配符或其他比较符（如 `>`、`<=`、`=`）。有等级的八种写法必须且只能包含一个 `>=`，不能省略等级；四种无等级写法不能追加 `>=any` 或 `>=ultimate`。
+
+例如 `chemical_input_hatch>=normal`、`chemical_input_hatch_basic>=basic`、`chemical_input_hatch`、`heat_input_hatch>=ultimate`、`radioactive_chemical_input_hatch>=any`、`item_input_bus >= normal` 都会抛出异常。数量需求允许的具体端口 ID 不能直接作为这里的端口族。
+
+等级比较使用族声明的检测等级，扩展 / 复合 / 联动端口也可凭对应族声明满足需求，不按端口 ID 的后缀推断等级。化学品 `basic`、`advanced`、`elite`、`ultimate` 对应检测等级 2、3、4、5；放射性化学品与热量需求仅检查族和方向，不提供等级选择，普通化学品即使达到 `ultimate` 也不能代替放射性化学品端口。
+
+列表中的每项都必须满足，但不会分别占用一个端口：同一个端口可以满足多项兼容的需求。需要至少两个端口时仍应配合 `portRequirements`。Mekanism 未加载时仍能创建这些需求对象，但没有对应端口可满足它们，结构无法通过相应成型校验。
+
+##### Mekanism 等级与存在性快捷工厂
+
+以下六个方法在 `KubeJSApi` 和三个构建器 `MachineBuilderJS`、`MachineStructureBuilderJS`、`MachineStructureStageBuilderJS` 上均可调用，返回 `PortTierRequirementSpec`，不是方块谓词。带字符串参数的方法使用上表全部化学品等级，等级名不区分大小写且不去除空格；无参数方法只要求对应族、方向的端口存在。
+
+| 方法 | 等价的 `portTierRequirements` 项 |
+| --- | --- |
+| `chemicalInputTier(String id)` | `chemical_input_hatch>=<tier>` |
+| `chemicalOutputTier(String id)` | `chemical_output_hatch>=<tier>` |
+| `radioactiveChemicalInputTier()` | `radioactive_chemical_input_hatch` |
+| `radioactiveChemicalOutputTier()` | `radioactive_chemical_output_hatch` |
+| `heatInputTier()` | `heat_input_hatch` |
+| `heatOutputTier()` | `heat_output_hatch` |
+
+```javascript
+structure.portTierRequirements(api.chemicalInputTier("advanced"))
+// 同样也可以在阶段回调中：
+// stage.portTierRequirements(stage.heatOutputTier())
+```
+
+源码：[字符串解析入口](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/c2563c4110cd15bad0218dc4fa5a4f091fbccc87/src/main/java/cn/howxu/mmcr/compat/kubejs/KubeJSApi.java)、[端口种类与统计别名](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/c2563c4110cd15bad0218dc4fa5a4f091fbccc87/src/main/java/cn/howxu/mmcr/registry/PortKinds.java)、[等级匹配规则](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/c2563c4110cd15bad0218dc4fa5a4f091fbccc87/src/main/java/cn/howxu/mmcr/api/machine/PortTierRequirementSpec.java)。
 
 #### 配方输入输出
 
@@ -2440,7 +2541,12 @@ machine
 | `parallelControllers()` | `BlockPredicate` | 内置并行控制器。工厂控制器谓词使用 `api.factoryController()`，机器构建器没有该方法。 |
 | `smartInterfaceBlock()` / `smartInterface()` | `BlockPredicate` | 内置智能接口谓词。 |
 | `dataStorage()` | `BlockPredicate` | 内置数据存储谓词。 |
-| `itemInputTier(String)` 等 6 个端口等级工厂 | `PortTierRequirementSpec` | 按端口族构造最低等级需求。 |
+| `itemInputTier(String)` / `itemOutputTier(String)` | `PortTierRequirementSpec` | 物品端口最低等级，完整可选值见[端口需求](#port-requirements)。 |
+| `fluidInputTier(String)` / `fluidOutputTier(String)` | `PortTierRequirementSpec` | 流体端口最低等级。 |
+| `energyInputTier(String)` / `energyOutputTier(String)` | `PortTierRequirementSpec` | 能量端口最低等级。 |
+| `chemicalInputTier(String)` / `chemicalOutputTier(String)` | `PortTierRequirementSpec` | 化学品端口最低等级：`basic`、`advanced`、`elite`、`ultimate`。 |
+| `radioactiveChemicalInputTier()` / `radioactiveChemicalOutputTier()` | `PortTierRequirementSpec` | 放射性化学品端口存在性需求，无等级参数。 |
+| `heatInputTier()` / `heatOutputTier()` | `PortTierRequirementSpec` | 热量端口存在性需求，无等级参数。 |
 
 Mekanism 化学品、放射性化学品与热量端口谓词在 Mekanism 未加载时匹配不到方块。
 
@@ -2844,6 +2950,14 @@ structure.extension(stage => stage.pattern("Y").set("Y", "minecraft:iron_block")
 | `fluidOutputTier(String)` | `PortTierRequirementSpec` | 流体输出端口的等级规格。 |
 | `energyInputTier(String)` | `PortTierRequirementSpec` | 能量输入端口的等级规格。 |
 | `energyOutputTier(String)` | `PortTierRequirementSpec` | 能量输出端口的等级规格。 |
+| `chemicalInputTier(String)` | `PortTierRequirementSpec` | 化学品输入端口的等级规格。 |
+| `chemicalOutputTier(String)` | `PortTierRequirementSpec` | 化学品输出端口的等级规格。 |
+| `radioactiveChemicalInputTier()` | `PortTierRequirementSpec` | 放射性化学品输入端口存在性需求，无等级参数。 |
+| `radioactiveChemicalOutputTier()` | `PortTierRequirementSpec` | 放射性化学品输出端口存在性需求，无等级参数。 |
+| `heatInputTier()` | `PortTierRequirementSpec` | 热量输入端口存在性需求，无等级参数。 |
+| `heatOutputTier()` | `PortTierRequirementSpec` | 热量输出端口存在性需求，无等级参数。 |
+
+各等级工厂的完整字符串可选值与匹配规则见[端口等级与端口需求](#port-requirements)。
 
 Mekanism 化学品、放射性化学品与热量端口谓词在 Mekanism 未加载时匹配不到方块。
 
@@ -3014,7 +3128,12 @@ mainStructure(stage => stage.dynamicPattern(myDynamicPattern))
 | `anyOfUpgradeBus()` | `BlockPredicate` | 所有升级总线并集。 |
 | `anyOfPort(String...)` / `anyOfPort(Identifier...)` / `anyOfPort(api.machine.definition.BlockPredicate...)` | `BlockPredicate` | 指定端口的并集。 |
 | `factoryController()` / `parallelControllers()` / `smartInterface()` | `BlockPredicate` | 内置控制器或智能接口谓词。 |
-| `itemInputTier(String)` 等 6 个端口等级工厂 | `PortTierRequirementSpec` | 按端口族构造最低等级需求。 |
+| `itemInputTier(String)` / `itemOutputTier(String)` | `PortTierRequirementSpec` | 物品端口最低等级，完整可选值见[端口需求](#port-requirements)。 |
+| `fluidInputTier(String)` / `fluidOutputTier(String)` | `PortTierRequirementSpec` | 流体端口最低等级。 |
+| `energyInputTier(String)` / `energyOutputTier(String)` | `PortTierRequirementSpec` | 能量端口最低等级。 |
+| `chemicalInputTier(String)` / `chemicalOutputTier(String)` | `PortTierRequirementSpec` | 化学品端口最低等级：`basic`、`advanced`、`elite`、`ultimate`。 |
+| `radioactiveChemicalInputTier()` / `radioactiveChemicalOutputTier()` | `PortTierRequirementSpec` | 放射性化学品端口存在性需求，无等级参数。 |
+| `heatInputTier()` / `heatOutputTier()` | `PortTierRequirementSpec` | 热量端口存在性需求，无等级参数。 |
 
 Mekanism 化学品、放射性化学品与热量端口谓词在 Mekanism 未加载时匹配不到方块。
 
@@ -3998,11 +4117,11 @@ MMCREvents.startup(event => {
 
 > `cn.howxu.mmcr.compat.kubejs.KubeJSInterfaceHelpers` 是 KubeJS 端方块谓词、端口等级与智能接口需求的内部工厂。所有 `KubeJSApi` 中的同名方法、`MachineBuilderJS`/`MachineStructureBuilderJS`/`MachineStructureStageBuilderJS` 的端口谓词和等级工厂都委托到这里；普通业务脚本不需要直接调用。
 
-该类虽为 public 工厂，但没有全局 binding，普通脚本优先使用门面/构建器。它提供物品、流体、能量、化学品、放射性化学品、热量各族的输入/输出/合并谓词，升级总线谓词、`ports()`、`anyOfPort(String...)` / `anyOfPort(Identifier...)` / `anyOfPort(api.machine.definition.BlockPredicate...)`，以及一个明确抛异常的零参数 `anyOfPort()`。还有 `factoryController`、`parallelControllers`、`smartInterface`、`dataStorage`、`networkInterface`、`port(String)` / `port(Identifier)`，六个端口等级工厂，两个 `smartInterfaceInput` 重载（固定值、范围）和一个 `smartInterfaceOutput`。`convert(...)` 是私有方法，转换底层定义谓词为 `api.machine.BlockPredicate`。
+该类虽为 public 工厂，但没有全局 binding，普通脚本优先使用门面/构建器。它提供物品、流体、能量、化学品、放射性化学品、热量各族的输入/输出/合并谓词，升级总线谓词、`ports()`、`anyOfPort(String...)` / `anyOfPort(Identifier...)` / `anyOfPort(api.machine.definition.BlockPredicate...)`，以及一个明确抛异常的零参数 `anyOfPort()`。还有 `factoryController`、`parallelControllers`、`smartInterface`、`dataStorage`、`networkInterface`、`port(String)` / `port(Identifier)`，十二个端口等级 / 存在性工厂，两个 `smartInterfaceInput` 重载（固定值、范围）和一个 `smartInterfaceOutput`。`convert(...)` 是私有方法，转换底层定义谓词为 `api.machine.BlockPredicate`。
 
 注意门面与构建器没有自动暴露 helper 的所有方法：例如门面只暴露 Mekanism 合并端口谓词，未提供 `anyOfChemicalInput`；机器构建器没有 `factoryController`，阶段构建器没有 `dataStorage`。
 
-helper 的 Mekanism 方向工厂完整名称为 `anyOfChemicalInput()` / `anyOfChemicalOutput()`、`anyOfRadioactiveChemicalInput()` / `anyOfRadioactiveChemicalOutput()`、`anyOfHeatInput()` / `anyOfHeatOutput()`，均返回底层 `BlockPredicate`。`port(String)` / `port(Identifier)` 构造单个端口谓词；`anyOfPort` 不能传空列表。构建器上的六个等级工厂分别为 `itemInputTier`、`itemOutputTier`、`fluidInputTier`、`fluidOutputTier`、`energyInputTier`、`energyOutputTier`，参数为等级名称字符串，返回 `PortTierRequirementSpec`。
+helper 的 Mekanism 方向工厂完整名称为 `anyOfChemicalInput()` / `anyOfChemicalOutput()`、`anyOfRadioactiveChemicalInput()` / `anyOfRadioactiveChemicalOutput()`、`anyOfHeatInput()` / `anyOfHeatOutput()`，均返回底层 `BlockPredicate`。`port(String)` / `port(Identifier)` 构造单个端口谓词；`anyOfPort` 不能传空列表。构建器上的八个带等级参数工厂分别为 `itemInputTier`、`itemOutputTier`、`fluidInputTier`、`fluidOutputTier`、`energyInputTier`、`energyOutputTier`、`chemicalInputTier`、`chemicalOutputTier`；四个无参数工厂为 `radioactiveChemicalInputTier()`、`radioactiveChemicalOutputTier()`、`heatInputTier()`、`heatOutputTier()`，均返回 `PortTierRequirementSpec`。完整等级名与存在性语义见[端口等级与端口需求](#port-requirements)。
 
 ### `MachineRecipeFactory`
 

@@ -6,6 +6,8 @@ title: JavaAPI
 
 本页集中列出 Java 公共层的入口、声明、运行时视图和扩展契约。文中的签名以该提交的实现为准，不代表某个尚未确认的 Maven 发布版本。
 
+端口数量与等级约束部分已按提交 [`c2563c41`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/commit/c2563c4110cd15bad0218dc4fa5a4f091fbccc87) 更新，包含 Mekanism 化学品、放射性化学品与热量端口；其余章节仍以 `f234477b` 为基准。
+
 ## 包路径与边界
 
 公共 API 根包为 **`cn.howxu.mmcr.publicapi`**。下文每节注明包名；节内的简单类型名与该包拼接即为完整类名，嵌套类型按 `外层类型.内层类型` 引用。签名块省略 import 和实现体；接口方法隐含 `public`，工厂方法标明 `static`，可空值用 `@Nullable` 标出。
@@ -498,7 +500,7 @@ static void structures(RegisterMachineStructuresEvent event) {
                             .where('X', BlockConditions.block(Blocks.IRON_BLOCK))
                             .where('I', BlockConditions.itemInput())
                             .controller('C'))
-                    .ports(ports -> ports.min("item_input", 1))
+                    .ports(ports -> ports.min("item_input_bus", 1))
                     .portTiers(tiers -> tiers.minItemInput(PortTierLimits.ItemTier.NORMAL))));
 }
 ```
@@ -590,10 +592,25 @@ PortLimits build();
 
 按端口 ID 限定数量。`min` 只设下限，`range` 同时设上下限；数量不得负、上限不得低于下限。无要求时用 `none()`。这不限制每个端口的容量，容量最低要求见 `PortTierLimits`。
 
+`portId` 使用端口族统计别名或具体端口种类 ID，按字符串精确匹配，区分大小写、不去除空格、不添加 `mmcr:` 命名空间。完整的内置族别名为：
+
+| 端口族 | 输入别名 | 输出别名 |
+| --- | --- | --- |
+| 物品 | `item_input_bus` | `item_output_bus` |
+| 流体 | `fluid_input_hatch` | `fluid_output_hatch` |
+| 能量 | `energy_input_hatch` | `energy_output_hatch` |
+| Mekanism 普通化学品 | `chemical_input_hatch` | `chemical_output_hatch` |
+| Mekanism 放射性化学品 | `radioactive_chemical_input_hatch` | `radioactive_chemical_output_hatch` |
+| Mekanism 热量 | `heat_input_hatch` | `heat_output_hatch` |
+
+别名统计同族、同方向的全部等级及具有相应族声明的扩展 / 复合 / 联动端口，具体 ID 只统计该型号。完整型号列表与规则见 [KubeJS API：端口等级与端口需求](./KubeJS#port-requirements)，Java 与 KubeJS 使用同一套统计键。普通物品、流体、能量的 `normal` 型号 ID 没有 `_normal` 后缀，且与族别名重名，因此不能用这些键单独计数 `normal` 型号。
+
+构建器拒绝空白键，但不会验证其他键是否已注册；未知键的实际计数为 0。`min(id, 0)` 不限制数量，要禁止该类端口应使用 `range(id, 0, 0)`；`range(id, n, n)` 要求恰好 `n` 个。同一个键重复声明时后一次覆盖前一次。
+
 ### `PortTierLimits`
 
 ```java
-enum PortCategory { ITEM, FLUID, ENERGY }
+enum PortCategory { ITEM, FLUID, ENERGY, CHEMICAL, RADIOACTIVE_CHEMICAL, HEAT }
 enum ItemTier {
     TINY, SMALL, NORMAL, REINFORCED, BIG, HUGE, LUDICROUS;
     public String id();
@@ -604,6 +621,10 @@ enum FluidTier {
 }
 enum EnergyTier {
     TINY, SMALL, NORMAL, REINFORCED, BIG, HUGE, LUDICROUS, ULTIMATE;
+    public String id();
+}
+enum ChemicalTier {
+    BASIC, ADVANCED, ELITE, ULTIMATE;
     public String id();
 }
 
@@ -631,6 +652,21 @@ static PortTierLimits energyInput(String id);
 static PortTierLimits energyInput(EnergyTier tier);
 static PortTierLimits energyOutput(String id);
 static PortTierLimits energyOutput(EnergyTier tier);
+static PortTierLimits chemical(String id);
+static PortTierLimits chemical(ChemicalTier tier);
+static PortTierLimits chemical(ChemicalTier tier, IoDirection io);
+static PortTierLimits chemicalInput(String id);
+static PortTierLimits chemicalInput(ChemicalTier tier);
+static PortTierLimits chemicalOutput(String id);
+static PortTierLimits chemicalOutput(ChemicalTier tier);
+static PortTierLimits radioactiveChemical();
+static PortTierLimits radioactiveChemical(IoDirection io);
+static PortTierLimits radioactiveChemicalInput();
+static PortTierLimits radioactiveChemicalOutput();
+static PortTierLimits heat();
+static PortTierLimits heat(IoDirection io);
+static PortTierLimits heatInput();
+static PortTierLimits heatOutput();
 List<RequirementView> requirements();
 
 // PortTierLimits.RequirementView
@@ -646,16 +682,48 @@ Builder anyFluidInput();
 Builder anyFluidOutput();
 Builder anyEnergyInput();
 Builder anyEnergyOutput();
+Builder anyChemicalInput();
+Builder anyChemicalOutput();
+Builder anyRadioactiveChemicalInput();
+Builder anyRadioactiveChemicalOutput();
+Builder anyHeatInput();
+Builder anyHeatOutput();
 Builder minItemInput(ItemTier tier);
 Builder minItemOutput(ItemTier tier);
 Builder minFluidInput(FluidTier tier);
 Builder minFluidOutput(FluidTier tier);
 Builder minEnergyInput(EnergyTier tier);
 Builder minEnergyOutput(EnergyTier tier);
+Builder minChemicalInput(ChemicalTier tier);
+Builder minChemicalOutput(ChemicalTier tier);
 PortTierLimits build();
 ```
 
-三族等级按各自枚举由低到高排列，不能跨族比较 ordinal。`id()` 返回如 `"normal"` 的等级 ID；`any...` 是最低 `TINY` 要求。`combine` 合并声明，不设置时 `none()`。不指定方向的 `item`/`fluid`/`energy` 同时约束输入和输出；指定方向或使用 Input/Output 工厂只约束一侧。字符串重载是已有等级名，不是新等级注册入口。
+**字符串等级的全部可选值**（各行从低到高排列；`...Input(String)` 与 `...Output(String)` 使用同族的列表）：
+
+| 端口族 / 工厂 | `String id` 可选值 | 对应枚举 |
+| --- | --- | --- |
+| `item` / `itemInput` / `itemOutput` | `tiny`、`small`、`normal`、`reinforced`、`big`、`huge`、`ludicrous` | `ItemTier` |
+| `fluid` / `fluidInput` / `fluidOutput` | `tiny`、`small`、`normal`、`reinforced`、`big`、`huge`、`ludicrous`、`vacuum` | `FluidTier` |
+| `energy` / `energyInput` / `energyOutput` | `tiny`、`small`、`normal`、`reinforced`、`big`、`huge`、`ludicrous`、`ultimate` | `EnergyTier` |
+| `chemical` / `chemicalInput` / `chemicalOutput` | `basic`、`advanced`、`elite`、`ultimate` | `ChemicalTier` |
+| `radioactiveChemical` / `radioactiveChemicalInput` / `radioactiveChemicalOutput` | 无字符串等级重载，使用无参工厂或方向重载。 | 无等级枚举。 |
+| `heat` / `heatInput` / `heatOutput` | 无字符串等级重载，使用无参工厂或方向重载。 | 无等级枚举。 |
+
+字符串等级名不区分大小写，但不去除空格；`null`、空白或不属于该族的名称抛出 `IllegalArgumentException`。例如 `chemicalInput("ADVANCED")` 有效，`chemicalInput("normal")` 和 `chemicalInput(" advanced ")` 无效。`id()` 返回小写名称。字符串重载只接受已有等级名，不是新等级注册入口，也不接收 `chemical_input_hatch>=advanced` 这种 KubeJS 列表语法。
+
+等级只在同族内比较，不能跨族比较 ordinal。物品、流体、能量的检测等级从 0 开始；化学品 `basic`、`advanced`、`elite`、`ultimate` 的检测等级分别为 2、3、4、5，不能用 `ChemicalTier.ordinal()` 代替。`anyItem...` / `anyFluid...` / `anyEnergy...` 等价于该方向的最低 `TINY`，`anyChemical...` 等价于最低 `BASIC`。放射性化学品与热量仅检查对应族、方向的端口存在，`RequirementView` 的 `minTier()` / `minTierId()` 为 `0` / `"any"`，这不是可传入字符串工厂的等级名。
+
+每项声明要求结构中至少有一个同族、同方向、达到最低等级的端口，不要求所有端口都达到此等级；数量约束仍由 `PortLimits` 配置。普通化学品与放射性化学品是两个独立族。`combine` 合并声明，同一个端口可满足多项兼容需求，不设置时用 `none()`。不指定方向的 `item` / `fluid` / `energy` / `chemical` / `radioactiveChemical` / `heat` 同时约束输入和输出；指定方向或使用 Input/Output 工厂只约束一侧。Mekanism 未加载时仍可构造声明，但没有对应端口可满足成型校验。
+
+```java
+stage.ports(ports -> ports.range("chemical_input_hatch", 1, 2)
+                .min("heat_output_hatch", 1))
+        .portTiers(tiers -> tiers.minChemicalInput(PortTierLimits.ChemicalTier.ADVANCED)
+                .anyHeatOutput());
+```
+
+该片段配置阶段约束，模式中还需通过 `BlockConditions` 允许放置这些端口。源码：[公共等级工厂与枚举](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/c2563c4110cd15bad0218dc4fa5a4f091fbccc87/src/main/java/cn/howxu/mmcr/publicapi/structure/PortTierLimits.java)、[字符串等级解析](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/c2563c4110cd15bad0218dc4fa5a4f091fbccc87/src/main/java/cn/howxu/mmcr/api/machine/definition/InterfaceTiers.java)。
 
 ### `StructureConstraints`
 
@@ -2208,4 +2276,4 @@ static void information(RegisterJeiRecipeInformationEvent event) {
 - 客户端渲染读取已发布状态，26.1.2 渲染签名使用提交节点；JEI 注册工作台与说明各有窗口。
 - 扩展需求/输出同时提供序列化、复制、规划及输出需求转换契约；底层端口能力实现不包含在公共 API jar 中。
 
-全部签名与源码链接均以 `f234477b` 为基准。升级源码后应重新核对公共层声明及底层执行语义，而不是仅替换包名前缀。
+端口数量与等级约束部分以 `c2563c41` 为基准，其余签名与源码链接以 `f234477b` 为基准。升级源码后应重新核对公共层声明及底层执行语义，而不是仅替换包名前缀。

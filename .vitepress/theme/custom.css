@@ -122,12 +122,12 @@ body {
 }
 
 .VPDoc .aside {
-  max-width: 200px !important;
+  max-width: 239.2px !important;
 }
 
 .VPDoc .aside-container,
 .VPDoc .aside-curtain {
-  width: 168px !important;
+  width: 200.928px !important;
 }
 
 @media (min-width: 1440px) {

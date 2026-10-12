@@ -1,5 +1,5 @@
 import { defineConfig } from 'vitepress'
-// import { en } from './en'
+import { en } from './en'
 import { zh } from './zh'
 
 export default defineConfig({
@@ -9,11 +9,11 @@ export default defineConfig({
     ['link', { rel: 'icon', type: 'image/png', href: '/logo.svg' }],
   ],
   locales: {
-    // 'en-us': {
-    //   label: 'English',
-    //   link: '/en-us/',
-    //   ...en,
-    // },
+    'en-us': {
+      label: 'English',
+      link: '/en-us/',
+      ...en,
+    },
     'zh-cn': {
       label: '简体中文',
       link: '/zh-cn/',

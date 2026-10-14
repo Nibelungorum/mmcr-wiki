@@ -27,7 +27,7 @@ export const zh = defineConfig({
     nav: nav(),
     sidebar: sidebar(),
     editLink: {
-      pattern: 'https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/edit/main/wiki/:path',
+      pattern: 'https://github.com/Nibelungorum/mmcr-wiki/edit/main/:path',
       text: '在 GitHub 上编辑此页面',
     },
     footer: {

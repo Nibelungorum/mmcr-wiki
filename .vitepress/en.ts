@@ -26,7 +26,7 @@ export const en = defineConfig({
     nav: nav(),
     sidebar: sidebar(),
     editLink: {
-      pattern: 'https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/edit/main/wiki/:path',
+      pattern: 'https://github.com/Nibelungorum/mmcr-wiki/edit/main/:path',
       text: 'Edit this page on GitHub',
     },
     footer: {
@@ -46,9 +46,9 @@ export const en = defineConfig({
 function nav(): DefaultTheme.NavItem[] {
   return [
     { text: 'Home', link: '/en-us/' },
-    { text: 'Getting Started', link: '/en-us/getting-started/index' },
+    { text: 'Getting Started', link: '/en-us/getting-started/' },
     { text: 'All Examples', link: '/en-us/KubeJS/blast-furnace' },
-    { text: 'API Reference', link: '/en-us/API/index' },
+    { text: 'API Reference', link: '/en-us/API/' },
   ]
 }
 
@@ -124,5 +124,5 @@ function orderCompare(
 }
 
 function pageLink(file: string): string {
-  return `/${locale}/${relative(docsDir, file).split(sep).join('/').replace(/\.md$/, '')}`
+  return `/${locale}/${relative(docsDir, file).split(sep).join('/').replace(/\.md$/, '').replace(/(^|\/)index$/, '$1')}`
 }

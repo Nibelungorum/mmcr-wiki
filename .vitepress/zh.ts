@@ -6,7 +6,7 @@ import { defineConfig, type DefaultTheme } from 'vitepress'
 const locale = 'zh-cn'
 const docsDir = resolve(dirname(fileURLToPath(import.meta.url)), '..', locale)
 const sectionTitles: Record<string, string> = {
-  '快速开始': '快速开始',
+  'getting-started': '快速开始',
   'KubeJS': 'KubeJS示例',
   'JavaAPI': 'JavaAPI示例',
   'API': 'API 参考',
@@ -14,7 +14,7 @@ const sectionTitles: Record<string, string> = {
 
 /** Sidebar section order: lower number comes first. Sections not listed here fall back to pinyin sort. */
 const sectionOrders: Record<string, number> = {
-  '快速开始': 1,
+  'getting-started': 1,
   'KubeJS': 2,
   'JavaAPI': 3,
   'API': 4,
@@ -47,9 +47,9 @@ export const zh = defineConfig({
 function nav(): DefaultTheme.NavItem[] {
   return [
     { text: '首页', link: '/zh-cn/' },
-    { text: '快速开始', link: '/zh-cn/快速开始/开始' },
-    { text: '全部示例', link: '/zh-cn/KubeJS/高炉' },
-    { text: 'API 参考', link: '/zh-cn/API/开始' },
+    { text: '快速开始', link: '/zh-cn/getting-started/' },
+    { text: '全部示例', link: '/zh-cn/KubeJS/blast-furnace' },
+    { text: 'API 参考', link: '/zh-cn/API/' },
   ]
 }
 
@@ -127,5 +127,5 @@ function orderCompare(
 }
 
 function pageLink(file: string): string {
-  return `/${locale}/${relative(docsDir, file).split(sep).join('/').replace(/\.md$/, '')}`
+  return `/${locale}/${relative(docsDir, file).split(sep).join('/').replace(/\.md$/, '').replace(/(^|\/)index$/, '$1')}`
 }

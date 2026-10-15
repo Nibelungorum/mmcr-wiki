@@ -47,7 +47,7 @@ public static void registerDefinitions(RegisterMachineDefinitionsEvent event) {
 - `fullyRotationallySymmetric(true)` 声明完全旋转对称的控制器表现。不要用“同一贴图”推导结构可以绕过朝向匹配；结构坐标仍由放置朝向参与转换。
 - `recipePool(CRACKER)` 把机器绑定到裂化器配方池。
 
-`controller(...)` 接受 `Consumer<ControllerOptions>`，回调中配置库提供的对象，无需创建或回传构建器。机器 `build()` 返回 `MachineSpec`。强制竖直放置的对照见 [怪物农场](怪物农场)。
+`controller(...)` 接受 `Consumer<ControllerOptions>`，回调中配置库提供的对象，无需创建或回传构建器。机器 `build()` 返回 `MachineSpec`。强制竖直放置的对照见 [怪物农场](mob-farm)。
 
 ## 多方块结构
 
@@ -90,7 +90,7 @@ public static void registerStructures(RegisterMachineStructuresEvent event) {
 
 四个切片各为 3×3。`A` 是磨制安山岩，`X` 是磨制闪长岩，`D` 是蓝冰，`E` 是青金石块。第二个切片的 `B` 是骨块或接口安装位：可装物品输入、物品输出、流体输出与能量输入。`C` 绑定本机控制器，空格为忽略位置。
 
-所有 `layer(...)` 的行数与行宽需要一致，不能通过多写一行直接让某个切片变高。更复杂的外观用统一尺寸的空白行补齐，参考 [紫珀炉](紫珀炉)。
+所有 `layer(...)` 的行数与行宽需要一致，不能通过多写一行直接让某个切片变高。更复杂的外观用统一尺寸的空白行补齐，参考 [紫珀炉](purpur-furnace)。
 
 ### 端口等级与端口类型
 

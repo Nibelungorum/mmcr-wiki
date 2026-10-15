@@ -5,7 +5,7 @@ order: 7
 
 # 合金炉 — 修饰器系统
 
-本文演示 MMCR 的 **Modifier 系统**：把一类"对配方的修饰规则"打包成可复用的修饰器，再用结构上的特殊方块位作为修饰器"使用处"。代码对应 [Java 端的 合金炉](../JavaAPI/合金炉)。
+本文演示 MMCR 的 **Modifier 系统**：把一类"对配方的修饰规则"打包成可复用的修饰器，再用结构上的特殊方块位作为修饰器"使用处"。代码对应 [Java 端的 合金炉](../JavaAPI/alloy-furnace)。
 
 
 ## 机器简介
@@ -293,7 +293,7 @@ ServerEvents.recipes( event => {
 
 ### 数据驱动配方字段
 
-本配方的字段含义已在 [高炉](高炉) 中详述。
+本配方的字段含义已在 [高炉](blast-furnace) 中详述。
 
 本教程新增的是输入 / 输出都用 `components` 做数据组件匹配，`#minecraft:swords` 任意剑 + `sharpness: 2`，输出带 `custom_name` + `sharpness: 3`，以及 `consume_chance` / `chance` 这两个可选概率字段。
 

@@ -71,7 +71,7 @@ public static void registerStructures(RegisterMachineStructuresEvent event) {
 
 源码有 19 个 `state(...)` 绑定；字符 `a` 则仍使用 `block(Blocks.POLISHED_DEEPSLATE_STAIRS)`，只约束方块类型。开启状态敏感不会自动把所有 `block(...)` 变为默认状态匹配。
 
-与 [紫珀炉](紫珀炉) 对照：紫珀炉也写出楼梯状态，但没有调用 `stateSensitive()`，实际匹配不强制这些状态属性。
+与 [紫珀炉](purpur-furnace) 对照：紫珀炉也写出楼梯状态，但没有调用 `stateSensitive()`，实际匹配不强制这些状态属性。
 
 ### 接口集合
 

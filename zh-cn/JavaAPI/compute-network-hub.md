@@ -84,7 +84,7 @@ void process(RequestPayload body, RequestDetails request,
 
 这里仅写 `receiverStorage`，不依赖发送方存储。取出的报告不能转换成 `double` 时退到 `0.0`，键名是 `power_<发送方hash>`；同一发送方后续上报覆盖原值。
 
-处理器没有隐式事务。两参数 `set` 立即写入，其他 IO 的回滚不会撤销它。`DataStore` 不是 `SnapshotJournal` 子类；只有显式传入 `DataStore.Transaction` 的三参数写入才参加对应 IO 事务。详细边界见 [数据存储测试机器](./数据存储测试机器#事务边界哪些会回滚)。
+处理器没有隐式事务。两参数 `set` 立即写入，其他 IO 的回滚不会撤销它。`DataStore` 不是 `SnapshotJournal` 子类；只有显式传入 `DataStore.Transaction` 的三参数写入才参加对应 IO 事务。详细边界见 [数据存储测试机器](./data-store-test-machine#事务边界哪些会回滚)。
 
 ## 结构
 
@@ -195,6 +195,6 @@ context.jadeText().append(CENTER_COUNT,
 
 ## 延伸阅读
 
-- [算力网络-生产者](./算力网络-生产者)：输入消耗、上报节奏及 payload。
-- [数据存储测试机器](./数据存储测试机器)：普通写入与事务写入。
-- [KubeJS 通信模型](../KubeJS/算力-网络交互示例#网络通信模型图解) / [Java 公共 API 参考](../API/JavaAPI)。
+- [算力网络-生产者](./compute-network-producer)：输入消耗、上报节奏及 payload。
+- [数据存储测试机器](./data-store-test-machine)：普通写入与事务写入。
+- [KubeJS 通信模型](../KubeJS/compute-network-example#网络通信模型图解) / [Java 公共 API 参考](../API/JavaAPI)。

@@ -238,6 +238,6 @@ Hook 中异常处理与失败状态由核心控制；不能据此承诺普通存
 
 ## 延伸阅读
 
-- [纯Tick测试机器的模式对比](./纯Tick测试机器#pure_tick-和-recipe_tick)。
-- [数据存储测试机器](./数据存储测试机器)：事务与非事务副作用。
+- [纯Tick测试机器的模式对比](./pure-tick-test-machine#pure_tick-和-recipe_tick)。
+- [数据存储测试机器](./data-store-test-machine)：事务与非事务副作用。
 - [Java 公共 API 参考](../API/JavaAPI)。

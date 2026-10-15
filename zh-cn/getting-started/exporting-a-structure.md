@@ -78,6 +78,6 @@ MMCR 提供了非常便捷的多方块结构导出功能，依靠`多方块导�
 
 接下来你可以根据自己选择的API前往对应的教程区域:
 
-[快速跳转KubeJS版](/zh-cn/快速开始/KubeJS版.md)
+[快速跳转KubeJS版](/zh-cn/getting-started/kubejs.md)
 
-[快速跳转JavaAPI版](/zh-cn/快速开始/JavaAPI版.md)
+[快速跳转JavaAPI版](/zh-cn/getting-started/java-api.md)

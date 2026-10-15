@@ -15,7 +15,7 @@ order: 5
 
 ## 概览
 
-裂化器 与 [高炉](高炉) 的关键差异在于**机器的物理摆放**与**端口的数量/等级约束**：
+裂化器 与 [高炉](blast-furnace) 的关键差异在于**机器的物理摆放**与**端口的数量/等级约束**：
 
 - 高炉 的控制器只能水平朝向。
 - 裂化器 通过 `.allowVerticalFacing()` + `.fullyRotationallySymmetric()` 让控制器可以竖直放置。
@@ -89,7 +89,7 @@ MMCREvents.startup(event => {
 `builder.register()` 终结，把机器提交到启动期注册窗口。
 
 :::info 备注
-与 [蒸馏塔](蒸馏塔) 不同，这台机器**没有调用 `.expandableStructure(true)`**。裂化器只有一个固定形态，不需要分组，结构脚本用扁平式 API 即可。
+与 [蒸馏塔](distillation-tower) 不同，这台机器**没有调用 `.expandableStructure(true)`**。裂化器只有一个固定形态，不需要分组，结构脚本用扁平式 API 即可。
 :::
 
 启动期窗口不可热加载，修改后必须重启游戏。
@@ -142,7 +142,7 @@ MMCREvents.server(event => {
 `MMCREvents.server(event => {...})` 回调里的 `event` 是 [MMCRServerEventJS](../API/KubeJS#mmcrservereventjs)。
 `event.getAPI()` 返回 [KubeJSApi](../API/KubeJS#kubejsapi)。
 
-与 [高炉](高炉) 相比，本机器的结构新增了两个工具：
+与 [高炉](blast-furnace) 相比，本机器的结构新增了两个工具：
 
 1. **`.portRequirements(...)`**：端口数量需求。
     详见 [MachineStructureBuilderJS.portRequirements](../API/KubeJS#machinestructurebuilderjs) 与 [KubeJSApi.portRequirements](../API/KubeJS#port-requirements)。

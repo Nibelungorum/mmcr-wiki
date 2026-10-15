@@ -15,7 +15,7 @@ order: 2
 
 ## 概览
 
-反应堆 与 [高炉](高炉) 的关键差异在于**结构匹配粒度**：
+反应堆 与 [高炉](blast-furnace) 的关键差异在于**结构匹配粒度**：
 
 - 高炉 用 `api.block(...)` 描述外壳，即任意状态都算匹配。
 - 反应堆 用 `api.state(...)` 精确指定方块的**全部属性值**，即 `facing`、`shape`、`waterlogged` 等一一对齐。
@@ -155,7 +155,7 @@ MMCREvents.server(event => {
 `event.getAPI()` 返回 [KubeJSApi](../API/KubeJS#kubejsapi)，下文统一用 `api` 指代。
 `event.createStructure(...)` 返回 [MachineStructureBuilderJS](../API/KubeJS#machinestructurebuilderjs)。
 
-与 [高炉](高炉) 相比，本机器的结构有两个**关键差异**：
+与 [高炉](blast-furnace) 相比，本机器的结构有两个**关键差异**：
 
 1. 官方脚本未调用 `stateSensitive()`，默认状态不敏感。本文补上该调用后，`api.state(...)` 的属性才会参与实际成型匹配；`api.block(...)` 仍只匹配方块，不会被升级为默认状态匹配。
 2. `X` 字符的并集较宽，包含 5 种端口和蓝冰：`anyOfItemInput`、`anyOfItemOutput`、`anyOfFluidOutput`、`anyOfFluidInput`、`anyOfEnergyOutput`、再加 `minecraft:blue_ice`。这是因为反应堆同一外壳方块位既允许端口，也允许作为装饰的蓝冰。

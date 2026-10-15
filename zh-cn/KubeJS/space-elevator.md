@@ -397,5 +397,5 @@ KubeJS 端有 [`MachineBuilderJS.expandableStructure()`](../API/KubeJS#machinebu
 - [API/KubeJS#machinestructurebuilderjs](../API/KubeJS#machinestructurebuilderjs) — 结构构建器中的 `coupler` 谓词与 `modifier` 调用。
 - [API/KubeJS#machinerecipebuilderjs](../API/KubeJS#machinerecipebuilderjs) — 编程式配方构建器的 `requiredHost(...)` / `requiredHosts(...)`。
 - [API/KubeJS#machinerecipeschema](../API/KubeJS#machinerecipeschema) — 数据驱动配方 schema 的全部键。
-- [JavaAPI/SPACE](../JavaAPI/太空电梯) — 同一对电梯 + 重组机的 Java 实现。
+- [JavaAPI/SPACE](../JavaAPI/space-elevator) — 同一对电梯 + 重组机的 Java 实现。
 - [JavaAPI#machinebuilder](../API/JavaAPI#machinebuilder) — Java 端主机/模块 API。

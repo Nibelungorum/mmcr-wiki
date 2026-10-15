@@ -440,4 +440,4 @@ machine
 - [API/KubeJS#smartinterfaceinputstring-type-float-min-float-max--smartinterfacerequirement](../API/KubeJS#kubejsapi) — 编程式智能接口需求对象。
 - [API/KubeJS#machinerecipebuilderjs](../API/KubeJS#machinerecipebuilderjs) — 编程式 `smartInterfaceInput(...)` / `smartInterfaceOutput(...)`。
 - [API/KubeJS#machinerecipeschema](../API/KubeJS#machinerecipeschema) — 数据驱动 `mmcr:smart_interface` 条目字段。
-- [JavaAPI/紫珀炉](../JavaAPI/紫珀炉) — 同一台紫珀炉的 Java 实现。
+- [JavaAPI/紫珀炉](../JavaAPI/purpur-furnace) — 同一台紫珀炉的 Java 实现。

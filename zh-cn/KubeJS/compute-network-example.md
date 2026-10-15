@@ -11,7 +11,7 @@ order: 11
 
 本文对官方脚本的三处 PRODUCER 存储写入作了签名适配：直接传入布尔值 / 数字，而不是传 `api.dataValue(...)`。后者生成底层数据值，不被 tick 存储视图的 `Object` 重载接受。CENTER 请求处理器收到底层存储，继续使用 `api.dataValue(reported)`。
 
-与 [数据存储测试机器](./数据存储测试机器) 不同，本教程**同时注册两台机器**：一台 PRODUCER（生产者）和一台 CENTER（中心），演示每 tick 检查 FE、每 20 tick 条件上报、中心每 tick 聚合。
+与 [数据存储测试机器](./data-store-test-machine) 不同，本教程**同时注册两台机器**：一台 PRODUCER（生产者）和一台 CENTER（中心），演示每 tick 检查 FE、每 20 tick 条件上报、中心每 tick 聚合。
 
 ## 机器
 
@@ -594,11 +594,11 @@ CENTER tick 中 `storage.remove(key)` 是 `DataStorage` 的非事务版本，立
 
 ## 延伸阅读
 
-- [数据存储测试机器](./数据存储测试机器) — 同一 `DataStorage` API，但不走网络。
-- [纯Tick机器示例](./纯Tick机器示例) — 同样用 `tickBehavior`，但没有网络。
-- [算力生产者](../JavaAPI/算力网络-生产者) — 本教程 PRODUCER 的 Java 端实现。
-- [网络中心](../JavaAPI/算力网络-网络中心) — 本教程 CENTER 的 Java 端实现。
-- [数据存储测试机器](../JavaAPI/数据存储测试机器) — `DataStorage` 的最简样本。
+- [数据存储测试机器](./data-store-test-machine) — 同一 `DataStorage` API，但不走网络。
+- [纯Tick机器示例](./pure-tick-machine-example) — 同样用 `tickBehavior`，但没有网络。
+- [算力生产者](../JavaAPI/compute-network-producer) — 本教程 PRODUCER 的 Java 端实现。
+- [网络中心](../JavaAPI/compute-network-hub) — 本教程 CENTER 的 Java 端实现。
+- [数据存储测试机器](../JavaAPI/data-store-test-machine) — `DataStorage` 的最简样本。
 - [KubeJS API](../API/KubeJS) — 本教程引用 API 的集中参考。
 - [KubeJS API#networkInterfaces](../API/KubeJS#networkinterfacesmachinebehaviorcontext-context--listnetworkinterfacereference) — 网络接口查询入口。
 - [KubeJS API#sendRequest](../API/KubeJS#sendrequestnetworkinterfacereference-source-machinereference-target-string-requestid-object-body--void) — 消息机制。

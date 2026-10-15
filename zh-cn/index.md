@@ -14,10 +14,10 @@ hero:
   actions:
     - theme: brand
       text: 快速开始
-      link: /zh-cn/快速开始/开始
+      link: /zh-cn/getting-started/
     - theme: alt
       text: 全部示例
-      link: /zh-cn/KubeJS/高炉
+      link: /zh-cn/KubeJS/blast-furnace
     - theme: alt
       text: 查看源码
       link: https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed

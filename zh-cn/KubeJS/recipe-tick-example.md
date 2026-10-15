@@ -472,16 +472,16 @@ ServerEvents.recipes(event => {
 | 配方机器的"每 tick 强制副作用"（无论配方是否在跑：屏幕、`dataStorage`、网络探测） | `MachineBuilderJS.preServerTick` / `MachineBuilderJS.postServerTick` | `recipeTick` 只在配方运行中触发；要做"配方未启动也要每 tick 跑"的全局逻辑，写在这两个 `MachineBuilderJS` Hook里 |
 | 自定义复杂合成的节奏（多阶段、跨配方共享需求修改） | `recipeBehavior` | 仍需要配方数据来定义"做什么"，但每个阶段需要插入自定义回调 |
 
-本机器是"`recipeBehavior` 5 个Hook全用上"的完整样本，可与 [纯Tick测试机器](../JavaAPI/纯Tick测试机器) 的无配方方案对照阅读。
+本机器是"`recipeBehavior` 5 个Hook全用上"的完整样本，可与 [纯Tick测试机器](../JavaAPI/pure-tick-test-machine) 的无配方方案对照阅读。
 
 ## 延伸阅读
 
-- [纯Tick机器示例](./纯Tick机器示例) — 同组对比，无配方的 `tickBehavior`。
-- [数据存储测试机器](./数据存储测试机器) — `DataStorage` 的最简样本。
-- [算力-网络交互示例](./算力-网络交互示例) — `tickBehavior` + 网络通信。
-- [配方Tick测试机器](../JavaAPI/配方Tick测试机器) — 本机器的 Java 端实现。
-- [高炉](../JavaAPI/高炉) — 标准配方机器（空Hook）。
-- [纯Tick测试机器](../JavaAPI/纯Tick测试机器) — `tickBehavior` 在 Java 端的完整演示。
+- [纯Tick机器示例](./pure-tick-machine-example) — 同组对比，无配方的 `tickBehavior`。
+- [数据存储测试机器](./data-store-test-machine) — `DataStorage` 的最简样本。
+- [算力-网络交互示例](./compute-network-example) — `tickBehavior` + 网络通信。
+- [配方Tick测试机器](../JavaAPI/recipe-tick-test-machine) — 本机器的 Java 端实现。
+- [高炉](../JavaAPI/blast-furnace) — 标准配方机器（空Hook）。
+- [纯Tick测试机器](../JavaAPI/pure-tick-test-machine) — `tickBehavior` 在 Java 端的完整演示。
 - [KubeJS API](../API/KubeJS) — 本教程引用 API 的集中参考。
 - [KubeJS API#MachineBehaviorBuilderJS](../API/KubeJS#machinebehaviorbuilderjs) — 5 个Hook的签名与触发时机。
 - [KubeJS API#recipeBehavior](../API/KubeJS#recipebehaviorconsumermachinebehaviorbuilderjs-builder--machinebuilderjs) — `recipeBehavior` 入口。

@@ -209,6 +209,6 @@ public static void registerStructures(RegisterMachineStructuresEvent event) {
 
 ## 延伸阅读
 
-- [配方Tick测试机器](./配方Tick测试机器)：配方生命周期及安全需求替换。
-- [数据存储测试机器](./数据存储测试机器)：事务写入与借用句柄。
+- [配方Tick测试机器](./recipe-tick-test-machine)：配方生命周期及安全需求替换。
+- [数据存储测试机器](./data-store-test-machine)：事务写入与借用句柄。
 - [Java 公共 API 参考](../API/JavaAPI)。

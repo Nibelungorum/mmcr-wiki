@@ -135,7 +135,7 @@ public static void registerStructures(RegisterMachineStructuresEvent event) {
 
 `BlockConditions.smartInterface()` 允许真实的智能接口方块进入结构组件集合；机器端的 `SmartInterfaces.type(...)` 只声明可配置值规格，不能替代接口安装位。玩家通过智能接口的配置界面设置值，不应把它描述成控制器自身无条件具备的调节器。
 
-结构默认状态不敏感，因此楼梯 `state(...)` 中的属性用于声明预览 / 搭建状态，实际匹配忽略状态属性。本例没有调用 `stateSensitive()`；要强制检查朝向、半高、形状等属性，参照 [反应堆](反应堆)。
+结构默认状态不敏感，因此楼梯 `state(...)` 中的属性用于声明预览 / 搭建状态，实际匹配忽略状态属性。本例没有调用 `stateSensitive()`；要强制检查朝向、半高、形状等属性，参照 [反应堆](reactor)。
 
 ## 三条配方与智能要求
 

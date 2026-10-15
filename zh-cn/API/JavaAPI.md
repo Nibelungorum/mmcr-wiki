@@ -2271,7 +2271,7 @@ static void information(RegisterJeiRecipeInformationEvent event) {
 
 协议与快照位于 `cn.howxu.mmcr.publicapi.ui`，客户端接入位于 `cn.howxu.mmcr.publicapi.client.ui`，注册事件位于 `.event`。
 
-此扩展允许为一台机器注册完整的控制器屏幕。MMCR 管理原菜单、会话身份、状态同步与请求传输；附属 Mod 提供屏幕、纯数据 Codec 和服务端业务回调。可以使用原生 Minecraft UI 或 Modern UI 等框架，公共接口不依赖 Modern UI 的控件类型。接入示例见 [UI 测试机器](../JavaAPI/UI测试机器)。
+此扩展允许为一台机器注册完整的控制器屏幕。MMCR 管理原菜单、会话身份、状态同步与请求传输；附属 Mod 提供屏幕、纯数据 Codec 和服务端业务回调。可以使用原生 Minecraft UI 或 Modern UI 等框架，公共接口不依赖 Modern UI 的控件类型。接入示例见 [UI 测试机器](../JavaAPI/ui-test-machine)。
 
 ### 注册事件与窗口
 

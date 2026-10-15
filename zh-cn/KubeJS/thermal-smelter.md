@@ -340,4 +340,4 @@ max_threads: 4
 - [API/KubeJS#levelrequirementstring-typeid-string-levelid--levelrequirement](../API/KubeJS#kubejsapi) — 编程式等级要求对象。
 - [API/KubeJS#machinerecipebuilderjs](../API/KubeJS#machinerecipebuilderjs) — 编程式配方构建器的 `requiresLevel(...)`。
 - [API/KubeJS#machinerecipeschema](../API/KubeJS#machinerecipeschema) — 数据驱动配方字段全集。
-- [JavaAPI/热能冶炼炉](../JavaAPI/热能冶炼炉) — 同一台热能冶炼炉的 Java 实现。
+- [JavaAPI/热能冶炼炉](../JavaAPI/thermal-smelter) — 同一台热能冶炼炉的 Java 实现。

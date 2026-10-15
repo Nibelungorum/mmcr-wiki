@@ -386,9 +386,9 @@ KubeJS 端支持的取值方法不止 `asBigInteger`，还有 `asBoolean` / `asS
 
 ## 延伸阅读
 
-- [纯Tick机器示例](./纯Tick机器示例) — 同样是直 tick 机器，但没有数据存储。
-- [算力-网络交互示例](./算力-网络交互示例) — 用 [`api.dataValue(...)`](../API/KubeJS#datavalueobject-value--datavalue) 把数据跨机器搬运。
-- [数据存储测试机器](../JavaAPI/数据存储测试机器) — 本机器的 Java 端实现。
+- [纯Tick机器示例](./pure-tick-machine-example) — 同样是直 tick 机器，但没有数据存储。
+- [算力-网络交互示例](./compute-network-example) — 用 [`api.dataValue(...)`](../API/KubeJS#datavalueobject-value--datavalue) 把数据跨机器搬运。
+- [数据存储测试机器](../JavaAPI/data-store-test-machine) — 本机器的 Java 端实现。
 - [KubeJS API](../API/KubeJS) — 本教程引用 API 的集中参考。
 - [KubeJS API#dataValue](../API/KubeJS#datavalueobject-value--datavalue) — 类型化值包装器的完整文档。
 - [KubeJS API#dataStorage()](../API/KubeJS#datastorage--blockpredicate) — 数据存储方块谓词。

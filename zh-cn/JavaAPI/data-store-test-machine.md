@@ -198,6 +198,6 @@ IoCommitResult commitData(Consumer<DataStore.Transaction> writes);
 
 ## 延伸阅读
 
-- [纯Tick测试机器](./纯Tick测试机器)：能量、实体副作用与物品 IO 的不同边界。
-- [算力网络-生产者](./算力网络-生产者)：普通持久化写入与网络消息。
+- [纯Tick测试机器](./pure-tick-test-machine)：能量、实体副作用与物品 IO 的不同边界。
+- [算力网络-生产者](./compute-network-producer)：普通持久化写入与网络消息。
 - [Java 公共 API 参考](../API/JavaAPI)。

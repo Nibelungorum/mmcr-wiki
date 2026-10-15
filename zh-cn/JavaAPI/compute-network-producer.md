@@ -155,7 +155,7 @@ if (context.isDue(20)) {
 
 ### 3. 世界副作用与普通存储
 
-上面的 `set` 是两参数普通写入，立即生效，不与能量、水的 IO 自动组成事务。爆炸也是世界副作用，不自动回滚。若要将数据修改与 IO 一起提交，应使用 [数据存储测试机器](./数据存储测试机器#事务边界哪些会回滚) 的 `commitData` 和三参数 `set` 写法。
+上面的 `set` 是两参数普通写入，立即生效，不与能量、水的 IO 自动组成事务。爆炸也是世界副作用，不自动回滚。若要将数据修改与 IO 一起提交，应使用 [数据存储测试机器](./data-store-test-machine#事务边界哪些会回滚) 的 `commitData` 和三参数 `set` 写法。
 
 ### 4. 向中心上报
 
@@ -213,6 +213,6 @@ context.jadeText().append(PRODUCER_WATER, Component.literal(hasWater ? "Water OK
 
 ## 延伸阅读
 
-- [算力网络-网络中心](./算力网络-网络中心)：请求处理、连接收集与过期桶清理。
-- [数据存储测试机器](./数据存储测试机器)：事务写入与借用句柄。
-- [KubeJS 通信模型](../KubeJS/算力-网络交互示例#网络通信模型图解) / [Java 公共 API 参考](../API/JavaAPI)。
+- [算力网络-网络中心](./compute-network-hub)：请求处理、连接收集与过期桶清理。
+- [数据存储测试机器](./data-store-test-machine)：事务写入与借用句柄。
+- [KubeJS 通信模型](../KubeJS/compute-network-example#网络通信模型图解) / [Java 公共 API 参考](../API/JavaAPI)。

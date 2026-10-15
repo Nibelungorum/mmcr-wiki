@@ -14,7 +14,7 @@ order: 10
 - 未绑定的空格忽略世界中的对应位置，适合表达笼子中空区域。
 - 可以合法注册没有配方的机器，但名称“怪物农场”并不会让它自动刷怪、杀怪或收集掉落物。
 
-怪物农场不是内置示例中唯一配置朝向的机器：[裂化器](裂化器) 也允许竖直放置并声明完全旋转对称；本例更进一步要求控制器只能竖直放置。
+怪物农场不是内置示例中唯一配置朝向的机器：[裂化器](cracker) 也允许竖直放置并声明完全旋转对称；本例更进一步要求控制器只能竖直放置。
 
 ## 入口与类型签名
 
@@ -126,7 +126,7 @@ XXXXX          ABBBA          XXXXX
 
 **`where('A', block(Blocks.OAK_LOG))`**
 
-角柱固定为橡木原木，`block(...)` 不限制 `axis=x/y/z`。若要强制指定状态，应使用 `state("minecraft:oak_log[axis=y]")` 并按需要开启 `stateSensitive()`，对照 [反应堆](反应堆)。
+角柱固定为橡木原木，`block(...)` 不限制 `axis=x/y/z`。若要强制指定状态，应使用 `state("minecraft:oak_log[axis=y]")` 并按需要开启 `stateSensitive()`，对照 [反应堆](reactor)。
 
 **`where('B', block(Blocks.IRON_BARS))`**
 
@@ -138,7 +138,7 @@ XXXXX          ABBBA          XXXXX
 
 ### 为什么没有接口
 
-源码没有使用物品、流体、能量等接口条件，也没有 `portTiers(...)`。本例不接收材料、不产出物品，不需要加工 IO；[高炉](高炉) 则在 `I` 位置允许物品输入 / 输出与能量输入。
+源码没有使用物品、流体、能量等接口条件，也没有 `portTiers(...)`。本例不接收材料、不产出物品，不需要加工 IO；[高炉](blast-furnace) 则在 `I` 位置允许物品输入 / 输出与能量输入。
 
 ## 没有配方意味着什么
 
@@ -146,7 +146,7 @@ XXXXX          ABBBA          XXXXX
 
 要扩展成可工作的机器，可选择与目标行为匹配的方式：
 
-1. **加工配方**：使用 `Recipes.recipe(...)` 创建 `RecipeDraft`，在 `RegisterMachineRecipesEvent` 中提交 `RecipeSpec`，并为结构增加所需接口。随机副产物可用 `outputChance(ItemStack, float)`，参考 [蒸馏塔](蒸馏塔)。
+1. **加工配方**：使用 `Recipes.recipe(...)` 创建 `RecipeDraft`，在 `RegisterMachineRecipesEvent` 中提交 `RecipeSpec`，并为结构增加所需接口。随机副产物可用 `outputChance(ItemStack, float)`，参考 [蒸馏塔](distillation-tower)。
 2. **世界行为**：用 `MachineDraft.tickBehavior(Consumer<TickHooks>)` 或 `preServerTick(Consumer<MachineContext>)` 配置与实体交互的回调，行为上下文与钩子均来自 `publicapi.behavior`。本文件没有提供这类实现。
 
 这两条路解决不同问题；添加配方不会自动扫描实体，添加行为也要明确资源、掉落和运行条件。
@@ -167,8 +167,8 @@ XXXXX          ABBBA          XXXXX
 
 ## 延伸阅读
 
-- [高炉](高炉)：三阶段注册与 JEI 工作站。
-- [裂化器](裂化器)：允许竖直、非强制竖直的控制器配置。
+- [高炉](blast-furnace)：三阶段注册与 JEI 工作站。
+- [裂化器](cracker)：允许竖直、非强制竖直的控制器配置。
 - [ControllerOptions](../API/JavaAPI#controlleroptions)：ID、纹理与朝向选项。
 - [BlockConditions](../API/JavaAPI#blockconditions) / [PatternDraft](../API/JavaAPI#patterndraft)：标签、状态、字符与空格。
 - [TickHooks](../API/JavaAPI#tickhooks) / [MachineContext](../API/JavaAPI#machinecontext)：行为扩展入口。

@@ -9,9 +9,9 @@ order: 12
 
 脚本回调直接使用 `cn.howxu.mmcr.api.machine.definition` 下的底层上下文，不是 Java `publicapi` 的行为接口。`serverTick` 收到 `TickBehaviorContext`；其 `ioPlan()` 返回同包的 `MachineIoPlan`，`screenText()` 返回 `api.controller.ControllerScreenText`。
 
-本机器没有配方，完全靠 [`tickBehavior`](../API/KubeJS#tickbehaviorconsumermachinebehaviorbuilderjs-builder--machinebuilderjs) + [`serverTick`](../API/KubeJS#servertickconsumertickbehaviorcontext-callback--machinebehaviorbuilderjs) 自驱。它是 [纯Tick测试机器](../JavaAPI/纯Tick测试机器) 的 KubeJS 版实现。
+本机器没有配方，完全靠 [`tickBehavior`](../API/KubeJS#tickbehaviorconsumermachinebehaviorbuilderjs-builder--machinebuilderjs) + [`serverTick`](../API/KubeJS#servertickconsumertickbehaviorcontext-callback--machinebehaviorbuilderjs) 自驱。它是 [纯Tick测试机器](../JavaAPI/pure-tick-test-machine) 的 KubeJS 版实现。
 
-它跟 [配方Tick示例](./配方Tick示例) 是同组对比：两者都"按 tick 自定义"，但本机器**完全没有配方**，所有逻辑都压缩到 `serverTick` 里。配方Tick示例 走 [`recipeBehavior`](../API/KubeJS#recipebehaviorconsumermachinebehaviorbuilderjs-builder--machinebuilderjs)，在配方生命周期的 5 个钩子上插入回调。本教程会重点展开 [`MachineBehaviorBuilderJS`](../API/KubeJS#machinebehaviorbuilderjs) 的链式调用 + `idleStart` / `idleEnd` / `preServerTick` / `postServerTick` / `serverTick` 等钩子的可用范围，并区分 PURE_TICK vs RECIPE_TICK。
+它跟 [配方Tick示例](./recipe-tick-example) 是同组对比：两者都"按 tick 自定义"，但本机器**完全没有配方**，所有逻辑都压缩到 `serverTick` 里。配方Tick示例 走 [`recipeBehavior`](../API/KubeJS#recipebehaviorconsumermachinebehaviorbuilderjs-builder--machinebuilderjs)，在配方生命周期的 5 个钩子上插入回调。本教程会重点展开 [`MachineBehaviorBuilderJS`](../API/KubeJS#machinebehaviorbuilderjs) 的链式调用 + `idleStart` / `idleEnd` / `preServerTick` / `postServerTick` / `serverTick` 等钩子的可用范围，并区分 PURE_TICK vs RECIPE_TICK。
 
 ## 涉及的文件
 
@@ -397,11 +397,11 @@ plan.commit()
 
 ## 延伸阅读
 
-- [数据存储测试机器](./数据存储测试机器) — 同为 `tickBehavior` 但带 `DataStorage`。
-- [算力-网络交互示例](./算力-网络交互示例) — 同为 `tickBehavior` 但带网络通信。
-- [配方Tick示例](./配方Tick示例) — 同组对比，演示 `recipeBehavior` 的 5 个钩子。
-- [纯Tick测试机器](../JavaAPI/纯Tick测试机器) — 本机器的 Java 端实现。
-- [配方Tick测试机器](../JavaAPI/配方Tick测试机器) — `recipeBehavior` 在 Java 端的完整演示。
+- [数据存储测试机器](./data-store-test-machine) — 同为 `tickBehavior` 但带 `DataStorage`。
+- [算力-网络交互示例](./compute-network-example) — 同为 `tickBehavior` 但带网络通信。
+- [配方Tick示例](./recipe-tick-example) — 同组对比，演示 `recipeBehavior` 的 5 个钩子。
+- [纯Tick测试机器](../JavaAPI/pure-tick-test-machine) — 本机器的 Java 端实现。
+- [配方Tick测试机器](../JavaAPI/recipe-tick-test-machine) — `recipeBehavior` 在 Java 端的完整演示。
 - [KubeJS API](../API/KubeJS) — 本教程引用 API 的集中参考。
 - [KubeJS API#tickBehavior](../API/KubeJS#tickbehaviorconsumermachinebehaviorbuilderjs-builder--machinebuilderjs) — 直 tick 模式入口。
 - [KubeJS API#serverTick](../API/KubeJS#servertickconsumertickbehaviorcontext-callback--machinebehaviorbuilderjs) — 每 tick 一次的回调。

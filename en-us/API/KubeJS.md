@@ -4,9 +4,7 @@ title: KubeJS API
 
 # KubeJS API
 
-This page is a consolidated reference for MMCR's KubeJS integration, targeting **Minecraft 26.1.2, Java 25, and KubeJS 26.1.2-8.0.6**, with commit [`f234477b`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/gradle.properties) as the source baseline. Examples use KubeJS/Rhino JavaScript syntax.
-
-Port count requirements, tier requirements, and related factory shortcuts have been updated to match commit [`c2563c41`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/commit/c2563c4110cd15bad0218dc4fa5a4f091fbccc87), including Mekanism chemical, radioactive chemical, and heat ports.
+This page is a consolidated reference for MMCR's KubeJS integration, targeting **Minecraft 26.1.2**, with commit [`f234477b`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/gradle.properties) as the source baseline. Examples use KubeJS/Rhino JavaScript syntax.
 
 MMCR's KubeJS API has three declaration windows: machine, tier, modifier, and screen text registration in startup scripts; structure and programmatic recipe registration during server script loading; and data-driven recipe registration in `ServerEvents.recipes`. Changes to startup declarations require a restart; server-side structures and recipes can be replaced during a resource reload. There are also client-side recipe information events and runtime smart interface update events.
 
@@ -3169,7 +3167,7 @@ Their method names are not identical. The schema provides `chemicalInputChance` 
 
 ### `MachineRecipeBuilderJS`
 
-Source: [MachineRecipeBuilderJS.java](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineRecipeBuilderJS.java). This class does not extend `BuilderBase` and has no `register()` method like the machine registration builder; `MMCRServerEventJS` also has no `createRecipe` method.
+Source: [MachineRecipeBuilderJS.java](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/fbb3198c/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineRecipeBuilderJS.java). This class does not extend `BuilderBase` and has no `register()` method like the machine registration builder; `MMCRServerEventJS` also has no `createRecipe` method.
 
 #### Construction, Fields, and Defaults
 
@@ -3244,6 +3242,21 @@ Therefore, whenever you use the builder's `itemOutputWithComponents`, you must *
 | `heatOutput(double heat)` | Heat output declaration. |
 
 Chemical/heat calls use the `custom` path with registered codecs, rather than placing Mekanism objects in an item stack list. Consumption chances are converted to `float`; type IDs, amounts, chances, temperatures, and heat values must also pass the relevant payload validation. Passing a `long` amount does not make underlying item and fluid stacks unlimited: these stacks call `MachineOutput.recipeStackAmount`, which requires a positive amount and clamps values above `Integer.MAX_VALUE` to that limit.
+
+#### Lightning Recipe IO {#lightning-builder}
+
+All methods below return the current `MachineRecipeBuilderJS`. They append lightning IO as explicit requirements, independently of the traditional input `deriveRequirements` switch.
+
+| Method | Behavior |
+| --- | --- |
+| `lightningInput(String tierId, long amount)` | Appends a one-shot, fully consumed lightning input. |
+| `lightningOutput(String tierId, long amount)` | Appends a lightning output with chance 1. |
+| `lightningOutput(String tierId, long amount, double chance)` | Appends a chance-based lightning output. |
+| `lightningOutputChance(String tierId, long amount, double chance)` | Alias for three-argument `lightningOutput`. |
+
+`tierId` accepts only `ae2lt:high_voltage` or `ae2lt:extreme_high_voltage`; unknown IDs throw `IllegalArgumentException`. `amount` must be positive and is capped at `2147483647`; multiple requirements for the same resource and direction also share this limit. `chance` is converted to `float` and clamped to `[0,1]`, with `NaN` becoming 1. There is no input chance overload. Amounts are per parallel recipe, not per-tick consumption; see [Lightning Schema and JSON](#lightning-schema) below for execution requirements and capacity policies.
+
+These entry points belong to the recipe builder, not to same-named factories on `MMCR.getAPI()` / `KubeJSApi`. The data-driven schema does not have the three-argument `lightningOutput` shown above; its corresponding method is named `lightningOutputChance`. Recipe examples consistently use the plain `requirements` format below rather than mixing builder entry points.
 
 #### Smart Interfaces, Levels, Stages, and Hosts
 
@@ -3330,14 +3343,50 @@ The following additional functions are registered on the data-driven recipe `Rec
 | `chemicalOutput(chemicalId, amount, chance)` | `(String, long, double)` | Appends a specific chemical output to `outputs`; chance is 0..1. |
 | `heatTemperatureInput(temperature)` | `(double)` | Appends a minimum temperature input with a nonnegative temperature. |
 | `heatOutput(heat)` | `(double)` | Appends to `outputs` if an output codec is registered; otherwise uses requirement decoding. Heat must be nonnegative. |
+| `lightningInput(tierId, amount)` | `(String, long)` | Appends a one-shot lightning input to `requirements`. |
+| `lightningOutput(tierId, amount)` | `(String, long)` | Appends a guaranteed lightning output to `outputs`. |
+| `lightningOutputChance(tierId, amount, chance)` | `(String, long, float)` | Appends a chance-based lightning output to `outputs`, normalizing its chance using lightning rules. |
 
-Source: [MachineRecipeSchema.java](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineRecipeSchema.java). These are all 14 additionally registered schema functions. Chemical amounts are constrained to positive `long` values by their component; temperature and heat use nonnegative `double` components, with payload validation also checking that values are finite. Do not infer from the programmatic builder that the schema has `itemOutputWithComponents`, `requiresStage`, `requiredHosts`, or a three-argument `chemicalInput`; the source does not register these functions.
+Source: [MachineRecipeSchema.java](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/fbb3198c/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineRecipeSchema.java). These are all 17 additionally registered schema functions. Chemical and lightning amounts are constrained to positive `long` values by their component; temperature and heat use nonnegative `double` components, with payload validation also checking that values are finite. Do not infer from the programmatic builder that the schema has `itemOutputWithComponents`, `requiresStage`, `requiredHosts`, three-argument `chemicalInput`, or three-argument `lightningOutput`; the source does not register these functions.
 
 The schema's required keys are `recipe_pool`, `tick_time`, and `requirements`; `outputs` and `modifiers` default to empty lists. The schema component for `tick_time` permits nonnegative integers, but valid machine recipes are still subject to MMCR's execution/decoding validation, so the examples use positive durations. Additional functions modify `cx.recipe().json` and then call `save()`; they operate on a `KubeRecipe`, not the programmatic builder.
 
 KubeJS also automatically generates setters for keys that do not call `noFunctions()`. Available setters include `tickTime(int)`, `requirements(List<JsonElement>)`, `outputs(List<JsonElement>)`, `modifiers(List<JsonElement>)`, `maxThreads(int)`, `parallelized(boolean)`, and `cancelIfPerTickFails(boolean)`. Since `recipe_pool` calls `noFunctions()`, that key does not generate a `recipePool` setter. These list parameters are still JSON, not Java IO objects.
 
 `allowPartialOutputs` is a special case of a same-name override: in KubeJS 26.1.2-8.0.6, the function map first adds the automatic key setter, then MMCR's explicitly registered no-argument `allowPartialOutputs()`, which overwrites the former. As a result, the schema has **no usable boolean overload**; `.allowPartialOutputs(false)` ignores the argument and still writes `allow_partial_outputs=true`. To disable it, set `allow_partial_outputs: false` in the recipe JSON (also the default) and do not call this function. Only the programmatic `MachineRecipeBuilderJS` supports `allowPartialOutputs(boolean)`; that signature does not apply to the schema.
+
+#### Lightning Recipe IO Types {#lightning-schema}
+
+Both AE2 (`ae2`) and AE2LT (`ae2lt`) must be loaded at runtime; the current metadata declares minimum versions of `26.1.10-beta` and `1.0.1alpha`, respectively. Lightning participates in IO through MMCR's ME Input, Stocking, Output, Async Output, and Pattern Interfaces, not ordinary energy hatches or automatic adjacent-block transfer. If either dependency is absent, lightning requirements block; being able to construct a declaration does not make the machine executable.
+
+`ae2lt:high_voltage` identifies high-voltage lightning and `ae2lt:extreme_high_voltage` identifies extreme-high-voltage lightning. They match separately without automatic conversion. Do not pass enum names, the unnamespaced `high_voltage`, or the internal capability ID `ae2lt:lightning`. Amounts are one-shot IO per parallel recipe, not FE/t or lightning entity spawning: inputs are consumed at start, outputs are produced at completion, and actual amounts scale with parallelism. Outputs still check capacity; `allowPartialOutputs` accepts partial outputs without providing unlimited space. Later blocked outputs do not charge already-paid one-shot inputs again.
+
+The schema's `tierId` likewise accepts only `ae2lt:high_voltage` and `ae2lt:extreme_high_voltage`. `amount` uses a positive `long` component and is capped at `2147483647` when converted to a declaration. Unknown IDs and nonpositive amounts are rejected. Output chance is read using a `float` component and normalized to `[0,1]`. The schema has **only two-argument `lightningOutput`**; chance-based output must use `lightningOutputChance`, not the programmatic builder's three-argument overload.
+
+Recipe examples declare both inputs and outputs in `requirements`, using `io` to distinguish direction, without mixing chained IO methods or a top-level `outputs` array:
+
+```javascript
+// server_scripts; the machine definition must already declare example:lightning_pool
+ServerEvents.recipes(event => {
+    event.custom({
+        type: "mmcr:machine_recipe",
+        recipe_pool: "example:lightning_pool",
+        tick_time: 100,
+        requirements: [
+            { type: "ae2lt:high_voltage", io: "input", amount: 100 },
+            { type: "ae2lt:extreme_high_voltage", io: "output", amount: 10, chance: 0.25 }
+        ]
+    }).id("example:lightning_json")
+})
+```
+
+Both lightning types support `io`, positive `amount`, `chance` (default 1), and an optional string list `tags`. `io: "input"` declares an input and `io: "output"` declares an output. Although omitting `io` defaults to input, the example explicitly specifies both directions. Input `chance` must be 1; lightning inputs have no `consume_chance` semantics. The recipe above already declares its complete output; do not append it again through shortcuts or `outputs`.
+
+Shortcuts do not replace the dependency, interface, or capacity requirements above. Java addons use the [public `LightningTier` enum](JavaAPI#lightning-tier), not the string parameters used by scripts.
+
+With JEI loaded, the integration uses AE2LT's native lightning ingredient display and supports transferring lightning amounts into pattern encoding. Amounts for the same resource and direction are merged during transfer; encoding slot limits and ME network requirements still apply.
+
+Source: [dependency declarations](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/fbb3198c/src/main/resources/META-INF/neoforge.mods.toml), [ME interface integration](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/fbb3198c/src/main/java/cn/howxu/mmcr/compat/ae2lt/loaded/LoadedLightningBridge.java), [requirement and output codecs](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/fbb3198c/src/main/java/cn/howxu/mmcr/compat/ae2lt/LightningRecipeTypes.java), [JEI pattern transfer](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/fbb3198c/src/main/java/cn/howxu/mmcr/compat/ae2lt/client/LightningPatternTransfer.java).
 
 #### Mekanism Recipe IO Types
 

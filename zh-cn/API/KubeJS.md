@@ -4,9 +4,7 @@ title: KubeJS API
 
 # KubeJS API
 
-本页是 MMCR 的 KubeJS 集成层的集中参考，固定对应 **Minecraft 26.1.2、Java 25、KubeJS 26.1.2-8.0.6**，源码基线为提交 [`f234477b`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/gradle.properties)。示例使用 KubeJS/Rhino 的 JavaScript 写法。
-
-端口数量需求、等级需求及相关快捷工厂已按提交 [`c2563c41`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/commit/c2563c4110cd15bad0218dc4fa5a4f091fbccc87) 更新，包含 Mekanism 化学品、放射性化学品与热量端口。
+本页是 MMCR 的 KubeJS 集成层的集中参考，固定对应 **Minecraft 26.1.2**，源码基线为提交 [`f234477b`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/gradle.properties)。示例使用 KubeJS/Rhino 的 JavaScript 写法。
 
 MMCR 的 KubeJS API 分为三个声明窗口：启动脚本中的机器、等级、修饰符和屏幕文本注册；服务端脚本加载中的结构与编程式配方注册；`ServerEvents.recipes` 中的数据驱动配方注册。启动声明修改后需要重启；服务端结构与配方可随资源重载替换。此外还有客户端配方说明事件和运行时智能接口更新事件。
 
@@ -3169,7 +3167,7 @@ stage.pattern("X").set("X", "minecraft:iron_block").controller("X")
 
 ### `MachineRecipeBuilderJS`
 
-源码：[MachineRecipeBuilderJS.java](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineRecipeBuilderJS.java)。该类不继承 `BuilderBase`，没有机器注册构建器的 `register()`；`MMCRServerEventJS` 也没有 `createRecipe` 方法。
+源码：[MachineRecipeBuilderJS.java](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/fbb3198c/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineRecipeBuilderJS.java)。该类不继承 `BuilderBase`，没有机器注册构建器的 `register()`；`MMCRServerEventJS` 也没有 `createRecipe` 方法。
 
 #### 创建、字段与默认值
 
@@ -3244,6 +3242,21 @@ stage.pattern("X").set("X", "minecraft:iron_block").controller("X")
 | `heatOutput(double heat)` | 输出热量声明。 |
 
 化学品/热量调用通过注册 codec 的 `custom` 路径，不是往物品栈列表放 Mekanism 对象。消费概率转为 `float`；类型 ID、数量、概率、温度和热量还需通过相应 payload 校验。数量传 `long` 不代表物品与流体底层栈无限大：这些栈调用 `MachineOutput.recipeStackAmount`，要求数量为正，并把超过 `Integer.MAX_VALUE` 的数量饱和到该上限。
+
+#### 闪电科技配方 IO {#lightning-builder}
+
+以下方法均返回当前 `MachineRecipeBuilderJS`，通过显式需求追加闪电 IO，不依赖传统输入的 `deriveRequirements` 开关。
+
+| 方法 | 行为 |
+| --- | --- |
+| `lightningInput(String tierId, long amount)` | 追加一次性、完全消耗的闪电输入。 |
+| `lightningOutput(String tierId, long amount)` | 追加闪电输出，概率为 1。 |
+| `lightningOutput(String tierId, long amount, double chance)` | 追加概率闪电输出。 |
+| `lightningOutputChance(String tierId, long amount, double chance)` | 三参数 `lightningOutput` 的别名。 |
+
+`tierId` 仅接受 `ae2lt:high_voltage` 或 `ae2lt:extreme_high_voltage`；未知 ID 抛 `IllegalArgumentException`。`amount` 必须为正，超过 `2147483647` 时饱和到该上限；同资源、同方向的多条需求合计也受上限约束。`chance` 转为 `float` 后夹到 `[0,1]`，`NaN` 归为 1。没有输入概率重载。数量按每份并行配方计算，不是每 tick 消耗；执行条件与容量策略见下文[闪电科技 schema 与 JSON](#lightning-schema)。
+
+这些入口属于配方构建器，不是 `MMCR.getAPI()` / `KubeJSApi` 上的同名工厂。数据驱动 schema 没有上表的三参数 `lightningOutput`，对应方法名为 `lightningOutputChance`。配方示例统一使用下节的纯 `requirements` 写法，不混用构建器入口。
 
 #### 智能接口、等级、阶段与宿主
 
@@ -3330,14 +3343,50 @@ MMCREvents.server(event => {
 | `chemicalOutput(chemicalId, amount, chance)` | `(String, long, double)` | 追加具体化学品输出到 `outputs`；概率 0..1。 |
 | `heatTemperatureInput(temperature)` | `(double)` | 追加最低温度输入，非负温度。 |
 | `heatOutput(heat)` | `(double)` | 注册输出 codec 时追加到 `outputs`，否则走需求解码；热量非负。 |
+| `lightningInput(tierId, amount)` | `(String, long)` | 追加一次性闪电输入到 `requirements`。 |
+| `lightningOutput(tierId, amount)` | `(String, long)` | 追加必定产出的闪电输出到 `outputs`。 |
+| `lightningOutputChance(tierId, amount, chance)` | `(String, long, float)` | 追加概率闪电输出到 `outputs`，概率按闪电规则归一化。 |
 
-源码：[MachineRecipeSchema.java](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineRecipeSchema.java)。以上是额外注册的全部 14 个 schema 函数。化学品数量的组件约束为正 `long`；温度和热量使用非负 `double` 组件，payload 继续校验有限值。不要据编程式构建器推导 schema 存在 `itemOutputWithComponents`、`requiresStage`、`requiredHosts` 或三参数 `chemicalInput`，源码未注册这些函数。
+源码：[MachineRecipeSchema.java](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/fbb3198c/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineRecipeSchema.java)。以上是额外注册的全部 17 个 schema 函数。化学品与闪电数量的组件约束为正 `long`；温度和热量使用非负 `double` 组件，payload 继续校验有限值。不要据编程式构建器推导 schema 存在 `itemOutputWithComponents`、`requiresStage`、`requiredHosts`、三参数 `chemicalInput` 或三参数 `lightningOutput`，源码未注册这些函数。
 
 schema 的必需键是 `recipe_pool`、`tick_time`、`requirements`；`outputs` 和 `modifiers` 默认空列表。`tick_time` 的 schema 组件允许非负整数，但合法机器配方仍受 MMCR 的执行/解码校验约束，示例使用正耗时。附加函数修改 `cx.recipe().json` 后调用 `save()`；它们操作的是 `KubeRecipe`，不是编程式 builder。
 
 此外 KubeJS 为未调用 `noFunctions()` 的键自动生成设置函数，可用的包括：`tickTime(int)`、`requirements(List<JsonElement>)`、`outputs(List<JsonElement>)`、`modifiers(List<JsonElement>)`、`maxThreads(int)`、`parallelized(boolean)`、`cancelIfPerTickFails(boolean)`。`recipe_pool` 调用了 `noFunctions()`，所以没有由此键生成的 `recipePool` 设置函数。这里的列表参数仍是 JSON，而不是 Java IO 对象。
 
 `allowPartialOutputs` 是同名覆盖的特例：KubeJS 26.1.2-8.0.6 的函数 map 先加入自动键 setter，再加入 MMCR 显式注册的无参 `allowPartialOutputs()`，后者覆盖前者。因此 schema 上**没有可用的布尔重载**；`.allowPartialOutputs(false)` 会忽略传入参数，仍写入 `allow_partial_outputs=true`。需要禁用时，在配方 JSON 中设置 `allow_partial_outputs: false`（默认也是 false），并且不再调用此函数。只有编程式 `MachineRecipeBuilderJS` 支持 `allowPartialOutputs(boolean)`，不能将其签名套用到 schema。
+
+#### 闪电科技配方 IO 类型 {#lightning-schema}
+
+运行时必须同时加载 AE2（`ae2`）和闪电科技（`ae2lt`）；当前元数据声明的最低版本分别为 `26.1.10-beta` 和 `1.0.1alpha`。闪电通过 MMCR 的 ME 输入、备货、输出、异步输出和样板接口参与 IO，不走普通能量仓或相邻方块自动传输。缺少任一依赖时闪电需求会阻塞，能构造声明不代表机器可以执行。
+
+`ae2lt:high_voltage` 表示高压闪电，`ae2lt:extreme_high_voltage` 表示极高压闪电，两者分别匹配，不会自动转换。不要传枚举名、无命名空间的 `high_voltage`，或内部能力 ID `ae2lt:lightning`。数量是每份并行配方的一次性 IO，不是 FE/t 或召唤闪电实体：启动扣输入、完成产输出，实际数量随并行份数缩放。输出仍检查容量，`allowPartialOutputs` 允许部分产出但不提供无限空间；后续输出阻塞不会重新扣除已支付的一次性输入。
+
+schema 的 `tierId` 同样只接受 `ae2lt:high_voltage` 和 `ae2lt:extreme_high_voltage`。`amount` 使用正 `long` 组件，进入声明时饱和到 `2147483647`；未知 ID 或非正数量被拒绝。输出概率由 `float` 组件读取后归一化到 `[0,1]`。schema **只有两参数 `lightningOutput`**，概率输出必须调用 `lightningOutputChance`，不能照抄编程式构建器的三参数重载。
+
+配方示例统一把输入、输出都声明在 `requirements` 中，通过 `io` 区分方向：
+
+```javascript
+// server_scripts；example:lightning_pool 必须已由机器定义声明
+ServerEvents.recipes(event => {
+    event.custom({
+        type: "mmcr:machine_recipe",
+        recipe_pool: "example:lightning_pool",
+        tick_time: 100,
+        requirements: [
+            { type: "ae2lt:high_voltage", io: "input", amount: 100 },
+            { type: "ae2lt:extreme_high_voltage", io: "output", amount: 10, chance: 0.25 }
+        ]
+    }).id("example:lightning_json")
+})
+```
+
+两种闪电 `type` 都支持 `io`、正数 `amount`、`chance`（默认 1）和可选的字符串列表 `tags`。`io: "input"` 表示输入，`io: "output"` 表示输出；虽然省略 `io` 时默认为输入，示例仍显式填写方向。输入的 `chance` 只能为 1，不存在 `consume_chance` 闪电输入语义。上述配方已完整声明产出，不要再通过便捷方法或 `outputs` 重复追加。
+
+便捷函数不替代上述依赖、接口和容量条件。
+
+加载 JEI 时，联动使用闪电科技的原生闪电配料显示，并支持将闪电数量传入样板编码；相同资源、同方向的数量在转移时合并，仍受编码槽位和 ME 网络条件限制。
+
+源码：[依赖声明](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/fbb3198c/src/main/resources/META-INF/neoforge.mods.toml)、[ME 接口接入](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/fbb3198c/src/main/java/cn/howxu/mmcr/compat/ae2lt/loaded/LoadedLightningBridge.java)、[需求与输出 codec](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/fbb3198c/src/main/java/cn/howxu/mmcr/compat/ae2lt/LightningRecipeTypes.java)、[JEI 样板转移](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/fbb3198c/src/main/java/cn/howxu/mmcr/compat/ae2lt/client/LightningPatternTransfer.java)。
 
 #### Mekanism 配方 IO 类型
 

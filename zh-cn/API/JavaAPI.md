@@ -810,6 +810,9 @@ RecipeDraft inputEnergy(long fePerTick);
 RecipeDraft outputEnergy(long fePerTick);
 RecipeDraft iFEt(long fePerTick);
 RecipeDraft oFEt(long fePerTick);
+RecipeDraft lightningInput(LightningTier tier, long amount);
+RecipeDraft lightningOutput(LightningTier tier, long amount);
+RecipeDraft lightningOutput(LightningTier tier, long amount, float chance);
 RecipeDraft outputItem(Item item, int count);
 RecipeDraft outputItem(ItemStack stack);
 RecipeDraft outputItem(ItemStack stack, ComponentConstraints components);
@@ -834,7 +837,7 @@ RecipeSpec build();
 
 默认时长 1 tick、优先级 0、最大线程 1，三个布尔开关默认 `false`。时长/最大线程必须正数，优先级不得负。**配方池无默认值**，未设池时 `build()` 抛 `IllegalStateException`。输入输出与 requirement 为追加声明，不会因再次调用覆盖整个列表。
 
-物品数量/流体数量使用 `int`，能量是 `long` **FE/t**（不是配方总耗能）；化学品是 `long`。`iFEt`/`oFEt` 是能量输入/输出别名。`consumeChance` 是输入消耗概率，0 表示仍须匹配但不消耗；输出 `chance` 是产出概率，二者不能混淆。概率需有限且位于 `[0,1]`。
+物品数量/流体数量使用 `int`，能量是 `long` **FE/t**；化学品是 `long`。`iFEt`/`oFEt` 是能量输入/输出别名。`consumeChance` 是输入消耗概率，0 表示仍须匹配但不消耗；输出 `chance` 是产出概率，二者不能混淆。普通概率参数需有限且位于 `[0,1]`；闪电输出使用下节说明的概率归一化规则。
 
 `requiredHost` 约束模块配方可接受的宿主，`modifier` 引用已注册修饰符 ID，`stageRequirement` 约束最低结构阶段。部分输出开关允许规划器接受可容纳的产出，不表示所有输出都会忽略容量。
 
@@ -849,7 +852,46 @@ static void recipes(RegisterMachineRecipesEvent event) {
 }
 ```
 
-源码：[RecipeDraft](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/publicapi/recipe/RecipeDraft.java)、[校验及默认值](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/api/recipe/MachineRecipeBuilder.java)。
+源码：[RecipeDraft](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/fbb3198c/src/main/java/cn/howxu/mmcr/publicapi/recipe/RecipeDraft.java)、[校验及默认值](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/fbb3198c/src/main/java/cn/howxu/mmcr/api/recipe/MachineRecipeBuilder.java)。
+
+### `LightningTier` 与闪电配方 IO {#lightning-tier}
+
+完整类名：`cn.howxu.mmcr.publicapi.recipe.LightningTier`。
+
+```java
+public enum LightningTier {
+    HIGH_VOLTAGE,
+    EXTREME_HIGH_VOLTAGE
+}
+```
+
+`RecipeDraft.lightningInput(tier, amount)` 追加一次性输入；`lightningOutput(tier, amount)` 追加必定产出的输出，三参数版本显式设置产出概率。这三个方法均返回当前草稿；没有输入概率重载，也没有公共 `lightningOutputChance` 别名。
+
+`tier` 为 `null` 时抛 `NullPointerException`；`amount <= 0` 时抛 `IllegalArgumentException`，正数超过 `2147483647` 时饱和到该上限。输出概率夹到 `[0,1]`，`NaN` 归为 `1`。数量是每份并行配方的一次性总量；输入在启动时扣除，输出在完成时产生，实际数量随并行份数缩放。高压与超高压分别匹配，不会自动互相转换；同资源、同方向的多条需求合计也受上述数量上限限制。
+
+运行时需要同时加载 AE2（`ae2`）和闪电科技（`ae2lt`）；当前元数据声明的最低版本分别为 `26.1.10-beta` 和 `1.0.1alpha`。闪电通过 MMCR 的 ME 输入、备货、输出、异步输出及样板接口接入，不通过普通能量仓或相邻方块自动传输。缺少任一依赖时闪电需求会阻塞；只依赖公共 API jar 不会提供执行能力。
+
+输出仍检查容量，`allowPartialOutputs` 可允许接受部分产出，但不会提供无限存储。一次性输入扣除成功后，后续输出阻塞不会重新扣除已支付的输入。对应资源 ID、JSON 与 schema 写法见 [KubeJS 闪电配方 IO](KubeJS#lightning-schema)。
+
+以下导入放在文件顶部，方法放在已有注册类的类体中；从已订阅 `NeoForge.EVENT_BUS` 的 `RegisterMachineRecipesEvent` 监听器调用 `lightningRecipes(event)`，仅添加方法不会自动注册配方。`my_mod:lightning_pool` 必须已由机器定义声明。每份配方消耗 100 单位高压闪电，完成时有 25% 概率产出 10 单位超高压闪电；它并不定义两种资源之间的通用换算率。
+
+```java
+import cn.howxu.mmcr.publicapi.event.RegisterMachineRecipesEvent;
+import cn.howxu.mmcr.publicapi.recipe.LightningTier;
+import net.minecraft.resources.Identifier;
+
+static void lightningRecipes(RegisterMachineRecipesEvent event) {
+    event.registerRecipe(Identifier.fromNamespaceAndPath("my_mod", "lightning_recipe"), recipe -> recipe
+            .recipePool(Identifier.fromNamespaceAndPath("my_mod", "lightning_pool"))
+            .duration(100)
+            .lightningInput(LightningTier.HIGH_VOLTAGE, 100L)
+            .lightningOutput(LightningTier.EXTREME_HIGH_VOLTAGE, 10L, 0.25F));
+}
+```
+
+附属 Mod 使用上述公共枚举；不要导入 KubeJS 底层使用的 `cn.howxu.mmcr.api.compat.ae2lt.LightningTier`，也不要依赖原生 `LightningKey`。公共枚举不提供底层枚举的 `fromId` / `requirementId` 方法。
+
+源码：[公共枚举](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/fbb3198c/src/main/java/cn/howxu/mmcr/publicapi/recipe/LightningTier.java)、[公共门面](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/fbb3198c/src/main/java/cn/howxu/mmcr/internal/api/facade/recipe/RecipeDraftFacade.java)。
 
 ### `RecipeSpec`
 

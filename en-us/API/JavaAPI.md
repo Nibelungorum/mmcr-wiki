@@ -810,6 +810,9 @@ RecipeDraft inputEnergy(long fePerTick);
 RecipeDraft outputEnergy(long fePerTick);
 RecipeDraft iFEt(long fePerTick);
 RecipeDraft oFEt(long fePerTick);
+RecipeDraft lightningInput(LightningTier tier, long amount);
+RecipeDraft lightningOutput(LightningTier tier, long amount);
+RecipeDraft lightningOutput(LightningTier tier, long amount, float chance);
 RecipeDraft outputItem(Item item, int count);
 RecipeDraft outputItem(ItemStack stack);
 RecipeDraft outputItem(ItemStack stack, ComponentConstraints components);
@@ -834,7 +837,7 @@ RecipeSpec build();
 
 The default duration is 1 tick, priority is 0, maximum thread count is 1, and the three boolean switches default to `false`. Duration and maximum thread count must be positive, and priority must not be negative. **The recipe pool has no default value**; when no pool is set, `build()` throws `IllegalStateException`. Input, output, and requirement declarations are appended; repeated calls do not overwrite the entire list.
 
-Item and fluid amounts use `int`, energy uses `long` **FE/t** (not the recipe's total energy consumption), and chemical amounts use `long`. `iFEt`/`oFEt` are energy input/output aliases. `consumeChance` is the input consumption probability; 0 means the input must still match but is not consumed. Output `chance` is the production probability; do not confuse the two. Probabilities must be finite and within `[0,1]`.
+Item and fluid amounts use `int`, energy uses `long` **FE/t** (not the recipe's total energy consumption), and chemical amounts use `long`. `iFEt`/`oFEt` are energy input/output aliases. `consumeChance` is the input consumption probability; 0 means the input must still match but is not consumed. Output `chance` is the production probability; do not confuse the two. Ordinary probability parameters must be finite and within `[0,1]`; lightning outputs use the normalization described in the next section.
 
 `requiredHost` constrains the hosts acceptable to the module recipe, `modifier` references the registered modifier ID, and `stageRequirement` constrains the lowest structural stage. Partial output switching allows the planner to accept outputs that can be accommodated, but does not mean that all outputs ignore capacity.
 
@@ -849,7 +852,46 @@ static void recipes(RegisterMachineRecipesEvent event) {
 }
 ```
 
-Source code: [RecipeDraft](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/publicapi/recipe/RecipeDraft.java), [validation and defaults](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/api/recipe/MachineRecipeBuilder.java).
+Source code: [RecipeDraft](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/fbb3198c/src/main/java/cn/howxu/mmcr/publicapi/recipe/RecipeDraft.java), [validation and defaults](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/fbb3198c/src/main/java/cn/howxu/mmcr/api/recipe/MachineRecipeBuilder.java).
+
+### `LightningTier` and Lightning Recipe IO {#lightning-tier}
+
+Fully qualified name: `cn.howxu.mmcr.publicapi.recipe.LightningTier`.
+
+```java
+public enum LightningTier {
+    HIGH_VOLTAGE,
+    EXTREME_HIGH_VOLTAGE
+}
+```
+
+`RecipeDraft.lightningInput(tier, amount)` appends a one-shot input. `lightningOutput(tier, amount)` appends a guaranteed output; the three-argument version sets the production chance explicitly. All three methods return the current draft. There is no input chance overload or public `lightningOutputChance` alias.
+
+A `null` tier throws `NullPointerException`; `amount <= 0` throws `IllegalArgumentException`, and positive amounts above `2147483647` are capped at that limit. Output chance is clamped to `[0,1]`, with `NaN` becoming `1`. Amounts are one-shot totals per parallel recipe, not FE/t, and do not summon lightning in the world. Inputs are consumed at start, outputs are produced at completion, and actual amounts scale with parallelism. High and extreme-high voltage match separately without automatic conversion. Multiple requirements for the same resource and direction also share the amount limit above.
+
+Both AE2 (`ae2`) and AE2LT (`ae2lt`) must be loaded at runtime; the current metadata declares minimum versions of `26.1.10-beta` and `1.0.1alpha`, respectively. Lightning uses MMCR's ME Input, Stocking, Output, Async Output, and Pattern Interfaces, not ordinary energy hatches or automatic adjacent-block transfer. If either dependency is absent, lightning requirements block; depending only on the public API jar does not provide execution support.
+
+Outputs still check capacity. `allowPartialOutputs` may accept partial outputs but does not provide unlimited storage. Once one-shot inputs have been successfully paid, later blocked outputs do not charge them again. See [KubeJS Lightning Recipe IO](KubeJS#lightning-schema) for resource IDs, JSON, and schema syntax.
+
+Place the imports at the top of the file and the method in an existing registration class. Call `lightningRecipes(event)` from a `RegisterMachineRecipesEvent` listener already subscribed to `NeoForge.EVENT_BUS`; merely adding the method does not register a recipe. The machine definition must already declare `my_mod:lightning_pool`. Each recipe consumes 100 units of high-voltage lightning and has a 25% chance to produce 10 units of extreme-high-voltage lightning at completion. This does not establish a general conversion ratio between the resources.
+
+```java
+import cn.howxu.mmcr.publicapi.event.RegisterMachineRecipesEvent;
+import cn.howxu.mmcr.publicapi.recipe.LightningTier;
+import net.minecraft.resources.Identifier;
+
+static void lightningRecipes(RegisterMachineRecipesEvent event) {
+    event.registerRecipe(Identifier.fromNamespaceAndPath("my_mod", "lightning_recipe"), recipe -> recipe
+            .recipePool(Identifier.fromNamespaceAndPath("my_mod", "lightning_pool"))
+            .duration(100)
+            .lightningInput(LightningTier.HIGH_VOLTAGE, 100L)
+            .lightningOutput(LightningTier.EXTREME_HIGH_VOLTAGE, 10L, 0.25F));
+}
+```
+
+Addons should use this public enum, not the underlying `cn.howxu.mmcr.api.compat.ae2lt.LightningTier` used by KubeJS or the native `LightningKey`. The public enum does not provide the underlying enum's `fromId` / `requirementId` methods.
+
+Source: [public enum](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/fbb3198c/src/main/java/cn/howxu/mmcr/publicapi/recipe/LightningTier.java), [public facade](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/fbb3198c/src/main/java/cn/howxu/mmcr/internal/api/facade/recipe/RecipeDraftFacade.java).
 
 ### `RecipeSpec`
 

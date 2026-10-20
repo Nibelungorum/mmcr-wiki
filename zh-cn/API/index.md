@@ -5,7 +5,8 @@ order: 0
 
 # API 参考
 
-此节以 Minecraft **26.1.2** 的 MMCR 源码提交 [`f234477b`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/tree/f234477b) 为基准，记录 Java 公共 API 与 KubeJS 集成层的签名、参数约束、执行语义和示例。
+此节以 Minecraft **26.1.2** 的 MMCR 源码提交 [`c5a48a93`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/tree/c5a48a934bc9de3f10c794bf582175cba6ffbe61) 为基准，记录 Java 公共 API 与 KubeJS 集成层的签名、参数约束、执行语义和示例。
+
 
 Java 开发使用 **Java 25**，公共 API 位于 `cn.howxu.mmcr.publicapi`。脚本门面还会返回底层实现对象，不能直接套用 Java 公共接口的类型名称。
 

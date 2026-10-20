@@ -4,7 +4,7 @@ title: KubeJS API
 
 # KubeJS API
 
-本页是 MMCR 的 KubeJS 集成层的集中参考，固定对应 **Minecraft 26.1.2**，源码基线为提交 [`f234477b`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/gradle.properties)。示例使用 KubeJS/Rhino 的 JavaScript 写法。
+本页是 MMCR 的 KubeJS 集成层的集中参考，固定对应 **Minecraft 26.1.2**，源码基线为提交 [`c5a48a93`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/c5a48a934bc9de3f10c794bf582175cba6ffbe61/gradle.properties)。示例使用 KubeJS/Rhino 的 JavaScript 写法。
 
 MMCR 的 KubeJS API 分为三个声明窗口：启动脚本中的机器、等级、修饰符和屏幕文本注册；服务端脚本加载中的结构与编程式配方注册；`ServerEvents.recipes` 中的数据驱动配方注册。启动声明修改后需要重启；服务端结构与配方可随资源重载替换。此外还有客户端配方说明事件和运行时智能接口更新事件。
 
@@ -13,6 +13,15 @@ KubeJS 桥接直接使用 `cn.howxu.mmcr.api` 底层类型；面向附属 Mod �
 本文中的 `String`、`List`、`Map`、`Consumer<T>` 等类型是 Java 签名中的类型名。Rhino 会把 JavaScript 字符串、数组、对象和回调转换为对应参数；如果某个重载标记为 `@HideFromJS`，它只保留给 Java 互操作或内部桥接使用，不是脚本调用入口。
 
 字段表有时用于解释构建器状态，不意味着字段全部公开：事件的 `api`、智能接口子构建器的字段、阶段构建器的状态字段和屏幕事件的 `context` 都是私有字段，应通过文中的方法配置/读取。`MachineBuilderJS`、`MachineStructureBuilderJS`、等级构建器则确实有表中所列的公开 transient 字段，仍优先使用方法以保持关联状态一致。
+
+:::warning c5a48a93 启动期引用迁移
+- `registerModifierItem` 改为接收物品 ID 字符串，不再传 `Item.of(...)`。
+- 启动事件的 `addRecipePoolWorkstation` 仅保留字符串 ID 形式，删除了 `ItemStack` 重载；Java 的 JEI 注册事件不受此删除影响。
+- 等级构建器改用 `state(String blockStateId)`，不再接收 `BlockState`；支持 `minecraft:oak_log[axis=y]` 形式。
+- 启动期声明使用 ID，不要提前调用 `Item.of()` 或 `Block.getBlock()` 取得其他 Mod 的注册对象。等级状态在结构窗口冻结时解析，修饰符物品在默认数据组件绑定完成后解析；不需要脚本手动触发这些步骤。
+
+需要 Mekanism 的完整示例：[启动声明](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/c5a48a934bc9de3f10c794bf582175cba6ffbe61/example/startup_scripts/mekanism/Registry_References.js)、[结构](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/c5a48a934bc9de3f10c794bf582175cba6ffbe61/example/server_scripts/structure/mekanism/Registry_References.js)、[配方](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/c5a48a934bc9de3f10c794bf582175cba6ffbe61/example/server_scripts/recipe/mekanism/Registry_References.js)。可选联动先用 `Platform.isLoaded('mekanism')` 判断；延迟解析不等于忽略缺失 Mod 或错误 ID。修改启动声明后需重启。
+:::
 
 ## 1. 顶层全局绑定
 
@@ -345,12 +354,13 @@ MMCREvents.startup(event => {
 
 - **参数表**：`typeId`（`String`）— 已注册的机器等级类型 ID。
 - **返回**：引用该等级类型的 `LevelSlot`，可传给结构构建器的 `set(symbol, value)`。
-- **抛出**：`IllegalArgumentException`：类型 ID 非法、未注册或当前等级注册表不可用。
+- **抛出**：`IllegalArgumentException`：类型 ID 非法或未在当前结构收集器中声明；结构窗口不可用时由注册器抛异常。这里不查询运行时等级注册表。
 - **默认值**：无；类型必须显式提供。
 - **示例**：
 
 ```javascript
 MMCREvents.startup(event => {
+    event.createLevelType("example:coil").register()
     const slot = event.levelSlot("example:coil")
 })
 ```
@@ -371,33 +381,33 @@ MMCREvents.startup(event => {
 })
 ```
 
-#### `registerModifierItem(ItemStack stack, String modifierId) → void`
+#### `registerModifierItem(String itemId, String modifierId) → void`
 
-- **参数表**：`stack`（`ItemStack`）— 绑定到修饰器的物品栈；`modifierId`（`String`）— 已注册修饰器 ID。
-- **返回**：无；物品会被注册为该修饰器的触发物品，注册器会把数量归一化为 1。
-- **抛出**：`IllegalArgumentException`：修饰器 ID 非法；注册器可能因修饰器不存在、物品为空或生命周期错误抛异常。
+- **参数表**：`itemId`（`String`）— 触发物品的资源 ID，普通物品和方块物品均可；`modifierId`（`String`）— 修饰器 ID，须在窗口冻结前注册。
+- **返回**：无；仅记录 ID，物品默认数据组件绑定后才创建数量为 1 的物品栈。
+- **抛出**：`IllegalArgumentException`：任一 ID 为空白或格式非法；重复物品 ID、关闭窗口、冻结时引用未知修饰器，以及稍后解析到未知或空物品时会抛注册异常。
 - **默认值**：无。
 - **示例**：
 
 ```javascript
 MMCREvents.startup(event => {
-    event.registerModifierItem(Item.of("minecraft:diamond"), "example:speed")
+    const api = event.getAPI()
+    event.registerModifier("example:speed", api.modifierDefinition([
+        api.modifier("duration", "input", 0.5, "multiply", false)
+    ]))
+    event.registerModifierItem("minecraft:diamond", "example:speed")
 })
 ```
 
 #### `addRecipePoolWorkstation(String recipePoolId, String itemId) → void`
 
-把指定物品注册为 JEI 中某个 MMCR 配方池页的工作方块。两个 ID 都必须是有效资源 ID。
+把指定物品注册为 JEI 中某个 MMCR 配方池页的工作方块。两个 ID 都必须是有效资源 ID；启动期只记录 ID，在 JEI 注册工作台时应用。
 
 ```javascript
 MMCREvents.startup(event => {
     event.addRecipePoolWorkstation("example:press", "minecraft:blast_furnace")
 })
 ```
-
-#### `addRecipePoolWorkstation(String recipePoolId, ItemStack workstation) → void`
-
-以物品栈注册配方池工作方块；空物品栈会被拒绝，注册时物品数量归一为 1。
 
 #### `addMachineWorkstation(String machineId, String recipeTypeId) → void`
 
@@ -3901,7 +3911,7 @@ event.createLevelType("example:coil").displayNameKey("level.example.coil").regis
 |------|------|------|------|
 | `typeId` | `Identifier` | `null` | 父等级类型 ID。 |
 | `priority` | `int` | `0` | 等级优先级。 |
-| `state` | `BlockState` | `null` | 等级表示方块。 |
+| `state` | `String` | `null` | 待解析的方块状态 ID，可含属性。 |
 | `modifier` | `ModifierDefinition` | `ModifierDefinition.EMPTY` | 等级生效时应用的修饰符集合。 |
 
 **方法**
@@ -3930,11 +3940,11 @@ event.createLevel("example:coil_iron").type("example:coil")
 event.createLevel("example:coil_iron").type("example:coil").priority(0)
 ```
 
-#### `state(Object state) → MachineLevelBuilderJS`
+#### `state(String blockStateId) → MachineLevelBuilderJS`
 
-- **参数表**：`state`（`Object`），`String`（方块 ID）或 `BlockState`。
-- **返回**：当前构建器；字符串形式使用方块默认状态。
-- **抛出**：`IllegalArgumentException`：方块未知或参数类型不是字符串/`BlockState`。
+- **参数表**：`blockStateId`（`String`），方块 ID 或含属性的状态字符串，例如 `minecraft:oak_log[axis=y]`；省略的属性保留默认值。不再接受 `BlockState`。
+- **返回**：当前构建器，仅保存字符串，不立即查询方块注册表。
+- **抛出**：传 `null` 时抛 `NullPointerException`。`createObject()` 校验资源 ID 与括号形式；未知方块、未知属性或非法属性值在结构窗口冻结、转换等级声明时以注册异常报告，并带等级 ID。
 - **默认值**：未设置时 `createObject()` 抛 `IllegalStateException`。
 - **示例**：
 
@@ -3962,8 +3972,8 @@ event.createLevel("example:coil_iron")
 #### `createObject() → MachineLevel`
 
 - **参数表**：无。
-- **返回**：不可变 `MachineLevel`。
-- **抛出**：`IllegalStateException`：`type` 或 `state` 未设置。
+- **返回**：不可变的 `cn.howxu.mmcr.api.machine.definition.MachineLevel` 声明，方块状态尚未解析，展示栈为空；不再返回运行时 `api.machine.level.MachineLevel`。
+- **抛出**：`IllegalStateException`：`type` 或 `state` 未设置；资源 ID 或括号形式非法时抛 `IllegalArgumentException`。
 - **默认值**：`modifier` 为 `ModifierDefinition.EMPTY`。
 - **示例**：
 

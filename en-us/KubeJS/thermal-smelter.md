@@ -151,7 +151,7 @@ Each individual level belongs to a level type, is identified by a `state` block,
 
 - `.type(typeId)`: Required; specifies the parent level type.
 - `.priority(int)`: Optional; the level ordering, defaulting to 0. Larger values mean higher levels. Both priority and representative state must be unique within a type, so you cannot leave all three levels at the default 0.
-- `.state(Object)`: Required; the block representing this level. `Object` can be a string (a block ID, using its default state) or a `BlockState`.
+- `.state(String)`: Required; pass a block ID or state string such as `minecraft:oak_log[axis=y]`. `BlockState` is no longer accepted. Startup stores the string; blocks and properties are resolved and validated when the structure window freezes. Omitted properties retain defaults.
 - `.modifier(ModifierDefinition)`: Optional; defines the set of modifiers supplied by this level. Create it through `api.modifierDefinition([...])`.
 
 `api.modifier(target, scope, value, operation, chance)` creates a numeric modifier entry. The level examples adjust duration, energy consumption, and machine parallelism.

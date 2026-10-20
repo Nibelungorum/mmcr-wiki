@@ -34,14 +34,14 @@ The same recipe has different effects in different machines because their modifi
 | --- | --- |
 | `MachineBuilderJS.allowModifiers()` | [API/KubeJS#machinebuilderjs](../API/KubeJS#machinebuilderjs) |
 | `modifier(String, String, double, String, boolean)` / `modifierDefinition(List<MachineModifier>)` / `modifierUse(String, BlockPredicate)` / `anyOfUpgradeBus()` | [API/KubeJS#kubejsapi](../API/KubeJS#kubejsapi) |
-| `registerModifier(String, ModifierDefinition)` / `registerModifierItem(ItemStack, String)` | [API/KubeJS#mmcrstartupeventjs](../API/KubeJS#mmcrstartupeventjs) |
+| `registerModifier(String, ModifierDefinition)` / `registerModifierItem(String, String)` | [API/KubeJS#mmcrstartupeventjs](../API/KubeJS#mmcrstartupeventjs) |
 | `MachineStructureBuilderJS.modifier(String, ModifierUse)` | [API/KubeJS#machinestructurebuilderjs](../API/KubeJS#machinestructurebuilderjs) |
 | `MachineRecipeSchema` data-driven recipe fields | [API/KubeJS#machinerecipeschema](../API/KubeJS#machinerecipeschema) |
 | `MachineRecipeBuilderJS` | [API/KubeJS#machinerecipebuilderjs](../API/KubeJS#machinerecipebuilderjs) |
 
 ## Machine Definition
 
-[A_Modifier_Machine.js](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/example/startup_scripts/A_Modifier_Machine.js) in the `startup_scripts/` directory:
+[A_Modifier_Machine.js](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/neo/26.1.2/example/startup_scripts/A_Modifier_Machine.js) in the `startup_scripts/` directory:
 
 ```js
 // Use MMCR's machine modifier system.
@@ -68,7 +68,7 @@ MMCREvents.startup(event => {
     )
 
     event.registerModifierItem(
-        Item.of("minecraft:emerald_block"),
+        "minecraft:emerald_block",
         "mmcr_kubejs:alloy_furnace_emerald_speedup"
     )
 
@@ -81,7 +81,7 @@ MMCREvents.startup(event => {
     )
 
     event.registerModifierItem(
-        Item.of("minecraft:lapis_block"),
+        "minecraft:lapis_block",
         "mmcr_kubejs:alloy_furnace_lapis_doubling"
     )
 })
@@ -125,14 +125,14 @@ Emerald speedup = recipe duration × 0.5. The lapis rule targets `output`, not j
 
 ```js
 event.registerModifierItem(
-    Item.of("minecraft:emerald_block"),
+    "minecraft:emerald_block",
     "mmcr_kubejs:alloy_furnace_emerald_speedup"
 )
 ```
 
-`registerModifierItem(stack, modifierId)` binds an `ItemStack` to a registered modifier ID.
+`registerModifierItem(itemId, modifierId)` binds an item ID string to a modifier ID, which must be registered before the window freezes.
 
-The registry internally normalizes the count to 1. `Item.of("minecraft:emerald_block")` and `Item.of("minecraft:emerald_block", 64)` have the same effect.
+Startup stores IDs only; they resolve to count-1 stacks after item default data components are bound. `ItemStack` is no longer accepted, so do not call `Item.of(...)` here. Both ordinary items and block items are supported; unknown items and duplicate bindings fail.
 
 This binding lets upgrade buses recognize the items inside them; structure replacement blocks are declared independently through `.modifier(...)`. An upgrade bus item binding alone does not automatically make the structure's `M` accept emerald blocks. A structure replacement declaration alone also does not need an item binding to recognize emerald blocks in the world.
 
@@ -316,7 +316,7 @@ The modifier system has four types of objects, each with its own responsibility:
 
 Relationships:
 
-1. Startup phase: `.allowModifiers()` enables the machine's modifier support → `registerModifier(id, def)` registers the definition → `registerModifierItem(stack, id)` registers the trigger item.
+1. Startup phase: `.allowModifiers()` enables the machine's modifier support → `registerModifier(id, def)` registers the definition → `registerModifierItem(itemId, id)` registers the trigger item ID.
 2. Server phase: `.modifier(symbol, modifierUse(id, replacement))` "attaches" the definition to the structure character `M`.
 3. Runtime: The player places the corresponding block at an `M` position. MMCR recognizes that "a modifier is being used" and applies the definition's rules to the running recipe.
 4. Output: When the recipe finishes and outputs its results, `OutputPolicy` determines "full acceptance" or "partial acceptance". This tutorial's recipe does not explicitly set it, so it uses the default `REQUIRE_FULL`.

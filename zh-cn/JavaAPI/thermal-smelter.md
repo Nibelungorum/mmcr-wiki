@@ -15,7 +15,7 @@ order: 4
 | `Structures` / `StructureDraft` | `fullStructure(Consumer<StructureStageDraft>)`；`build(Identifier)` → `StructureSpec` | [参考](../API/JavaAPI#structuredraft) |
 | `PatternDraft` / `BlockConditions` | `where(char, BlockCondition)`；`blockState(BlockState)` | [模式](../API/JavaAPI#patterndraft)、[条件](../API/JavaAPI#blockconditions) |
 | `Levels` | `type(Identifier, Component)` → `LevelTypeSpec` | [参考](../API/JavaAPI#levels) |
-| `Levels` | `level(Identifier, Identifier, int, BlockCondition, ItemStack, ModifierBundle)` → `MachineLevelSpec` | [参考](../API/JavaAPI#machinelevelspec) |
+| `Levels` | `level(Identifier, Identifier, int, BlockCondition, ModifierBundle)` → `MachineLevelSpec` | [参考](../API/JavaAPI#machinelevelspec) |
 | `Modifiers` | `numeric(String, ModifierScope, double, ModifierOperation, boolean)`；`bundle(ModifierSpec...)` | [参考](../API/JavaAPI#modifiers) |
 | `StructureConstraints.Builder` | `levelSlot(char, Identifier)` | [参考](../API/JavaAPI#structureconstraints) |
 | `Recipes` / `RecipeDraft` | `levelRequirement(Identifier, Identifier)`；`build()` → `RecipeSpec` | [参考](../API/JavaAPI#recipedraft) |
@@ -23,7 +23,7 @@ order: 4
 | `ComponentConditions` | `exact(JsonElement)` → `ExactCondition` | [参考](../API/JavaAPI#componentconditions) |
 | 注册事件 | `RegisterMachineDefinitionsEvent`、`RegisterMachineStructuresEvent`、`RegisterMachineRecipesEvent` | [定义](../API/JavaAPI#registermachinedefinitionsevent)、[结构](../API/JavaAPI#registermachinestructuresevent)、[配方](../API/JavaAPI#registermachinerecipesevent) |
 
-这里的等级实例由工厂方法创建，代表物品直接传 `ItemStack`；规则作用域与操作使用枚举，不再把它们写成字符串。
+这里的等级实例由工厂方法创建，不再传代表物品栈；规则作用域与操作使用枚举，不再把它们写成字符串。启动期引用其他 Mod 的方块时，建议使用 `BlockConditions.state("mod:block")` 保留 ID 到结构窗口冻结时再解析，避免提前取得注册对象。
 
 ## ID 与机器定义
 
@@ -70,7 +70,6 @@ public static void registerStructures(RegisterMachineStructuresEvent event) {
             THERMAL_SMELTING_COIL_TYPE,
             1,
             BlockConditions.blockState(Blocks.IRON_BLOCK.defaultBlockState()),
-            new ItemStack(Holder.direct(Blocks.IRON_BLOCK.asItem(), DataComponentMap.EMPTY)),
             Modifiers.bundle(Modifiers.numeric(
                     "duration", ModifierScope.INPUT, 0.9D, ModifierOperation.MULTIPLY, false)))
     );
@@ -80,7 +79,6 @@ public static void registerStructures(RegisterMachineStructuresEvent event) {
             THERMAL_SMELTING_COIL_TYPE,
             3,
             BlockConditions.blockState(Blocks.DIAMOND_BLOCK.defaultBlockState()),
-            new ItemStack(Holder.direct(Blocks.DIAMOND_BLOCK.asItem(), DataComponentMap.EMPTY)),
             Modifiers.bundle(
                     Modifiers.numeric("duration", ModifierScope.INPUT, 0.7D, ModifierOperation.MULTIPLY, false),
                     Modifiers.numeric("energy", ModifierScope.INPUT, 0.8D, ModifierOperation.MULTIPLY, false),
@@ -93,7 +91,6 @@ public static void registerStructures(RegisterMachineStructuresEvent event) {
             THERMAL_SMELTING_COIL_TYPE,
             2,
             BlockConditions.blockState(Blocks.GOLD_BLOCK.defaultBlockState()),
-            new ItemStack(Holder.direct(Blocks.GOLD_BLOCK.asItem(), DataComponentMap.EMPTY)),
             Modifiers.bundle(
                     Modifiers.numeric("duration", ModifierScope.INPUT, 0.6D, ModifierOperation.MULTIPLY, false),
                     Modifiers.numeric("energy", ModifierScope.INPUT, 0.7D, ModifierOperation.MULTIPLY, false),
@@ -137,7 +134,7 @@ public static void registerStructures(RegisterMachineStructuresEvent event) {
 ### 等级系统的三个概念
 
 1. **等级类型**：`Levels.type(typeId, displayName)` 创建 `LevelTypeSpec`，定义“线圈等级”这个维度。先注册类型，再注册实例。
-2. **等级实例**：`Levels.level(...)` 创建 `MachineLevelSpec`，六个参数依次为实例 ID、类型 ID、优先级、方块条件、代表物品栈、修饰符集合。
+2. **等级实例**：`Levels.level(...)` 创建 `MachineLevelSpec`，五个参数依次为实例 ID、类型 ID、优先级、方块条件、修饰符集合。工厂声明的展示栈为空，`representative()` 访问器仍保留。
 3. **等级槽位**：`StructureConstraints.Builder.levelSlot('X', typeId)` 把结构字符关联到等级维度，使实际放置的线圈参与等级识别。
 
 | 等级 | 优先级 | 方块 | 时间乘数 | 能耗乘数 | 输出乘数 | 并行加成 | 线程加成 |

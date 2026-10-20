@@ -8,7 +8,8 @@ order: 1
 
 ## Before You Begin
 
-This wiki is based on MMCR for Minecraft **`26.1.2`**. Examples and API references correspond to source commit [`f234477b`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/tree/f234477b). The Java development environment uses **Java 25**; KubeJS examples target **`26.1.2-8.0.6`**. When developing an addon mod, use the public interfaces under `cn.howxu.mmcr.publicapi`; scripts access the KubeJS integration layer through `MMCR` and `MMCREvents`, whose underlying types differ.
+This wiki is based on MMCR for Minecraft **`26.1.2`**. API references are updated through source commit [`c5a48a93`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/tree/c5a48a934bc9de3f10c794bf582175cba6ffbe61); individual examples cite their source commits on each page.
+
 
 ## Preparation
 

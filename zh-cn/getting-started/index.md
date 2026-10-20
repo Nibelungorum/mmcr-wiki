@@ -8,7 +8,7 @@ order: 1
 
 ## 写在最前
 
-本 Wiki 以 Minecraft **`26.1.2`** 的 MMCR 为基准，示例和 API 参考对照源码提交 [`f234477b`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/tree/f234477b)。Java 开发环境使用 **Java 25**；KubeJS 示例对应 **`26.1.2-8.0.6`**。开发附属 Mod 时，请使用 `cn.howxu.mmcr.publicapi` 下的公共接口；脚本通过 `MMCR` 和 `MMCREvents` 访问 KubeJS 集成层，两者的底层类型并不相同。
+本 Wiki 以 Minecraft **`26.1.2`** 的 MMCR 为基准，开发附属 Mod 时，请使用 `cn.howxu.mmcr.publicapi` 下的公共接口；脚本通过 `MMCR` 和 `MMCREvents` 访问 KubeJS 集成层，两者的底层类型并不相同。
 
 ## 开始前的准备
 

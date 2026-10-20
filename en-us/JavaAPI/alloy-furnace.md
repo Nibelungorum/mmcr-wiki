@@ -54,7 +54,7 @@ public static void registerStructures(RegisterMachineStructuresEvent event) {
                     ModifierOperation.MULTIPLY, false
             )));
     event.registerModifierItem(
-            new ItemStack(Items.DIAMOND_BLOCK), id("alloy_furnace_diamond_speedup"));
+            Identifier.parse("minecraft:diamond_block"), id("alloy_furnace_diamond_speedup"));
 
     event.registerModifier(
             id("alloy_furnace_gold_doubling"),
@@ -63,7 +63,7 @@ public static void registerStructures(RegisterMachineStructuresEvent event) {
                     ModifierOperation.MULTIPLY, false
             )));
     event.registerModifierItem(
-            new ItemStack(Items.GOLD_BLOCK), id("alloy_furnace_gold_doubling"));
+            Identifier.parse("minecraft:gold_block"), id("alloy_furnace_gold_doubling"));
 
     if (!event.structures().containsKey(ALLOY_FURNACE)) {
         StructureSpec structure = Structures
@@ -94,7 +94,7 @@ public static void registerStructures(RegisterMachineStructuresEvent event) {
 ### Responsibilities of the Three Declaration Layers
 
 1. `event.registerModifier(id, bundle)` registers the rule itself. `Modifiers.numeric(...)` returns a numeric rule, and `Modifiers.bundle(...)` wraps rules in a `ModifierBundle`.
-2. `event.registerModifierItem(stack, id)` binds the modifier's representative item; register the rule before binding the item.
+2. `event.registerModifierItem(itemId, id)` binds an upgrade-bus trigger item using an `Identifier`; register the rule before binding the item. Startup only records IDs, constructing stacks after default data components are bound. Do not use `new ItemStack(...)` here.
 3. `requirements(r -> r.modifier('M', id, replacement))` determines which characters in the structure can be replaced by the corresponding block. Here, pass the ID and `BlockCondition` directly; no separate wrapper record is needed.
 
 | Modifier ID (namespace omitted) | Representative Item | target | scope | value | operation | Effect |

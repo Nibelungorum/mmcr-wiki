@@ -15,7 +15,7 @@ The thermal smelting furnace models the "coil blocks" in its structure as **leve
 | `Structures` / `StructureDraft` | `fullStructure(Consumer<StructureStageDraft>)`; `build(Identifier)` → `StructureSpec` | [Reference](../API/JavaAPI#structuredraft-and-structurespec) |
 | `PatternDraft` / `BlockConditions` | `where(char, BlockCondition)`; `blockState(BlockState)` | [Pattern](../API/JavaAPI#patterndraft-and-patternspec), [conditions](../API/JavaAPI#blockconditions-and-blockcondition) |
 | `Levels` | `type(Identifier, Component)` → `LevelTypeSpec` | [Reference](../API/JavaAPI#levels-leveltypespec-and-machinelevelspec) |
-| `Levels` | `level(Identifier, Identifier, int, BlockCondition, ItemStack, ModifierBundle)` → `MachineLevelSpec` | [Reference](../API/JavaAPI#levels-leveltypespec-and-machinelevelspec) |
+| `Levels` | `level(Identifier, Identifier, int, BlockCondition, ModifierBundle)` → `MachineLevelSpec` | [Reference](../API/JavaAPI#levels-leveltypespec-and-machinelevelspec) |
 | `Modifiers` | `numeric(String, ModifierScope, double, ModifierOperation, boolean)`; `bundle(ModifierSpec...)` | [Reference](../API/JavaAPI#modifiers) |
 | `StructureConstraints.Builder` | `levelSlot(char, Identifier)` | [Reference](../API/JavaAPI#structureconstraints) |
 | `Recipes` / `RecipeDraft` | `levelRequirement(Identifier, Identifier)`; `build()` → `RecipeSpec` | [Reference](../API/JavaAPI#recipedraft) |
@@ -23,7 +23,7 @@ The thermal smelting furnace models the "coil blocks" in its structure as **leve
 | `ComponentConditions` | `exact(JsonElement)` → `ExactCondition` | [Reference](../API/JavaAPI#componentconditions-and-conditional-view) |
 | Registration events | `RegisterMachineDefinitionsEvent`, `RegisterMachineStructuresEvent`, `RegisterMachineRecipesEvent` | [Definitions](../API/JavaAPI#registermachinedefinitionsevent-and-machineregistrar), [structures](../API/JavaAPI#registermachinestructuresevent-and-structureregistrar), [recipes](../API/JavaAPI#registermachinerecipesevent-and-reciperegistrar) |
 
-Level instances here are created by factory methods, and their representative items are passed directly as `ItemStack`; rule scopes and operations use enums rather than strings.
+Level instances here are created by factory methods without a representative stack argument; rule scopes and operations use enums rather than strings. For startup references to another mod's blocks, prefer `BlockConditions.state("mod:block")` to retain the ID until the structure window freezes instead of obtaining registry objects early.
 
 ## IDs and Machine Definition
 
@@ -70,7 +70,6 @@ public static void registerStructures(RegisterMachineStructuresEvent event) {
             THERMAL_SMELTING_COIL_TYPE,
             1,
             BlockConditions.blockState(Blocks.IRON_BLOCK.defaultBlockState()),
-            new ItemStack(Holder.direct(Blocks.IRON_BLOCK.asItem(), DataComponentMap.EMPTY)),
             Modifiers.bundle(Modifiers.numeric(
                     "duration", ModifierScope.INPUT, 0.9D, ModifierOperation.MULTIPLY, false)))
     );
@@ -80,7 +79,6 @@ public static void registerStructures(RegisterMachineStructuresEvent event) {
             THERMAL_SMELTING_COIL_TYPE,
             3,
             BlockConditions.blockState(Blocks.DIAMOND_BLOCK.defaultBlockState()),
-            new ItemStack(Holder.direct(Blocks.DIAMOND_BLOCK.asItem(), DataComponentMap.EMPTY)),
             Modifiers.bundle(
                     Modifiers.numeric("duration", ModifierScope.INPUT, 0.7D, ModifierOperation.MULTIPLY, false),
                     Modifiers.numeric("energy", ModifierScope.INPUT, 0.8D, ModifierOperation.MULTIPLY, false),
@@ -93,7 +91,6 @@ public static void registerStructures(RegisterMachineStructuresEvent event) {
             THERMAL_SMELTING_COIL_TYPE,
             2,
             BlockConditions.blockState(Blocks.GOLD_BLOCK.defaultBlockState()),
-            new ItemStack(Holder.direct(Blocks.GOLD_BLOCK.asItem(), DataComponentMap.EMPTY)),
             Modifiers.bundle(
                     Modifiers.numeric("duration", ModifierScope.INPUT, 0.6D, ModifierOperation.MULTIPLY, false),
                     Modifiers.numeric("energy", ModifierScope.INPUT, 0.7D, ModifierOperation.MULTIPLY, false),
@@ -137,7 +134,7 @@ public static void registerStructures(RegisterMachineStructuresEvent event) {
 ### Three Concepts in the Level System
 
 1. **Level type**: `Levels.type(typeId, displayName)` creates a `LevelTypeSpec`, defining the "coil level" dimension. Register the type before its instances.
-2. **Level instance**: `Levels.level(...)` creates a `MachineLevelSpec`; its six parameters are, in order, instance ID, type ID, priority, block condition, representative item stack, and modifier bundle.
+2. **Level instance**: `Levels.level(...)` creates a `MachineLevelSpec`; its five parameters are, in order, instance ID, type ID, priority, block condition, and modifier bundle. Factory declarations use an empty display stack; the `representative()` accessor remains.
 3. **Level slot**: `StructureConstraints.Builder.levelSlot('X', typeId)` associates a structure character with a level dimension, making placed coils participate in level detection.
 
 | Level | Priority | Block | Duration multiplier | Energy multiplier | Output multiplier | Parallelism bonus | Thread bonus |

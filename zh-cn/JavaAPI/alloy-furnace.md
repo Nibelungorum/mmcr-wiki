@@ -54,7 +54,7 @@ public static void registerStructures(RegisterMachineStructuresEvent event) {
                     ModifierOperation.MULTIPLY, false
             )));
     event.registerModifierItem(
-            new ItemStack(Items.DIAMOND_BLOCK), id("alloy_furnace_diamond_speedup"));
+            Identifier.parse("minecraft:diamond_block"), id("alloy_furnace_diamond_speedup"));
 
     event.registerModifier(
             id("alloy_furnace_gold_doubling"),
@@ -63,7 +63,7 @@ public static void registerStructures(RegisterMachineStructuresEvent event) {
                     ModifierOperation.MULTIPLY, false
             )));
     event.registerModifierItem(
-            new ItemStack(Items.GOLD_BLOCK), id("alloy_furnace_gold_doubling"));
+            Identifier.parse("minecraft:gold_block"), id("alloy_furnace_gold_doubling"));
 
     if (!event.structures().containsKey(ALLOY_FURNACE)) {
         StructureSpec structure = Structures
@@ -94,7 +94,7 @@ public static void registerStructures(RegisterMachineStructuresEvent event) {
 ### 三层声明分别负责什么
 
 1. `event.registerModifier(id, bundle)` 注册规则本身。`Modifiers.numeric(...)` 返回数值规则，`Modifiers.bundle(...)` 将规则包装成 `ModifierBundle`。
-2. `event.registerModifierItem(stack, id)` 绑定修饰符代表物品；应先注册规则再绑定物品。
+2. `event.registerModifierItem(itemId, id)` 以 `Identifier` 绑定升级总线触发物品；应先注册规则再绑定物品。启动期只记录 ID，默认数据组件绑定完成后才创建物品栈，不要在这里 `new ItemStack(...)`。
 3. `requirements(r -> r.modifier('M', id, replacement))` 决定结构中哪些字符允许被对应方块替换。此处直接传 ID 与 `BlockCondition`，不需要另建包装记录。
 
 | 修饰符 ID（省略命名空间） | 代表物品 | target | scope | value | operation | 效果 |

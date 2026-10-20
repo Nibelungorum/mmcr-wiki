@@ -4,7 +4,7 @@ title: JavaAPI
 
 # Java Public API Reference
 
-This page lists the Java public layer's entry points, declarations, runtime views, and extension contracts. The signatures reflect the implementation at the referenced commit and do not imply availability in an unverified Maven release.
+This page lists the Java public layer's entry points, declarations, runtime views, and extension contracts.
 
 ## Package paths and boundaries
 
@@ -113,12 +113,13 @@ public void registerStructure(StructureSpec structure);
 public void registerLevelType(LevelTypeSpec type);
 public void registerLevel(MachineLevelSpec level);
 public void registerModifier(Identifier id, ModifierBundle modifier);
-public void registerModifierItem(ItemStack stack, Identifier modifierId);
+public void registerModifierItem(Identifier itemId, Identifier modifierId);
 public Map<Identifier, StructureSpec> structures();
 public Map<Identifier, LevelTypeSpec> levelTypes();
 public Map<Identifier, MachineLevelSpec> levels();
 public Map<Identifier, ModifierBundle> modifiers();
 public Map<Identifier, List<ItemStack>> modifierItems();
+public Map<Identifier, Identifier> modifierItemIds();
 
 // registration.StructureRegistrar：与事件的注册/查询方法同名同签名
 void registerStructure(Identifier machineId, Consumer<StructureDraft> configuration);
@@ -126,15 +127,22 @@ void registerStructure(StructureSpec structure);
 void registerLevelType(LevelTypeSpec type);
 void registerLevel(MachineLevelSpec level);
 void registerModifier(Identifier id, ModifierBundle modifier);
-void registerModifierItem(ItemStack stack, Identifier modifierId);
+void registerModifierItem(Identifier itemId, Identifier modifierId);
 Map<Identifier, StructureSpec> structures();
 Map<Identifier, LevelTypeSpec> levelTypes();
 Map<Identifier, MachineLevelSpec> levels();
 Map<Identifier, ModifierBundle> modifiers();
 Map<Identifier, List<ItemStack>> modifierItems();
+Map<Identifier, Identifier> modifierItemIds();
 ```
 
-The machine ID must be declared during the definition phase, and only one structure can be submitted per machine. Register the level type before registering the level. Modifier item binding preserves components and normalizes the count to 1. When the window closes, it also verifies that level slot references, modifier replacements, and item bindings refer to registered declarations.
+The machine ID must be declared during the definition phase, and only one structure can be submitted per machine. Register the level type before registering the level. Level declarations are retained until the structure window freezes, when block states are resolved. `levels()` also exposes pending declarations before then; do not read their `statePredicate().blockState()` early during startup.
+
+Modifier item bindings now take item IDs rather than `ItemStack`. MMCR resolves IDs and constructs count-1 stacks only after item default data components are bound; both ordinary items and block items are supported. `modifierItemIds()` returns a read-only **item ID → modifier ID** snapshot. `modifierItems()` returns only stack bindings already held by the collector; it does not resolve or merge pending IDs, so it cannot indicate whether an ID binding exists.
+
+Duplicate item IDs are rejected. Freezing validates level-slot, modifier-replacement, and item-binding references; later item resolution rejects unknown or empty items. Duplicate final stack bindings also fail. Startup declaration changes require a restart.
+
+Sources: [Structure registrar](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/c5a48a934bc9de3f10c794bf582175cba6ffbe61/src/main/java/cn/howxu/mmcr/publicapi/registration/StructureRegistrar.java), [deferred resolution and validation](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/c5a48a934bc9de3f10c794bf582175cba6ffbe61/src/main/java/cn/howxu/mmcr/api/registration/StructureRegistration.java).
 
 ### `RegisterMachineRecipesEvent` and `RecipeRegistrar`
 
@@ -571,6 +579,8 @@ List<BlockCondition> alternatives();
 
 `block` matches a block, while `blockState` describes an exact state; `state(String)` accepts values such as `minecraft:oak_log[axis=y]`. Unknown properties and invalid property values are validated. `deferredBlock` defers block lookup; `tag` matches tags; `any`/`anyOf` combines alternative conditions and is **not a no-argument wildcard**. The view's `isAny`/`isAir` methods describe conditions and do not imply that a public `air()` factory exists.
 
+For startup references to another mod's blocks, prefer `block(String/Identifier)` or `state(String/Identifier)` instead of obtaining block objects early. Creating a `state(...)` declaration validates only the resource ID and bracket form; block existence, property names, and property values are checked when `blockState()` is read or the declaration is converted to a runtime predicate. Unknown blocks fail instead of silently falling back to air. This applies to Java public declarations, not to KubeJS `api.state(...)`, which still queries the registry immediately.
+
 Port family factories collect blocks from the corresponding registered family; no-argument `ports()` returns the port collection, while overloads with arguments match only the specified ports. `parallelControllers`, `factoryController`, `smartInterface`, `dataStorage`, and `networkInterface` correspond to their respective built-in blocks. Whether Mekanism family shortcuts have available blocks depends on whether the integration is loaded; public signatures do not depend on Mekanism classes.
 
 ### `PortLimits`
@@ -756,7 +766,7 @@ Level slots associate pattern characters to level types. Modifier substitution a
 // Levels
 public static LevelTypeSpec type(Identifier id, Component displayName);
 public static MachineLevelSpec level(Identifier id, Identifier typeId, int priority,
-        BlockCondition condition, ItemStack representative, ModifierBundle modifier);
+        BlockCondition condition, ModifierBundle modifier);
 
 // LevelTypeSpec
 Identifier id();
@@ -771,14 +781,14 @@ ItemStack representative();
 ModifierBundle modifier();
 ```
 
-Types group levels; individual levels describe matching conditions, priorities, display items, and modifiers. The display item getter returns a copy, so modifying that stack does not change the declaration. Level slots use type IDs, and recipe requirements use a type ID plus a level ID.
+Types group levels; individual levels describe matching conditions, priorities, and modifiers. `Levels.level(...)` now takes five parameters and no longer accepts a representative item stack. Factory-created declarations use an empty display stack; the `representative()` accessor remains and returns a copy. Level slots use type IDs, and recipe requirements use a type ID plus a level ID.
 
 ```java
 Identifier typeId = Identifier.fromNamespaceAndPath("my_mod", "casing");
 Identifier levelId = Identifier.fromNamespaceAndPath("my_mod", "steel");
 event.registerLevelType(Levels.type(typeId, Component.translatable("level.my_mod.casing")));
 event.registerLevel(Levels.level(levelId, typeId, 1,
-        BlockConditions.block(Blocks.IRON_BLOCK), new ItemStack(Items.IRON_BLOCK),
+        BlockConditions.state("minecraft:iron_block"),
         Modifiers.bundle()));
 ```
 

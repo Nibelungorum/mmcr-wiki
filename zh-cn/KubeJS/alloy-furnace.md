@@ -34,14 +34,14 @@ order: 7
 | --- | --- |
 | `MachineBuilderJS.allowModifiers()` | [API/KubeJS#machinebuilderjs](../API/KubeJS#machinebuilderjs) |
 | `modifier(String, String, double, String, boolean)` / `modifierDefinition(List<MachineModifier>)` / `modifierUse(String, BlockPredicate)` / `anyOfUpgradeBus()` | [API/KubeJS#kubejsapi](../API/KubeJS#kubejsapi) |
-| `registerModifier(String, ModifierDefinition)` / `registerModifierItem(ItemStack, String)` | [API/KubeJS#mmcrstartupeventjs](../API/KubeJS#mmcrstartupeventjs) |
+| `registerModifier(String, ModifierDefinition)` / `registerModifierItem(String, String)` | [API/KubeJS#mmcrstartupeventjs](../API/KubeJS#mmcrstartupeventjs) |
 | `MachineStructureBuilderJS.modifier(String, ModifierUse)` | [API/KubeJS#machinestructurebuilderjs](../API/KubeJS#machinestructurebuilderjs) |
 | `MachineRecipeSchema` 数据驱动配方字段 | [API/KubeJS#machinerecipeschema](../API/KubeJS#machinerecipeschema) |
 | `MachineRecipeBuilderJS` | [API/KubeJS#machinerecipebuilderjs](../API/KubeJS#machinerecipebuilderjs) |
 
 ## 机器定义
 
-`startup_scripts/` 目录下的 [A_Modifier_Machine.js](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/example/startup_scripts/A_Modifier_Machine.js)：
+`startup_scripts/` 目录下的 [A_Modifier_Machine.js](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/neo/26.1.2/example/startup_scripts/A_Modifier_Machine.js)：
 
 ```js
 // Use MMCR's machine modifier system.
@@ -68,7 +68,7 @@ MMCREvents.startup(event => {
     )
 
     event.registerModifierItem(
-        Item.of("minecraft:emerald_block"),
+        "minecraft:emerald_block",
         "mmcr_kubejs:alloy_furnace_emerald_speedup"
     )
 
@@ -81,7 +81,7 @@ MMCREvents.startup(event => {
     )
 
     event.registerModifierItem(
-        Item.of("minecraft:lapis_block"),
+        "minecraft:lapis_block",
         "mmcr_kubejs:alloy_furnace_lapis_doubling"
     )
 })
@@ -125,14 +125,14 @@ api.modifier("duration", "input", 0.5, "multiply", false)
 
 ```js
 event.registerModifierItem(
-    Item.of("minecraft:emerald_block"),
+    "minecraft:emerald_block",
     "mmcr_kubejs:alloy_furnace_emerald_speedup"
 )
 ```
 
-`registerModifierItem(stack, modifierId)` 把一个 `ItemStack` 绑定到已注册的修饰器 ID 上。
+`registerModifierItem(itemId, modifierId)` 把物品 ID 字符串绑定到修饰器 ID 上；修饰器须在窗口冻结前注册。
 
-注册器内部把数量归一化为 1。`Item.of("minecraft:emerald_block")` 和 `Item.of("minecraft:emerald_block", 64)` 的效果是一样。
+启动期只保存 ID，物品默认数据组件绑定完成后才解析为数量为 1 的物品栈。不再接受 `ItemStack`，不要在这里调用 `Item.of(...)`。普通物品和方块物品都支持；未知物品或重复绑定会报错。
 
 这个绑定供升级总线识别内部物品；结构替换方块由 `.modifier(...)` 独立声明。只有升级总线物品绑定，不会自动让结构 `M` 接受绿宝石块；只有结构替换声明，也不需要依赖物品绑定才能识别世界中的绿宝石块。
 
@@ -316,7 +316,7 @@ ServerEvents.recipes( event => {
 
 关系：
 
-1. 启动期：`.allowModifiers()` 开启机器的修饰器支持 → `registerModifier(id, def)` 注册定义 → `registerModifierItem(stack, id)` 注册触发物品。
+1. 启动期：`.allowModifiers()` 开启机器的修饰器支持 → `registerModifier(id, def)` 注册定义 → `registerModifierItem(itemId, id)` 注册触发物品 ID。
 2. 服务期：`.modifier(symbol, modifierUse(id, replacement))` 把定义"挂"到结构字符 `M` 上。
 3. 运行时：玩家把对应方块放到 `M` 位置，MMCR 识别为"使用了某个修饰器"，把定义里的规则叠加到正在跑的配方上。
 4. 输出：配方结束输出时按 `OutputPolicy` 决定"全部接受"还是"部分接受"。本教程配方没显式设置，沿用默认值 `REQUIRE_FULL`。

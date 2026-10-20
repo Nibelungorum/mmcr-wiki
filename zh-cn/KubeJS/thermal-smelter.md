@@ -151,7 +151,7 @@ MMCREvents.startup(event => {
 
 - `.type(typeId)`：必填，指定父等级类型。
 - `.priority(int)`：可选，等级顺序，默认 0，数值越大等级越高。同一类型的 priority 与代表状态都必须唯一，不能给三个等级都保留默认 0。
-- `.state(Object)`：必填，代表该等级的方块。`Object` 可以是字符串（方块 ID，使用默认状态）或 `BlockState`。
+- `.state(String)`：必填，传方块 ID 或状态字符串，例如 `minecraft:oak_log[axis=y]`；不再接受 `BlockState`。启动期只保存字符串，结构窗口冻结时再解析和校验方块与属性；省略的属性使用默认值。
 - `.modifier(ModifierDefinition)`：可选，定义该等级带来的修饰符集合。通过 `api.modifierDefinition([...])` 创建。
 
 `api.modifier(target, scope, value, operation, chance)` 创建数值修饰项。等级示例分别调整耗时、能耗和机器并行度。

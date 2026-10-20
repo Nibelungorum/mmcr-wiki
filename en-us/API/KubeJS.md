@@ -4,7 +4,7 @@ title: KubeJS API
 
 # KubeJS API
 
-This page is a consolidated reference for MMCR's KubeJS integration, targeting **Minecraft 26.1.2**, with commit [`f234477b`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/gradle.properties) as the source baseline. Examples use KubeJS/Rhino JavaScript syntax.
+This page is a consolidated reference for MMCR's KubeJS integration, targeting **Minecraft 26.1.2**, with commit [`c5a48a93`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/c5a48a934bc9de3f10c794bf582175cba6ffbe61/gradle.properties) as the source baseline. Examples use KubeJS/Rhino JavaScript syntax.
 
 MMCR's KubeJS API has three declaration windows: machine, tier, modifier, and screen text registration in startup scripts; structure and programmatic recipe registration during server script loading; and data-driven recipe registration in `ServerEvents.recipes`. Changes to startup declarations require a restart; server-side structures and recipes can be replaced during a resource reload. There are also client-side recipe information events and runtime smart interface update events.
 
@@ -13,6 +13,15 @@ The KubeJS bridge uses the underlying `cn.howxu.mmcr.api` types directly. The ad
 Types such as `String`, `List`, `Map`, and `Consumer<T>` on this page are Java signature type names. Rhino converts JavaScript strings, arrays, objects, and callbacks to the corresponding parameters. An overload marked `@HideFromJS` is reserved for Java interoperability or internal bridging and is not a script entry point.
 
 Field tables sometimes describe builder state rather than public fields: event `api` fields, smart interface sub-builder fields, stage builder state fields, and the screen event's `context` are private and should be configured or read through the documented methods. `MachineBuilderJS`, `MachineStructureBuilderJS`, and tier builders do have the public transient fields listed in their tables, but methods are still preferred to keep related state consistent.
+
+:::warning Startup reference migration in c5a48a93
+- `registerModifierItem` now takes an item ID string, not `Item.of(...)`.
+- The startup event's `addRecipePoolWorkstation` retains only the string-ID form; its `ItemStack` overload was removed. Java JEI registration events are unaffected by this removal.
+- The level builder now uses `state(String blockStateId)`, not `BlockState`, and supports strings such as `minecraft:oak_log[axis=y]`.
+- Use IDs in startup declarations instead of calling `Item.of()` or `Block.getBlock()` early to obtain another mod's registry objects. Level states resolve when the structure window freezes; modifier items resolve after default data components are bound. Scripts must not trigger these steps manually.
+
+Complete example requiring Mekanism: [startup declarations](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/c5a48a934bc9de3f10c794bf582175cba6ffbe61/example/startup_scripts/mekanism/Registry_References.js), [structure](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/c5a48a934bc9de3f10c794bf582175cba6ffbe61/example/server_scripts/structure/mekanism/Registry_References.js), [recipe](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/c5a48a934bc9de3f10c794bf582175cba6ffbe61/example/server_scripts/recipe/mekanism/Registry_References.js). Guard optional integrations with `Platform.isLoaded('mekanism')`; deferred resolution does not ignore missing mods or invalid IDs. Restart after changing startup declarations.
+:::
 
 ## 1. Top-Level Global Bindings
 
@@ -345,12 +354,13 @@ MMCREvents.startup(event => {
 
 - **Parameters**: `typeId` (`String`) — A registered machine tier type ID.
 - **Returns**: A `LevelSlot` referencing that tier type, which can be passed to the structure builder's `set(symbol, value)`.
-- **Throws**: `IllegalArgumentException` if the type ID is invalid or unregistered, or the current tier registry is unavailable.
+- **Throws**: `IllegalArgumentException` if the type ID is invalid or undeclared in the current structure collector; the registrar throws if the window is unavailable. This does not query the runtime tier registry.
 - **Default**: None; the type must be provided explicitly.
 - **Example**:
 
 ```javascript
 MMCREvents.startup(event => {
+    event.createLevelType("example:coil").register()
     const slot = event.levelSlot("example:coil")
 })
 ```
@@ -371,33 +381,33 @@ MMCREvents.startup(event => {
 })
 ```
 
-#### `registerModifierItem(ItemStack stack, String modifierId) → void`
+#### `registerModifierItem(String itemId, String modifierId) → void`
 
-- **Parameters**: `stack` (`ItemStack`) — Item stack bound to the modifier; `modifierId` (`String`) — A registered modifier ID.
-- **Returns**: Nothing; registers the item as a trigger item for that modifier. The registrar normalizes its count to 1.
-- **Throws**: `IllegalArgumentException` if the modifier ID is invalid; the registrar may throw exceptions if the modifier does not exist, the item is empty, or the lifecycle state is invalid.
+- **Parameters**: `itemId` (`String`) — Resource ID of an ordinary item or block item; `modifierId` (`String`) — Modifier ID, which must be registered before the window freezes.
+- **Returns**: Nothing; records IDs only. A count-1 stack is created after item default data components are bound.
+- **Throws**: `IllegalArgumentException` for blank or malformed IDs. Registration exceptions report duplicate item IDs, a closed window, unknown modifiers at freeze time, or unknown or empty items during later resolution.
 - **Default**: None.
 - **Example**:
 
 ```javascript
 MMCREvents.startup(event => {
-    event.registerModifierItem(Item.of("minecraft:diamond"), "example:speed")
+    const api = event.getAPI()
+    event.registerModifier("example:speed", api.modifierDefinition([
+        api.modifier("duration", "input", 0.5, "multiply", false)
+    ]))
+    event.registerModifierItem("minecraft:diamond", "example:speed")
 })
 ```
 
 #### `addRecipePoolWorkstation(String recipePoolId, String itemId) → void`
 
-Registers the specified item as a workstation for an MMCR recipe pool page in JEI. Both IDs must be valid resource IDs.
+Registers the specified item as a workstation for an MMCR recipe pool page in JEI. Both IDs must be valid resource IDs. Startup only records IDs; they are applied during JEI workstation registration.
 
 ```javascript
 MMCREvents.startup(event => {
     event.addRecipePoolWorkstation("example:press", "minecraft:blast_furnace")
 })
 ```
-
-#### `addRecipePoolWorkstation(String recipePoolId, ItemStack workstation) → void`
-
-Registers an item stack as a recipe pool workstation. Empty stacks are rejected, and the item count is normalized to 1 during registration.
 
 #### `addMachineWorkstation(String machineId, String recipeTypeId) → void`
 
@@ -3901,7 +3911,7 @@ event.createLevelType("example:coil").displayNameKey("level.example.coil").regis
 |------|------|------|------|
 | `typeId` | `Identifier` | `null` | Parent level type ID. |
 | `priority` | `int` | `0` | Level priority. |
-| `state` | `BlockState` | `null` | Block representing the level. |
+| `state` | `String` | `null` | Deferred block-state ID, optionally including properties. |
 | `modifier` | `ModifierDefinition` | `ModifierDefinition.EMPTY` | Set of modifiers applied when the level is active. |
 
 **Methods**
@@ -3930,11 +3940,11 @@ event.createLevel("example:coil_iron").type("example:coil")
 event.createLevel("example:coil_iron").type("example:coil").priority(0)
 ```
 
-#### `state(Object state) → MachineLevelBuilderJS`
+#### `state(String blockStateId) → MachineLevelBuilderJS`
 
-- **Parameters**: `state` (`Object`), a `String` (block ID) or `BlockState`.
-- **Returns**: The current builder; the string form uses the block's default state.
-- **Throws**: `IllegalArgumentException` if the block is unknown or the argument is not a string/`BlockState`.
+- **Parameters**: `blockStateId` (`String`), a block ID or state string such as `minecraft:oak_log[axis=y]`. Omitted properties retain defaults. `BlockState` is no longer accepted.
+- **Returns**: The current builder; stores the string without querying the block registry.
+- **Throws**: `NullPointerException` for `null`. `createObject()` validates the resource ID and bracket form. Unknown blocks, unknown properties, and invalid property values are reported with the level ID as registration exceptions when the structure window freezes and converts level declarations.
 - **Defaults**: `createObject()` throws `IllegalStateException` if unset.
 - **Example**:
 
@@ -3962,8 +3972,8 @@ event.createLevel("example:coil_iron")
 #### `createObject() → MachineLevel`
 
 - **Parameters**: None.
-- **Returns**: An immutable `MachineLevel`.
-- **Throws**: `IllegalStateException` if `type` or `state` is unset.
+- **Returns**: An immutable `cn.howxu.mmcr.api.machine.definition.MachineLevel` declaration with an unresolved block state and empty display stack, no longer a runtime `api.machine.level.MachineLevel`.
+- **Throws**: `IllegalStateException` if `type` or `state` is unset; `IllegalArgumentException` for an invalid resource ID or bracket form.
 - **Defaults**: `modifier` is `ModifierDefinition.EMPTY`.
 - **Example**:
 

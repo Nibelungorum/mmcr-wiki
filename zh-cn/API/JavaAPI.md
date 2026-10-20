@@ -4,7 +4,7 @@ title: JavaAPI
 
 # Java 公共 API 参考
 
-本页集中列出 Java 公共层的入口、声明、运行时视图和扩展契约。文中的签名以该提交的实现为准，不代表某个尚未确认的 Maven 发布版本。
+本页集中列出 Java 公共层的入口、声明、运行时视图和扩展契约。
 
 ## 包路径与边界
 
@@ -113,12 +113,13 @@ public void registerStructure(StructureSpec structure);
 public void registerLevelType(LevelTypeSpec type);
 public void registerLevel(MachineLevelSpec level);
 public void registerModifier(Identifier id, ModifierBundle modifier);
-public void registerModifierItem(ItemStack stack, Identifier modifierId);
+public void registerModifierItem(Identifier itemId, Identifier modifierId);
 public Map<Identifier, StructureSpec> structures();
 public Map<Identifier, LevelTypeSpec> levelTypes();
 public Map<Identifier, MachineLevelSpec> levels();
 public Map<Identifier, ModifierBundle> modifiers();
 public Map<Identifier, List<ItemStack>> modifierItems();
+public Map<Identifier, Identifier> modifierItemIds();
 
 // registration.StructureRegistrar：与事件的注册/查询方法同名同签名
 void registerStructure(Identifier machineId, Consumer<StructureDraft> configuration);
@@ -126,15 +127,22 @@ void registerStructure(StructureSpec structure);
 void registerLevelType(LevelTypeSpec type);
 void registerLevel(MachineLevelSpec level);
 void registerModifier(Identifier id, ModifierBundle modifier);
-void registerModifierItem(ItemStack stack, Identifier modifierId);
+void registerModifierItem(Identifier itemId, Identifier modifierId);
 Map<Identifier, StructureSpec> structures();
 Map<Identifier, LevelTypeSpec> levelTypes();
 Map<Identifier, MachineLevelSpec> levels();
 Map<Identifier, ModifierBundle> modifiers();
 Map<Identifier, List<ItemStack>> modifierItems();
+Map<Identifier, Identifier> modifierItemIds();
 ```
 
-机器 ID 必须在定义阶段声明，一台机器只能提交一个结构。注册等级前先注册等级类型。修饰符物品绑定保留组件、将数量归一化为 1。窗口结束时还会校验等级槽位引用、修饰符替换和物品绑定是否引用已注册声明。
+机器 ID 必须在定义阶段声明，一台机器只能提交一个结构。注册等级前先注册等级类型。等级声明保留到结构窗口冻结时才解析方块状态；`levels()` 在此之前也能查询尚未解析的声明，不要在启动早期主动读取其 `statePredicate().blockState()`。
+
+修饰符物品绑定改为传入物品 ID，而不是 `ItemStack`。MMCR 在物品默认数据组件绑定完成后才解析 ID 并创建数量为 1 的物品栈，普通物品和方块物品均可使用。`modifierItemIds()` 是 **物品 ID → 修饰符 ID** 的只读快照；`modifierItems()` 只返回收集器中已有的物品栈绑定，不会解析或合并这些待处理 ID，因此不能用它判断 ID 绑定是否存在。
+
+重复物品 ID 会被拒绝；窗口冻结时校验等级槽位、修饰符替换和物品绑定的声明引用，稍后解析物品时拒绝未知或空物品。重复的最终物品绑定也会报错。启动声明修改后需重启。
+
+源码：[结构注册器](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/c5a48a934bc9de3f10c794bf582175cba6ffbe61/src/main/java/cn/howxu/mmcr/publicapi/registration/StructureRegistrar.java)、[延迟解析与校验](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/c5a48a934bc9de3f10c794bf582175cba6ffbe61/src/main/java/cn/howxu/mmcr/api/registration/StructureRegistration.java)。
 
 ### `RegisterMachineRecipesEvent` 与 `RecipeRegistrar`
 
@@ -571,6 +579,8 @@ List<BlockCondition> alternatives();
 
 `block` 匹配方块，`blockState` 精确描述状态；`state(String)` 可写 `minecraft:oak_log[axis=y]`。未知属性或非法属性值会被校验。`deferredBlock` 延迟取得方块；`tag` 匹配标签；`any`/`anyOf` 是条件并集，**不是无参通配符**。视图上的 `isAny`/`isAir` 是描述方法，并不意味着公共工厂存在 `air()`。
 
+启动期引用其他 Mod 的方块时，优先使用 `block(String/Identifier)` 或 `state(String/Identifier)`，不要提前取得方块对象。`state(...)` 创建声明时只校验资源 ID 和括号形式；方块是否存在、属性名和属性值是否有效，延迟到读取 `blockState()` 或转换为运行时谓词时校验。未知方块会报错，不会静默退回空气。此行为属于 Java 公共声明层，不代表 KubeJS 的 `api.state(...)` 也延迟查询注册表。
+
 端口族工厂从对应注册族收集方块；`ports()` 无参返回端口集合，带参数版本只匹配指定端口。`parallelControllers`、`factoryController`、`smartInterface`、`dataStorage`、`networkInterface` 对应各自内置方块。Mekanism 族快捷条件是否有可用方块取决于联动加载，公共签名不依赖 Mekanism 类。
 
 ### `PortLimits`
@@ -756,7 +766,7 @@ StructureConstraints build();
 // Levels
 public static LevelTypeSpec type(Identifier id, Component displayName);
 public static MachineLevelSpec level(Identifier id, Identifier typeId, int priority,
-        BlockCondition condition, ItemStack representative, ModifierBundle modifier);
+        BlockCondition condition, ModifierBundle modifier);
 
 // LevelTypeSpec
 Identifier id();
@@ -771,14 +781,14 @@ ItemStack representative();
 ModifierBundle modifier();
 ```
 
-类型是等级组，具体等级描述匹配条件、优先级、展示物品和修饰符。展示物品 getter 返回副本，不能通过修改该堆栈改变声明。等级槽位使用类型 ID，配方需求使用类型 ID 加等级 ID。
+类型是等级组，具体等级描述匹配条件、优先级和修饰符。`Levels.level(...)` 现在只有五个参数，不再接受代表物品栈；工厂创建的声明使用空展示栈，`representative()` 访问器仍保留并返回副本。等级槽位使用类型 ID，配方需求使用类型 ID 加等级 ID。
 
 ```java
 Identifier typeId = Identifier.fromNamespaceAndPath("my_mod", "casing");
 Identifier levelId = Identifier.fromNamespaceAndPath("my_mod", "steel");
 event.registerLevelType(Levels.type(typeId, Component.translatable("level.my_mod.casing")));
 event.registerLevel(Levels.level(levelId, typeId, 1,
-        BlockConditions.block(Blocks.IRON_BLOCK), new ItemStack(Items.IRON_BLOCK),
+        BlockConditions.state("minecraft:iron_block"),
         Modifiers.bundle()));
 ```
 

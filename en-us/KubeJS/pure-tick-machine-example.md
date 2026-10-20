@@ -366,7 +366,7 @@ plan.commit()
 
 ### Screen Text: `replace(...)` vs `append(...)`
 
-Startup [`ControllerScreenTextEventJS`](../API/KubeJS#controllerscreentexteventjs) uses string scopes / IDs; runtime `ControllerScreenText` uses `ControllerScreenTextScope` / `Identifier`. This machine writes the initial two lines with `append(...)` during registration (`controller` scope), then constructs IDs through `api.id(...)` in `serverTick` and calls the underlying `replace(lineId, text)`.
+Startup [`ControllerScreenTextEventJS`](../API/KubeJS#controllerscreentexteventjs) uses string scopes and accepts string or `Identifier` line IDs; runtime `ControllerScreenText` uses `ControllerScreenTextScope` and accepts both line ID forms as well. This machine writes the initial two lines with `append(...)` during registration (`controller` scope), then constructs IDs through `api.id(...)` in `serverTick` and calls the underlying `replace(lineId, text)`.
 
 Key differences (detailed in [`KubeJS.md`](../API/KubeJS#controllerscreentexteventjs)):
 

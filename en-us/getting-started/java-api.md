@@ -147,7 +147,7 @@ public final class MyFirstMachineProvider implements MachineDefinitionProvider {
                 .machine(MY_FIRST_MACHINE)
                 .recipePool(MY_FIRST_MACHINE)
                 .displayNameKey("machine.my_mod.my_first_machine")
-                .appearance(a -> a.machineBasicBlock("minecraft:purpur_block"))
+                .appearance(a -> a.machineBasicBlock(Identifier.parse("minecraft:purpur_block")))
                 .build();
         event.registerMachine(definition);
     }
@@ -183,7 +183,7 @@ The interfaces used in the example mean:
 - `Machines.machine(Identifier)`: creates a `MachineDraft` from a namespaced ID.
 - `MachineDraft.recipePool(Identifier...)`: declares the recipe pools used by the machine. This tutorial uses the same ID for the pool and machine, but they are separate concepts and several machines may share a pool.
 - `MachineDraft.displayNameKey(String)`: sets a localization key; `machine.<namespace>.<machine registry name>` is recommended.
-- `MachineDraft.appearance(Consumer<AppearanceOptions>)`: configures basic appearance; `AppearanceOptions.machineBasicBlock(String)` sets the appearance block ID.
+- `MachineDraft.appearance(Consumer<AppearanceOptions>)`: configures basic appearance; `AppearanceOptions.machineBasicBlock(Identifier)` sets the appearance block ID and no longer accepts a string.
 - `MachineDraft.build()`: creates an immutable `MachineSpec` declaration.
 
 When behavior is not explicitly set, a machine is recipe-driven by default. The public Java API's `build()` plus event submission corresponds to KubeJS's `createMachine(...).register()`.

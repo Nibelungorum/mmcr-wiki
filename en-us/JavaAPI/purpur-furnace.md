@@ -7,7 +7,7 @@ order: 5
 
 The purpur furnace uses **smart interfaces** as runtime regulators: the integer `mode` selects recipes, the float `conversation` adds recipe filtering conditions, and both adjust energy consumption and duration through value mappings. The interface name `conversation` follows the source spelling and must not be changed to another name.
 
-This document is based on [PURPUR_FURNACE.java (f234477b)](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/org/nibelungorum/builtin/PURPUR_FURNACE.java).
+This document is based on [PURPUR_FURNACE.java (5912f92f)](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/org/nibelungorum/builtin/PURPUR_FURNACE.java).
 
 ## Entry Points and Type Signatures
 
@@ -88,23 +88,23 @@ public static void registerStructures(RegisterMachineStructuresEvent event) {
                                 .layer("NXXXXXO", " H   H ", " I   I ", " J   J ", "EH   HE", " PXXXQ ", "  EHE  ", "   R   ")
                                 .layer("STXXXUV", "  HCH  ", "  III  ", "  JJJ  ", " EHHHE ", " WYYYZ ", "       ", "       ")
                                 .layer(" abbbV ", "       ", "       ", "       ", "  EEE  ", "       ", "       ", "       ")
-                                .where('X', block("minecraft:end_stone_bricks"))
+                                .where('X', block(Identifier.parse("minecraft:end_stone_bricks")))
                                 .where('A', state("minecraft:end_stone_brick_stairs[facing=south,half=bottom,shape=outer_left,waterlogged=false]"))
                                 .where('B', state("minecraft:end_stone_brick_stairs[facing=south,half=bottom,shape=straight,waterlogged=false]"))
                                 .where('D', state("minecraft:end_stone_brick_stairs[facing=west,half=bottom,shape=outer_left,waterlogged=false]"))
-                                .where('E', block("minecraft:end_stone_brick_slab"))
+                                .where('E', block(Identifier.parse("minecraft:end_stone_brick_slab")))
                                 .where('F', state("minecraft:end_stone_brick_stairs[facing=east,half=bottom,shape=inner_right,waterlogged=false]"))
                                 .where('G', state("minecraft:end_stone_brick_stairs[facing=south,half=bottom,shape=inner_right,waterlogged=false]"))
                                 .where('H', any(
-                                        block("minecraft:purpur_pillar"),
+                                        block(Identifier.parse("minecraft:purpur_pillar")),
                                         BlockConditions.itemInput(),
                                         BlockConditions.itemOutput(),
                                         BlockConditions.energyInput(),
                                         BlockConditions.parallelControllers(),
                                         BlockConditions.smartInterface()
                                 ))
-                                .where('I', block("minecraft:purple_terracotta"))
-                                .where('J', block("minecraft:purpur_block"))
+                                .where('I', block(Identifier.parse("minecraft:purple_terracotta")))
+                                .where('J', block(Identifier.parse("minecraft:purpur_block")))
                                 .where('K', state("minecraft:purpur_stairs[facing=south,half=bottom,shape=outer_left,waterlogged=false]"))
                                 .where('L', state("minecraft:purpur_stairs[facing=south,half=bottom,shape=straight,waterlogged=false]"))
                                 .where('M', state("minecraft:purpur_stairs[facing=west,half=bottom,shape=outer_left,waterlogged=false]"))
@@ -112,7 +112,7 @@ public static void registerStructures(RegisterMachineStructuresEvent event) {
                                 .where('O', state("minecraft:end_stone_brick_stairs[facing=west,half=bottom,shape=straight,waterlogged=false]"))
                                 .where('P', state("minecraft:purpur_stairs[facing=east,half=bottom,shape=straight,waterlogged=false]"))
                                 .where('Q', state("minecraft:purpur_stairs[facing=west,half=bottom,shape=straight,waterlogged=false]"))
-                                .where('R', block("minecraft:purpur_slab"))
+                                .where('R', block(Identifier.parse("minecraft:purpur_slab")))
                                 .where('S', state("minecraft:end_stone_brick_stairs[facing=north,half=bottom,shape=outer_right,waterlogged=false]"))
                                 .where('T', state("minecraft:end_stone_brick_stairs[facing=north,half=bottom,shape=inner_right,waterlogged=false]"))
                                 .where('U', state("minecraft:end_stone_brick_stairs[facing=north,half=bottom,shape=inner_left,waterlogged=false]"))

@@ -14,7 +14,7 @@ order: 6
 | `Machines` / `MachineDraft` | `machine(Identifier)`；`build()` → `MachineSpec` | [参考](../API/JavaAPI#machinedraft) |
 | `Structures` / `StructureDraft` | `fullStructure(Consumer<StructureStageDraft>)`、`expandStructure(Consumer<StructureStageDraft>)` | [参考](../API/JavaAPI#structuredraft) |
 | `StructureStageDraft` / `PatternDraft` | 每个阶段独立配置模式；`pattern(Consumer<PatternDraft>)` | [阶段](../API/JavaAPI#structurestagedraft)、[模式](../API/JavaAPI#patterndraft) |
-| `BlockConditions` | `block(String)`、`any(BlockCondition...)`、接口条件 | [参考](../API/JavaAPI#blockconditions) |
+| `BlockConditions` | `block(Identifier)`、`any(BlockCondition...)`、接口条件 | [参考](../API/JavaAPI#blockconditions) |
 | `Recipes` / `RecipeDraft` | `outputChance(ItemStack, float)`、`allowPartialOutputs(boolean)`；`build()` → `RecipeSpec` | [参考](../API/JavaAPI#recipedraft) |
 | 注册事件 | `RegisterMachineDefinitionsEvent`、`RegisterMachineStructuresEvent`、`RegisterMachineRecipesEvent` | [定义](../API/JavaAPI#registermachinedefinitionsevent)、[结构](../API/JavaAPI#registermachinestructuresevent)、[配方](../API/JavaAPI#registermachinerecipesevent) |
 
@@ -61,12 +61,12 @@ public static void registerStructures(RegisterMachineStructuresEvent event) {
                                         BlockConditions.itemInput(),
                                         BlockConditions.itemOutput(),
                                         BlockConditions.energyInput(),
-                                        block("minecraft:deepslate_bricks")
+                                        block(Identifier.parse("minecraft:deepslate_bricks"))
                                 ))
-                                .where('X', block("minecraft:polished_blackstone"))
-                                .where('A', block("minecraft:deepslate_bricks"))
-                                .where('B', block("minecraft:polished_blackstone_bricks"))
-                                .where('D', block("minecraft:gilded_blackstone"))
+                                .where('X', block(Identifier.parse("minecraft:polished_blackstone")))
+                                .where('A', block(Identifier.parse("minecraft:deepslate_bricks")))
+                                .where('B', block(Identifier.parse("minecraft:polished_blackstone_bricks")))
+                                .where('D', block(Identifier.parse("minecraft:gilded_blackstone")))
                                 .controller('E')
                         )
                 )
@@ -83,12 +83,12 @@ public static void registerStructures(RegisterMachineStructuresEvent event) {
                                         BlockConditions.itemInput(),
                                         BlockConditions.itemOutput(),
                                         BlockConditions.energyInput(),
-                                        block("minecraft:deepslate_bricks")
+                                        block(Identifier.parse("minecraft:deepslate_bricks"))
                                 ))
-                                .where('X', block("minecraft:polished_blackstone"))
-                                .where('A', block("minecraft:deepslate_bricks"))
-                                .where('B', block("minecraft:polished_blackstone_bricks"))
-                                .where('D', block("minecraft:gilded_blackstone"))
+                                .where('X', block(Identifier.parse("minecraft:polished_blackstone")))
+                                .where('A', block(Identifier.parse("minecraft:deepslate_bricks")))
+                                .where('B', block(Identifier.parse("minecraft:polished_blackstone_bricks")))
+                                .where('D', block(Identifier.parse("minecraft:gilded_blackstone")))
                                 .controller('E')
                         )
                 )
@@ -105,12 +105,12 @@ public static void registerStructures(RegisterMachineStructuresEvent event) {
                                         BlockConditions.itemInput(),
                                         BlockConditions.itemOutput(),
                                         BlockConditions.energyInput(),
-                                        block("minecraft:deepslate_bricks")
+                                        block(Identifier.parse("minecraft:deepslate_bricks"))
                                 ))
-                                .where('X', block("minecraft:polished_blackstone"))
-                                .where('A', block("minecraft:deepslate_bricks"))
-                                .where('B', block("minecraft:polished_blackstone_bricks"))
-                                .where('D', block("minecraft:gilded_blackstone"))
+                                .where('X', block(Identifier.parse("minecraft:polished_blackstone")))
+                                .where('A', block(Identifier.parse("minecraft:deepslate_bricks")))
+                                .where('B', block(Identifier.parse("minecraft:polished_blackstone_bricks")))
+                                .where('D', block(Identifier.parse("minecraft:gilded_blackstone")))
                                 .controller('E')
                         )
                 )

@@ -386,9 +386,7 @@ The two-argument `textures` overload sets all remaining faces to the same textur
 
 ```java
 AppearanceOptions appearance(Identifier id);
-AppearanceOptions appearance(String id);
 AppearanceOptions machineBasicBlock(Identifier id);
-AppearanceOptions machineBasicBlock(String id);
 AppearanceOptions controllerBaseTexture(Identifier id);
 AppearanceOptions formedPortBaseTexture(Identifier id);
 AppearanceOptions controllerIdleOverlayTexture(Identifier id);
@@ -403,7 +401,9 @@ AppearanceOptions.View build();
 @Nullable Identifier controllerActiveOverlayTexture();
 ```
 
-`appearance` is an alias for `machineBasicBlock`. The base block, controller base texture, formed-port base texture, and idle/running overlay textures are all optional; string IDs are parsed with `Identifier.parse`. A valid resource ID does not guarantee that the corresponding resource exists.
+`appearance` is an alias for `machineBasicBlock`. The base block, controller base texture, formed-port base texture, and idle/running overlay textures are all optional. ID parameters now consistently use `Identifier`; `appearance(String)` / `machineBasicBlock(String)` are no longer available. For example, use `a.machineBasicBlock(Identifier.parse("minecraft:iron_block"))`. A valid resource ID does not guarantee that the corresponding resource exists.
+
+Source: [AppearanceOptions](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/publicapi/machine/AppearanceOptions.java).
 
 ### `FactoryOptions`
 
@@ -523,7 +523,6 @@ All `BlockConditions` factory methods are static:
 
 ```java
 public static BlockCondition block(Block block);
-public static BlockCondition block(String id);
 public static BlockCondition block(Identifier id);
 public static BlockCondition state(String state);
 public static BlockCondition state(Identifier id);
@@ -553,9 +552,7 @@ public static BlockCondition radioactiveChemicalPorts();
 public static BlockCondition heatPorts();
 public static BlockCondition upgradeBus();
 public static BlockCondition ports();
-public static BlockCondition ports(String... ids);
 public static BlockCondition ports(Identifier... ids);
-public static BlockCondition port(String id);
 public static BlockCondition port(Identifier id);
 public static BlockCondition parallelControllers();
 public static BlockCondition factoryController();
@@ -579,9 +576,11 @@ List<BlockCondition> alternatives();
 
 `block` matches a block, while `blockState` describes an exact state; `state(String)` accepts values such as `minecraft:oak_log[axis=y]`. Unknown properties and invalid property values are validated. `deferredBlock` defers block lookup; `tag` matches tags; `any`/`anyOf` combines alternative conditions and is **not a no-argument wildcard**. The view's `isAny`/`isAir` methods describe conditions and do not imply that a public `air()` factory exists.
 
-For startup references to another mod's blocks, prefer `block(String/Identifier)` or `state(String/Identifier)` instead of obtaining block objects early. Creating a `state(...)` declaration validates only the resource ID and bracket form; block existence, property names, and property values are checked when `blockState()` is read or the declaration is converted to a runtime predicate. Unknown blocks fail instead of silently falling back to air. This applies to Java public declarations, not to KubeJS `api.state(...)`, which still queries the registry immediately.
+For startup references to another mod's blocks, prefer `block(Identifier)` or `state(String/Identifier)` instead of obtaining block objects early. `block`, `port`, and `ports` overloads with arguments no longer accept string IDs; `state(String)` remains available for state expressions such as `minecraft:oak_log[axis=y]`. Creating a `state(...)` declaration validates only the resource ID and bracket form; block existence, property names, and property values are checked when `blockState()` is read or the declaration is converted to a runtime predicate. Unknown blocks fail instead of silently falling back to air. This applies to Java public declarations, not to KubeJS `api.state(...)`, which still queries the registry immediately.
 
 Port family factories collect blocks from the corresponding registered family; no-argument `ports()` returns the port collection, while overloads with arguments match only the specified ports. `parallelControllers`, `factoryController`, `smartInterface`, `dataStorage`, and `networkInterface` correspond to their respective built-in blocks. Whether Mekanism family shortcuts have available blocks depends on whether the integration is loaded; public signatures do not depend on Mekanism classes.
+
+Source: [BlockConditions](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/publicapi/structure/BlockConditions.java).
 
 ### `PortLimits`
 
@@ -1364,10 +1363,14 @@ IoSnapshot ioView();
 List<ItemStack> upgradeItems();
 JadeText jadeText();
 long countStructureBlocks(Block block);
-long countStructureBlocks(String blockId);
+long countStructureBlocks(Identifier blockId);
 ```
 
-This is the authoritative server context. The controller getter returns a read-only `MachineView`, not a block entity. Data storage may be absent; check for null before using it. Upgrade items are returned as copied stacks. `isDue(period)` uses gameTime modulo a positive period to determine whether a tick is due; non-positive periods throw `IllegalArgumentException`. Structure counts cover the currently formed structure and return 0 when it is unformed. Blank, invalid, or unregistered string block IDs throw `IllegalArgumentException`; these methods do not scan arbitrary world regions. Do not use the runtime context as a long-term cache or client-side data source.
+This is the authoritative server context. The controller getter returns a read-only `MachineView`, not a block entity. Data storage may be absent; check for null before using it. Upgrade items are returned as copied stacks. `isDue(period)` uses gameTime modulo a positive period to determine whether a tick is due; non-positive periods throw `IllegalArgumentException`. Structure counts cover the currently formed structure and return 0 when it is unformed. The ID overload now takes `Identifier`: `null` throws `NullPointerException`, and an unknown block throws `IllegalArgumentException`. These methods do not scan arbitrary world regions. Do not use the runtime context as a long-term cache or client-side data source.
+
+Neither `MachineContext` nor `MachineView` provides `countStructureBlocks(String)` anymore. Use `context.countStructureBlocks(Identifier.parse("minecraft:iron_block"))`. The underlying `MachineBehaviorContext` used by KubeJS retains its string entry point; script signatures do not apply to the public interfaces.
+
+Source: [MachineContext](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/publicapi/behavior/MachineContext.java), [MachineView](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/publicapi/runtime/MachineView.java).
 
 ### `RecipeStartContext`
 
@@ -1454,7 +1457,7 @@ Source code: [behavior adaptation](https://github.com/Nibelungorum/ModularMachin
 BlockPos controllerPos();
 boolean formed();
 long countStructureBlocks(Block block);
-long countStructureBlocks(String blockId);
+long countStructureBlocks(Identifier blockId);
 
 // RecipeView
 Identifier id();

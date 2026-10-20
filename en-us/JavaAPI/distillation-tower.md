@@ -14,7 +14,7 @@ The distillation tower demonstrates **a base structure and two expanded forms**,
 | `Machines` / `MachineDraft` | `machine(Identifier)`; `build()` → `MachineSpec` | [Reference](../API/JavaAPI#machinedraft) |
 | `Structures` / `StructureDraft` | `fullStructure(Consumer<StructureStageDraft>)`, `expandStructure(Consumer<StructureStageDraft>)` | [Reference](../API/JavaAPI#structuredraft-and-structurespec) |
 | `StructureStageDraft` / `PatternDraft` | Each stage configures a pattern independently; `pattern(Consumer<PatternDraft>)` | [Stage](../API/JavaAPI#structurestagedraft-and-structurestagespec), [Pattern](../API/JavaAPI#patterndraft-and-patternspec) |
-| `BlockConditions` | `block(String)`, `any(BlockCondition...)`, port conditions | [Reference](../API/JavaAPI#blockconditions-and-blockcondition) |
+| `BlockConditions` | `block(Identifier)`, `any(BlockCondition...)`, port conditions | [Reference](../API/JavaAPI#blockconditions-and-blockcondition) |
 | `Recipes` / `RecipeDraft` | `outputChance(ItemStack, float)`, `allowPartialOutputs(boolean)`; `build()` → `RecipeSpec` | [Reference](../API/JavaAPI#recipedraft) |
 | Registration events | `RegisterMachineDefinitionsEvent`, `RegisterMachineStructuresEvent`, `RegisterMachineRecipesEvent` | [Definitions](../API/JavaAPI#registermachinedefinitionsevent-and-machineregistrar), [Structures](../API/JavaAPI#registermachinestructuresevent-and-structureregistrar), [Recipes](../API/JavaAPI#registermachinerecipesevent-and-reciperegistrar) |
 
@@ -61,12 +61,12 @@ public static void registerStructures(RegisterMachineStructuresEvent event) {
                                         BlockConditions.itemInput(),
                                         BlockConditions.itemOutput(),
                                         BlockConditions.energyInput(),
-                                        block("minecraft:deepslate_bricks")
+                                        block(Identifier.parse("minecraft:deepslate_bricks"))
                                 ))
-                                .where('X', block("minecraft:polished_blackstone"))
-                                .where('A', block("minecraft:deepslate_bricks"))
-                                .where('B', block("minecraft:polished_blackstone_bricks"))
-                                .where('D', block("minecraft:gilded_blackstone"))
+                                .where('X', block(Identifier.parse("minecraft:polished_blackstone")))
+                                .where('A', block(Identifier.parse("minecraft:deepslate_bricks")))
+                                .where('B', block(Identifier.parse("minecraft:polished_blackstone_bricks")))
+                                .where('D', block(Identifier.parse("minecraft:gilded_blackstone")))
                                 .controller('E')
                         )
                 )
@@ -83,12 +83,12 @@ public static void registerStructures(RegisterMachineStructuresEvent event) {
                                         BlockConditions.itemInput(),
                                         BlockConditions.itemOutput(),
                                         BlockConditions.energyInput(),
-                                        block("minecraft:deepslate_bricks")
+                                        block(Identifier.parse("minecraft:deepslate_bricks"))
                                 ))
-                                .where('X', block("minecraft:polished_blackstone"))
-                                .where('A', block("minecraft:deepslate_bricks"))
-                                .where('B', block("minecraft:polished_blackstone_bricks"))
-                                .where('D', block("minecraft:gilded_blackstone"))
+                                .where('X', block(Identifier.parse("minecraft:polished_blackstone")))
+                                .where('A', block(Identifier.parse("minecraft:deepslate_bricks")))
+                                .where('B', block(Identifier.parse("minecraft:polished_blackstone_bricks")))
+                                .where('D', block(Identifier.parse("minecraft:gilded_blackstone")))
                                 .controller('E')
                         )
                 )
@@ -105,12 +105,12 @@ public static void registerStructures(RegisterMachineStructuresEvent event) {
                                         BlockConditions.itemInput(),
                                         BlockConditions.itemOutput(),
                                         BlockConditions.energyInput(),
-                                        block("minecraft:deepslate_bricks")
+                                        block(Identifier.parse("minecraft:deepslate_bricks"))
                                 ))
-                                .where('X', block("minecraft:polished_blackstone"))
-                                .where('A', block("minecraft:deepslate_bricks"))
-                                .where('B', block("minecraft:polished_blackstone_bricks"))
-                                .where('D', block("minecraft:gilded_blackstone"))
+                                .where('X', block(Identifier.parse("minecraft:polished_blackstone")))
+                                .where('A', block(Identifier.parse("minecraft:deepslate_bricks")))
+                                .where('B', block(Identifier.parse("minecraft:polished_blackstone_bricks")))
+                                .where('D', block(Identifier.parse("minecraft:gilded_blackstone")))
                                 .controller('E')
                         )
                 )

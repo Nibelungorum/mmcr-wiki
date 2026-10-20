@@ -5,7 +5,7 @@ order: 7
 
 # 太空电梯
 
-太空电梯与太空重组机演示 **HOST / MODULE 主机模块关系**、耦合器连接、有序配方池以及药水数据组件的匹配与输出。本文以 [SPACE.java（f234477b）](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/org/nibelungorum/builtin/SPACE.java) 为准。
+太空电梯与太空重组机演示 **HOST / MODULE 主机模块关系**、耦合器连接、有序配方池以及药水数据组件的匹配与输出。本文以 [SPACE.java（5912f92f）](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/org/nibelungorum/builtin/SPACE.java) 为准。
 
 ## 两台机器与六个用途不同的 ID
 
@@ -49,7 +49,7 @@ public static void registerDefinitions(RegisterMachineDefinitionsEvent event) {
                 .recipePool(SPACE_ELEVATOR)
                 .displayNameKey("machine.mmcr.space_elevator")
                 .appearance(a -> a
-                        .machineBasicBlock("smooth_quartz")
+                        .machineBasicBlock(Identifier.parse("minecraft:smooth_quartz"))
                         .controllerBaseTexture(Identifier.parse("block/quartz_block_bottom"))
                         .formedPortBaseTexture(Identifier.parse("block/quartz_block_bottom"))
                 )
@@ -62,7 +62,7 @@ public static void registerDefinitions(RegisterMachineDefinitionsEvent event) {
                 .machine(SPACE_REASSEMBLER)
                 .recipePool(SPACE_REASSEMBLER, SPACE_MINER, SPACE_POOL_1, SPACE_POOL_2, SPACE_POOL_3)
                 .displayNameKey("machine.mmcr.space_reassembler")
-                .appearance(a -> a.machineBasicBlock("quartz_pillar"))
+                .appearance(a -> a.machineBasicBlock(Identifier.parse("minecraft:quartz_pillar")))
                 .allowMultithreading()
                 .role(MachineKind.MODULE)
                 .build();
@@ -96,11 +96,11 @@ public static void registerStructures(RegisterMachineStructuresEvent event) {
                         .pattern(p -> p
                                 .layer()
                                 // ...省略
-                                .where('X', block("minecraft:smooth_quartz"))
-                                .where('A', block("minecraft:amethyst_block"))
+                                .where('X', block(Identifier.parse("minecraft:smooth_quartz")))
+                                .where('A', block(Identifier.parse("minecraft:amethyst_block")))
                                 .where('B', coupler())
                                 .where('D', any(
-                                        block("minecraft:smooth_quartz"),
+                                        block(Identifier.parse("minecraft:smooth_quartz")),
                                         BlockConditions.itemInput(),
                                         BlockConditions.itemOutput(),
                                         BlockConditions.energyInput(),
@@ -119,15 +119,15 @@ public static void registerStructures(RegisterMachineStructuresEvent event) {
                                 .layer("AAA", "XBX", "XBX", "XDX")
                                 .layer("AAA", "BEB", "B B", "DDD")
                                 .layer("AAA", "XFX", "XBX", "XDX")
-                                .where('X', block("minecraft:quartz_pillar"))
-                                .where('A', block("minecraft:amethyst_block"))
+                                .where('X', block(Identifier.parse("minecraft:quartz_pillar")))
+                                .where('A', block(Identifier.parse("minecraft:amethyst_block")))
                                 .where('B', any(
-                                        block("minecraft:smooth_quartz"),
+                                        block(Identifier.parse("minecraft:smooth_quartz")),
                                         BlockConditions.itemInput(),
                                         BlockConditions.itemOutput(),
                                         BlockConditions.energyInput()
                                 ))
-                                .where('D', block("minecraft:glass"))
+                                .where('D', block(Identifier.parse("minecraft:glass")))
                                 .where('E', coupler())
                                 .controller('F')
                         )

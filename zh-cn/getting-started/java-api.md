@@ -147,7 +147,7 @@ public final class MyFirstMachineProvider implements MachineDefinitionProvider {
                 .machine(MY_FIRST_MACHINE)
                 .recipePool(MY_FIRST_MACHINE)
                 .displayNameKey("machine.my_mod.my_first_machine")
-                .appearance(a -> a.machineBasicBlock("minecraft:purpur_block"))
+                .appearance(a -> a.machineBasicBlock(Identifier.parse("minecraft:purpur_block")))
                 .build();
         event.registerMachine(definition);
     }
@@ -183,7 +183,7 @@ MMCR 启动时遍历声明的 Provider，逐个调用 `register` 方法。Provid
 - `Machines.machine(Identifier)`：以命名空间 ID 创建 `MachineDraft`。
 - `MachineDraft.recipePool(Identifier...)`：声明机器使用的配方池。本教程让池 ID 与机器 ID 相同，但它们是不同概念，多个机器可以共享池。
 - `MachineDraft.displayNameKey(String)`：设置本地化键，建议遵循 `machine.<命名空间>.<机器注册名>`。
-- `MachineDraft.appearance(Consumer<AppearanceOptions>)`：配置基础外观；`AppearanceOptions.machineBasicBlock(String)` 设置外观方块 ID。
+- `MachineDraft.appearance(Consumer<AppearanceOptions>)`：配置基础外观；`AppearanceOptions.machineBasicBlock(Identifier)` 设置外观方块 ID，不再接受字符串。
 - `MachineDraft.build()`：生成不可变声明 `MachineSpec`。
 
 未显式指定行为时，机器默认由配方驱动。公共 Java API 的 `build()` 加事件提交，对应 KubeJS 的 `createMachine(...).register()`。

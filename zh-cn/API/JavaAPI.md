@@ -386,9 +386,7 @@ List<String> tooltip();
 
 ```java
 AppearanceOptions appearance(Identifier id);
-AppearanceOptions appearance(String id);
 AppearanceOptions machineBasicBlock(Identifier id);
-AppearanceOptions machineBasicBlock(String id);
 AppearanceOptions controllerBaseTexture(Identifier id);
 AppearanceOptions formedPortBaseTexture(Identifier id);
 AppearanceOptions controllerIdleOverlayTexture(Identifier id);
@@ -403,7 +401,9 @@ AppearanceOptions.View build();
 @Nullable Identifier controllerActiveOverlayTexture();
 ```
 
-`appearance` 是 `machineBasicBlock` 的别名。基础方块、控制器底纹、成型端口底纹、空闲/运行覆盖纹理均可选；字符串 ID 按 `Identifier.parse` 解析。资源 ID 合法不等于对应资源存在。
+`appearance` 是 `machineBasicBlock` 的别名。基础方块、控制器底纹、成型端口底纹、空闲/运行覆盖纹理均可选，ID 参数统一使用 `Identifier`，不再保留 `appearance(String)` / `machineBasicBlock(String)`；例如 `a.machineBasicBlock(Identifier.parse("minecraft:iron_block"))`。资源 ID 合法不等于对应资源存在。
+
+源码：[AppearanceOptions](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/publicapi/machine/AppearanceOptions.java)。
 
 ### `FactoryOptions`
 
@@ -523,7 +523,6 @@ static void structures(RegisterMachineStructuresEvent event) {
 
 ```java
 public static BlockCondition block(Block block);
-public static BlockCondition block(String id);
 public static BlockCondition block(Identifier id);
 public static BlockCondition state(String state);
 public static BlockCondition state(Identifier id);
@@ -553,9 +552,7 @@ public static BlockCondition radioactiveChemicalPorts();
 public static BlockCondition heatPorts();
 public static BlockCondition upgradeBus();
 public static BlockCondition ports();
-public static BlockCondition ports(String... ids);
 public static BlockCondition ports(Identifier... ids);
-public static BlockCondition port(String id);
 public static BlockCondition port(Identifier id);
 public static BlockCondition parallelControllers();
 public static BlockCondition factoryController();
@@ -579,9 +576,11 @@ List<BlockCondition> alternatives();
 
 `block` 匹配方块，`blockState` 精确描述状态；`state(String)` 可写 `minecraft:oak_log[axis=y]`。未知属性或非法属性值会被校验。`deferredBlock` 延迟取得方块；`tag` 匹配标签；`any`/`anyOf` 是条件并集，**不是无参通配符**。视图上的 `isAny`/`isAir` 是描述方法，并不意味着公共工厂存在 `air()`。
 
-启动期引用其他 Mod 的方块时，优先使用 `block(String/Identifier)` 或 `state(String/Identifier)`，不要提前取得方块对象。`state(...)` 创建声明时只校验资源 ID 和括号形式；方块是否存在、属性名和属性值是否有效，延迟到读取 `blockState()` 或转换为运行时谓词时校验。未知方块会报错，不会静默退回空气。此行为属于 Java 公共声明层，不代表 KubeJS 的 `api.state(...)` 也延迟查询注册表。
+启动期引用其他 Mod 的方块时，优先使用 `block(Identifier)` 或 `state(String/Identifier)`，不要提前取得方块对象。`block`、`port`、带参数的 `ports` 不再接受字符串 ID；`state(String)` 仍保留，用于 `minecraft:oak_log[axis=y]` 这类状态表达式。`state(...)` 创建声明时只校验资源 ID 和括号形式；方块是否存在、属性名和属性值是否有效，延迟到读取 `blockState()` 或转换为运行时谓词时校验。未知方块会报错，不会静默退回空气。此行为属于 Java 公共声明层，不代表 KubeJS 的 `api.state(...)` 也延迟查询注册表。
 
 端口族工厂从对应注册族收集方块；`ports()` 无参返回端口集合，带参数版本只匹配指定端口。`parallelControllers`、`factoryController`、`smartInterface`、`dataStorage`、`networkInterface` 对应各自内置方块。Mekanism 族快捷条件是否有可用方块取决于联动加载，公共签名不依赖 Mekanism 类。
+
+源码：[BlockConditions](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/publicapi/structure/BlockConditions.java)。
 
 ### `PortLimits`
 
@@ -1364,10 +1363,14 @@ IoSnapshot ioView();
 List<ItemStack> upgradeItems();
 JadeText jadeText();
 long countStructureBlocks(Block block);
-long countStructureBlocks(String blockId);
+long countStructureBlocks(Identifier blockId);
 ```
 
-服务器权威上下文。控制器 getter 返回只读 `MachineView`，不是方块实体。数据存储可缺失，使用前判空；升级物品返回复制堆栈。`isDue(period)` 按 gameTime 对正周期取模门控，非正周期抛 `IllegalArgumentException`。结构计数按当前成型结构统计，未成型返回 0；字符串方块 ID 空白、非法或未注册时抛 `IllegalArgumentException`，不等于扫描任意世界范围。不要把运行上下文当长期缓存或客户端数据源。
+服务器权威上下文。控制器 getter 返回只读 `MachineView`，不是方块实体。数据存储可缺失，使用前判空；升级物品返回复制堆栈。`isDue(period)` 按 gameTime 对正周期取模门控，非正周期抛 `IllegalArgumentException`。结构计数按当前成型结构统计，未成型返回 0；ID 版本改为 `Identifier`，传 `null` 时抛 `NullPointerException`，未知方块抛 `IllegalArgumentException`，不等于扫描任意世界范围。不要把运行上下文当长期缓存或客户端数据源。
+
+`MachineContext` 与 `MachineView` 都不再提供 `countStructureBlocks(String)`，应写 `context.countStructureBlocks(Identifier.parse("minecraft:iron_block"))`。KubeJS 使用的底层 `MachineBehaviorContext` 仍保留字符串入口，不能把脚本签名套用到公共接口。
+
+源码：[MachineContext](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/publicapi/behavior/MachineContext.java)、[MachineView](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/publicapi/runtime/MachineView.java)。
 
 ### `RecipeStartContext`
 
@@ -1454,7 +1457,7 @@ public interface TickContext extends MachineContext {
 BlockPos controllerPos();
 boolean formed();
 long countStructureBlocks(Block block);
-long countStructureBlocks(String blockId);
+long countStructureBlocks(Identifier blockId);
 
 // RecipeView
 Identifier id();

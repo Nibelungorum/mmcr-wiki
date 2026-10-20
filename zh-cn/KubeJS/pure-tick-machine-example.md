@@ -366,7 +366,7 @@ plan.commit()
 
 ### 屏幕文本：`replace(...)` vs `append(...)`
 
-启动期的 [`ControllerScreenTextEventJS`](../API/KubeJS#controllerscreentexteventjs) 使用字符串 scope / ID；运行期的 `ControllerScreenText` 使用 `ControllerScreenTextScope` / `Identifier`。本机器注册时用 `append(...)` 写初始两行（`controller` scope），之后在 `serverTick` 里通过 `api.id(...)` 构造 ID，调用底层 `replace(lineId, text)`。
+启动期的 [`ControllerScreenTextEventJS`](../API/KubeJS#controllerscreentexteventjs) 使用字符串 scope，行 ID 支持字符串或 `Identifier`；运行期的 `ControllerScreenText` 使用 `ControllerScreenTextScope`，行 ID 同样支持这两种形式。本机器注册时用 `append(...)` 写初始两行（`controller` scope），之后在 `serverTick` 里通过 `api.id(...)` 构造 ID，调用底层 `replace(lineId, text)`。
 
 两者关键区别（[`KubeJS.md`](../API/KubeJS#controllerscreentexteventjs) 中详细列出）：
 

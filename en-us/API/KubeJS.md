@@ -4,7 +4,7 @@ title: KubeJS API
 
 # KubeJS API
 
-This page is a consolidated reference for MMCR's KubeJS integration, targeting **Minecraft 26.1.2**, with commit [`c5a48a93`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/c5a48a934bc9de3f10c794bf582175cba6ffbe61/gradle.properties) as the source baseline. Examples use KubeJS/Rhino JavaScript syntax.
+This page is a consolidated reference for MMCR's KubeJS integration, targeting **Minecraft 26.1.2**, with commit [`5912f92f`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/gradle.properties) as the source baseline. Examples use KubeJS/Rhino JavaScript syntax.
 
 MMCR's KubeJS API has three declaration windows: machine, tier, modifier, and screen text registration in startup scripts; structure and programmatic recipe registration during server script loading; and data-driven recipe registration in `ServerEvents.recipes`. Changes to startup declarations require a restart; server-side structures and recipes can be replaced during a resource reload. There are also client-side recipe information events and runtime smart interface update events.
 
@@ -14,9 +14,11 @@ Types such as `String`, `List`, `Map`, and `Consumer<T>` on this page are Java s
 
 Field tables sometimes describe builder state rather than public fields: event `api` fields, smart interface sub-builder fields, stage builder state fields, and the screen event's `context` are private and should be configured or read through the documented methods. `MachineBuilderJS`, `MachineStructureBuilderJS`, and tier builders do have the public transient fields listed in their tables, but methods are still preferred to keep related state consistent.
 
+When a resource ID entry point provides both string and `Identifier` overloads, regular scripts can still pass `"mod:path"` directly; existing ID objects, such as the result of `api.id("mod:path")`, can be reused directly. The corresponding overloads are listed by class below. This does not mean that every `String` can be replaced with `Identifier`: translation keys, scopes, role names, and smart interface type names still follow each method's signature. Some pure ID parameters in the Java public layer have also been standardized; see [Java API](JavaAPI).
+
 :::warning Startup reference migration in c5a48a93
 - `registerModifierItem` now takes an item ID string, not `Item.of(...)`.
-- The startup event's `addRecipePoolWorkstation` retains only the string-ID form; its `ItemStack` overload was removed. Java JEI registration events are unaffected by this removal.
+- The startup event's `addRecipePoolWorkstation` no longer has an `ItemStack` overload; it now accepts string IDs or `Identifier` objects. Java JEI registration events are unaffected by this removal.
 - The level builder now uses `state(String blockStateId)`, not `BlockState`, and supports strings such as `minecraft:oak_log[axis=y]`.
 - Use IDs in startup declarations instead of calling `Item.of()` or `Block.getBlock()` early to obtain another mod's registry objects. Level states resolve when the structure window freezes; modifier items resolve after default data components are bound. Scripts must not trigger these steps manually.
 
@@ -205,6 +207,8 @@ const ids = MMCREvents.events()
 
 ### `RecipeInformationEventJS`
 
+The first ID parameter of `addRecipePoolInfo` / `addRecipeInfo` has both `String` and `Identifier` overloads; `translationKey` and `arguments` are unchanged. Both remain subject to `available()`: when unavailable, they neither parse IDs nor add entries.
+
 > `cn.howxu.mmcr.compat.kubejs.RecipeInformationEventJS` is the client event object for `MMCREvents.client`, used to add localized descriptions to JEI recipe pool pages or individual recipes.
 
 #### `addRecipePoolInfo(String poolId, String translationKey, Object... arguments) → void`
@@ -263,6 +267,20 @@ The trigger conditions follow the implementation: [SmartInterfaceBlockEntity.set
 ## 2. Startup Callbacks
 
 ### `MMCRStartupEventJS`
+
+The following methods retain their string entry points and provide corresponding `Identifier` overloads. Methods with two IDs take two `Identifier` arguments; no mixed-type overloads are explicitly declared in the source.
+
+| Method | Parameters of the `Identifier` Overload |
+| --- | --- |
+| `registerControllerScreenText` | `(Identifier machineId, Consumer<ControllerScreenTextEventJS> handler)` |
+| `createMachine` / `createLevelType` / `createLevel` | `(Identifier id)` |
+| `levelSlot` | `(Identifier typeId)` |
+| `registerModifier` | `(Identifier id, ModifierDefinition definition)` |
+| `registerModifierItem` | `(Identifier itemId, Identifier modifierId)` |
+| `addRecipePoolWorkstation` | `(Identifier recipePoolId, Identifier itemId)` |
+| `addMachineWorkstation` / `addMachineWorkStation` | `(Identifier machineId, Identifier recipeTypeId)` |
+
+ID-object overloads do not change the startup window or deferred resolution rules; `registerModifierItem` still does not accept `ItemStack`.
 
 > `cn.howxu.mmcr.compat.kubejs.MMCRStartupEventJS` is the event object received by `MMCREvents.startup` callbacks. It collects content that can only be declared during the startup window.
 
@@ -433,6 +451,8 @@ MMCREvents.startup(event => {
 
 ### `MMCRServerEventJS`
 
+`createStructure` provides both `createStructure(String id)` and `createStructure(Identifier id)`, returning `MachineStructureBuilderJS` with the same registration window and terminal steps.
+
 > `cn.howxu.mmcr.compat.kubejs.MMCRServerEventJS` is the event object received by `MMCREvents.server` callbacks. It collects machine structures within the server resource reload transaction.
 
 **Fields**
@@ -485,6 +505,24 @@ MMCREvents.server(event => {
 ## 4. Complete KubeJSApi Methods
 
 ### `KubeJSApi`
+
+The following methods provide `Identifier` overloads alongside their original string entry points. The table lists only the ID parameters to replace; other parameters and return values are unchanged from the descriptions below. Where quantity parameters already have `int` / `long` overloads, corresponding versions exist for both ID forms.
+
+| Method | Parameters Accepting `Identifier` |
+| --- | --- |
+| `block` / `state` | `blockId`; `state(Identifier)` uses the block's default state. Pass a string for expressions with properties. |
+| `tag` / `tagInput` | `tagId` |
+| `itemInput` / `itemInputRequirement` / `itemOutputRequirement` / `itemOutputRequirementWithComponents` | `itemId` |
+| `fluidInput` / `fluidStack` / `fluidInputRequirement` / `fluidOutputRequirement` | `fluidId` |
+| `chemicalInput` / `chemicalOutput` | `chemicalId`; includes `chemicalInput` with a consumption chance. |
+| `chemicalTagInput` | `tagId`; both two- and three-argument versions. |
+| `customRecipeIo` | `typeId` |
+| `modifierUse` | `modifierId` |
+| `levelRequirement` | Both `typeId` and `levelId` as `Identifier`. |
+| `levelSlot` | `typeId` |
+| `sendRequest` | `requestId` |
+
+`id(String)` itself remains a factory that parses a string into `Identifier`; there is no `id(Identifier)`. These overloads do not defer registry resolution for `api.block(...)` / `api.state(...)`, nor do they merge startup `event.levelSlot(...)` with the runtime registry query `api.levelSlot(...)`.
 
 > `cn.howxu.mmcr.compat.kubejs.KubeJSApi` is the script-safe factory facade returned by the global `MMCR.getAPI()` or an event's `getAPI()`.
 
@@ -1652,6 +1690,10 @@ const energy = state.asMap()
 
 The public constructors are `MachineBuilderJS(Identifier id)` and `MachineBuilderJS(String id)`; neither has `@HideFromJS`. Scripts typically use `event.createMachine(id)` to make the startup window in which the declaration occurs clearer.
 
+The following pure ID configuration methods accept both `String` and `Identifier`, and their ID-object overloads are now script-visible: `allowNetworkMachine`, `requestProcess`, `requestFailed`, `runningSound`, `finishSound`, `machineBasicBlock`, `appearance`, `controllerBaseTexture`, `formedPortBaseTexture`, and all `controller*Texture` methods. Both the two- and four-argument forms of `controllerTextures` accept all-string or all-`Identifier` arguments.
+
+Varargs are handled separately: `recipePool(Identifier...)`, `host(Identifier...)`, and `anyOfPort(Identifier...)` are marked `@HideFromJS`; scripts use string varargs. The explicit no-argument `recipePool()` throws `IllegalArgumentException`, while `host()` returns the current builder without adding modules.
+
 **Methods**
 
 #### Basic Properties and Behavior
@@ -1924,6 +1966,8 @@ machine.controllerTooltip("tooltip.example.press.0", "tooltip.example.press.1")
 machine.controllerTextures("example:block/controller_front", "example:block/controller_side")
 ```
 
+`controllerTextures` also has four-argument overloads: `controllerTextures(String front, String side, String top, String bottom)` and `controllerTextures(Identifier front, Identifier side, Identifier top, Identifier bottom)`. Both set the front, side, top, and bottom textures respectively and return the current builder. The two-argument form still sets all remaining five faces to the same texture.
+
 ##### `controllerFrontTexture(String texture) → MachineBuilderJS`
 
 - **Parameters**: `texture` (`String`) — front texture resource ID.
@@ -1974,7 +2018,7 @@ machine.controllerBottomTexture("example:block/controller_bottom")
 
 ##### `controllerTopTexture(String texture)` / `controllerBottomTexture(String texture) → MachineBuilderJS`
 
-Sets the controller's top and bottom texture IDs, respectively, stores the parsed IDs in the corresponding fields, and returns the current builder; invalid ID syntax throws an exception. When unset, the corresponding default textures from `MachineControllerSpec.defaultsFor(id)` are used. Like the front/side methods, each has an `Identifier` overload hidden by `@HideFromJS`.
+Sets the controller's top and bottom texture IDs, respectively, stores the parsed IDs in the corresponding fields, and returns the current builder; invalid ID syntax throws an exception. When unset, the corresponding default textures from `MachineControllerSpec.defaultsFor(id)` are used. Like the front/side methods, each has a script-visible `Identifier` overload.
 
 ##### `controllerIdleOverlayTexture(String texture) → MachineBuilderJS`
 
@@ -2545,7 +2589,7 @@ machine
 | `anyOfItemPorts()` / `anyOfFluidPorts()` / `anyOfEnergyPorts()` | `BlockPredicate` | Union of inputs and outputs in the corresponding port family. |
 | `anyOfChemicalPorts()` / `anyOfRadioactiveChemicalPorts()` / `anyOfHeatPorts()` | `BlockPredicate` | Union of Mekanism chemical, radioactive chemical, or heat ports. |
 | `anyOfUpgradeBus()` | `BlockPredicate` | Union of all upgrade buses. |
-| `anyOfPort(String...)` / `anyOfPort(Identifier...)` / `anyOfPort(api.machine.definition.BlockPredicate...)` | `BlockPredicate` | Union of the specified ports; the third overload accepts another underlying predicate type. |
+| `anyOfPort(String...)` / `anyOfPort(api.machine.definition.BlockPredicate...)` | `BlockPredicate` | Union of the specified ports; the latter accepts another underlying predicate type. The `Identifier...` overload is Java-only. |
 | `parallelControllers()` | `BlockPredicate` | Built-in parallel controllers. For the factory controller predicate, use `api.factoryController()`; the machine builder does not have that method. |
 | `smartInterfaceBlock()` / `smartInterface()` | `BlockPredicate` | Built-in smart interface predicate. |
 | `dataStorage()` | `BlockPredicate` | Built-in data storage predicate. |
@@ -2946,7 +2990,7 @@ structure.extension(stage => stage.pattern("Y").set("Y", "minecraft:iron_block")
 | `anyOfHeatPorts()` | `BlockPredicate` | Union of Mekanism heat input and output ports. |
 | `anyOfUpgradeBus()` | `BlockPredicate` | Union of all upgrade buses. |
 | `anyOfPort(String...)` | `BlockPredicate` | Union of the specified list of port IDs. |
-| `anyOfPort(Identifier...)` | `BlockPredicate` | Same as above, using an `Identifier` array. |
+| `anyOfPort(Identifier...)` | `BlockPredicate` | Same as above, using an `Identifier` array; marked `@HideFromJS`, so it is not a script entry point. |
 | `anyOfPort(api.machine.definition.BlockPredicate...)` | `BlockPredicate` | Union of a list of underlying definition predicates; returns `api.machine.BlockPredicate`. |
 | `factoryController()` | `BlockPredicate` | Built-in factory controller. |
 | `parallelControllers()` | `BlockPredicate` | All parallel controllers. |
@@ -3134,7 +3178,7 @@ The stage builder provides port unions, built-in controller predicates, and port
 | `anyOfItemPorts()` / `anyOfFluidPorts()` / `anyOfEnergyPorts()` | `BlockPredicate` | Union of inputs and outputs in the corresponding port family. |
 | `anyOfChemicalPorts()` / `anyOfRadioactiveChemicalPorts()` / `anyOfHeatPorts()` | `BlockPredicate` | Union of Mekanism chemical, radioactive chemical, or heat ports. |
 | `anyOfUpgradeBus()` | `BlockPredicate` | Union of all upgrade buses. |
-| `anyOfPort(String...)` / `anyOfPort(Identifier...)` / `anyOfPort(api.machine.definition.BlockPredicate...)` | `BlockPredicate` | Union of the specified ports. |
+| `anyOfPort(String...)` / `anyOfPort(api.machine.definition.BlockPredicate...)` | `BlockPredicate` | Union of the specified ports. |
 | `factoryController()` / `parallelControllers()` / `smartInterface()` | `BlockPredicate` | Built-in controller or smart interface predicates. |
 | `itemInputTier(String)` / `itemOutputTier(String)` | `PortTierRequirementSpec` | Minimum item port tier; see [Port Requirements](#port-requirements) for all available values. |
 | `fluidInputTier(String)` / `fluidOutputTier(String)` | `PortTierRequirementSpec` | Minimum fluid port tier. |
@@ -3177,13 +3221,17 @@ Their method names are not identical. The schema provides `chemicalInputChance` 
 
 ### `MachineRecipeBuilderJS`
 
-Source: [MachineRecipeBuilderJS.java](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/fbb3198c/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineRecipeBuilderJS.java). This class does not extend `BuilderBase` and has no `register()` method like the machine registration builder; `MMCRServerEventJS` also has no `createRecipe` method.
+Source: [MachineRecipeBuilderJS.java](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineRecipeBuilderJS.java). This class does not extend `BuilderBase` and has no `register()` method like the machine registration builder; `MMCRServerEventJS` also has no `createRecipe` method.
 
 #### Construction, Fields, and Defaults
 
 The public constructors are `MachineRecipeBuilderJS(String id)` and `MachineRecipeBuilderJS(Identifier id)`. The ID must be parseable; you must then call `recipePool` to set the recipe pool. Public fields are `recipePoolId`, `tickTime=40`, `inputs`, `outputs`, `energyPerTick=0`, `cancelIfPerTickFails=false`, and `requiredHostIds`. Internal defaults are `priority=0`, `maxThreads=1`, `parallelized=false`, `deriveRequirements=true`, and `allowPartialOutputs=false`; the fluid output, explicit requirement, custom output, and condition lists start empty.
 
 All configuration methods below return the current builder; only `createObject` and `build` are terminal methods. Do not add stacks directly to the `outputs` field: output chances are stored in a separate internal list, so use the methods to keep the lists aligned.
+
+The single resource ID parameters of `id`, `recipePool`, `custom`, item/tag inputs, item outputs, fluid inputs, chemical IO, and lightning IO below all have corresponding `Identifier` overloads, preserving the quantity, component, and chance overloads. `requiresLevel` also has `(Identifier typeId, Identifier levelId)`, and `requiredHost` has `(Identifier hostId)`. Smart interface `String type` parameters remain type names and are not part of these ID overloads.
+
+`requiredHosts(Identifier...)` is marked `@HideFromJS`; scripts use `requiredHosts(String...)`. The explicit no-argument `requiredHosts()` returns the current builder without modifying the set. These overloads do not change the function signatures of the data-driven `MachineRecipeSchema`.
 
 #### Basic Settings and List Overloads
 
@@ -3589,7 +3637,7 @@ const behavior = behaviorBuilder.build()
 :::
 ### Behavior Runtime Types
 
-All types in this section are in `cn.howxu.mmcr.api.machine.definition`, not `publicapi.machine`. Source: [MachineBehaviorContext](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/api/machine/definition/MachineBehaviorContext.java), [TickBehaviorContext](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/api/machine/definition/TickBehaviorContext.java), [RecipeStartContext](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/api/machine/definition/RecipeStartContext.java), [RecipeTickContext](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/api/machine/definition/RecipeTickContext.java), [RecipeFinishContext](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/api/machine/definition/RecipeFinishContext.java).
+All types in this section are in `cn.howxu.mmcr.api.machine.definition`, not `publicapi.machine`. Source: [MachineBehaviorContext](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/api/machine/definition/MachineBehaviorContext.java), [TickBehaviorContext](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/api/machine/definition/TickBehaviorContext.java), [RecipeStartContext](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/api/machine/definition/RecipeStartContext.java), [RecipeTickContext](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/api/machine/definition/RecipeTickContext.java), [RecipeFinishContext](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/api/machine/definition/RecipeFinishContext.java).
 
 #### `MachineBehaviorContext`
 
@@ -3598,13 +3646,22 @@ All types in this section are in `cn.howxu.mmcr.api.machine.definition`, not `pu
 | `controller()` | The underlying controller block entity; prefer the context's dedicated accessors. |
 | `level()` / `controllerPos()` / `machineId()` | `ServerLevel`, immutable `BlockPos`, and nullable `Identifier`. |
 | `gameTime()` / `isDue(long period)` | World tick count and `floorMod(gameTime, period)==0`; the period must be positive. Timing is not tracked separately from each machine's start time. |
-| `screenText()` / `jadeText()` | Handles for `api.controller.ControllerScreenText` and `api.controller.JadeText`. Runtime `screenText` is not the screen event wrapper; it uses enum scopes and `Identifier` row IDs. |
+| `screenText()` / `jadeText()` | Handles for `api.controller.ControllerScreenText` and `api.controller.JadeText`. Runtime `screenText` is not the screen event wrapper; it uses enum scopes and accepts `String` or `Identifier` line IDs. |
 | `dataStorage()` | Nullable `api.data.view.DataStorage`; returns `null` when no storage is available. |
 | `ioView()` | A read-only aggregate `MachineIoView`. |
 | `upgradeItems()` | Returns a list of defensive copies of upgrade item stacks. |
-| `countStructureBlocks(Block block)` / `countStructureBlocks(String blockId)` | `long`; counts blocks in the currently formed structure, or returns 0 if unformed. The string version validates that the block exists. |
+| `countStructureBlocks(Block block)` / `countStructureBlocks(String blockId)` / `countStructureBlocks(Identifier blockId)` | `long`; counts blocks in the currently formed structure, or returns 0 if unformed. ID overloads validate that the block exists. |
 
 `dataStorageForRuntime()` is an internal bridge; regular scripts should use `dataStorage()`. The view's `get` returns `Optional<api.data.view.DataValue>`; `set(key, Object)` supports ordinary script values, and the three-argument transaction version accepts `api.data.view.DataStorage.Transaction`. Do not treat the facade's `api.data.DataValue` and the view type as the same Java class.
+
+Runtime text handles now provide string line ID overloads for `append`, `appendAfter`, `replace`, and `remove`; both line IDs in `appendAfter` must be strings together or `Identifier` objects together. `ControllerScreenText` scopes still use `api.screenScope().CONTROLLER` / `OPERATION`, not the screen event wrapper's string scopes. `clear` is unchanged, and `JadeText.clear()` has no scope parameter. These underlying string entry points call `Identifier.parse`; startup screen events additionally require string line IDs to include an explicit namespace.
+
+Source: [ControllerScreenText](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/api/controller/ControllerScreenText.java), [JadeText](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/api/controller/JadeText.java).
+
+```javascript
+ctx.screenText().append(api.screenScope().OPERATION, "example:status", Text.translate("gui.example.status"))
+ctx.jadeText().replace("example:status", Text.translate("jade.example.status"))
+```
 
 ```javascript
 machine.preServerTick(ctx => {
@@ -3632,9 +3689,24 @@ The immutable record's accessors are `machineContext()`, `recipe()`, `currentTic
 
 Accessors are `machineContext()`, `recipe()`, `recipeId()`, `requestedParallelism()`, `effectiveParallelism()`, and `outputs()`. `setOutputs(List<MachineOutput>)` copies the list and rejects empty item/fluid output stacks; `discardOutputs()` clears the list and sets the `outputsDiscarded()` flag; `cancel()` / `cancelled()` use a separate cancellation flag. Discarding outputs and canceling are distinct operations. Make changes through the methods rather than modifying the returned list directly and bypassing validation.
 
+#### IDs in Recipes, Chemical Capabilities, and Failure Traces
+
+Script callbacks may also receive the underlying objects below. Their new string overloads have the same names as the original `Identifier` entry points and are not Java public-layer interfaces.
+
+| Type | String Entry Point | Behavior |
+| --- | --- | --- |
+| `api.recipe.MachineRecipe` | `withId(String id)` | Returns a new recipe with the given ID; does not modify the original or register it automatically. |
+| `api.recipe.MachineRecipe` | `canRunOnConnectedHost(String hostId)` | Returns `false` for `null`; otherwise checks host restrictions without establishing an actual connection. |
+| `api.compat.mekanism.ChemicalViewFacet` | `matchesTag(String tagId)` / `outputCapacity(String chemicalId)` | Parses the ID and delegates to the capability query; passes `null` through to the corresponding `Identifier` method. |
+| `api.capability.status.FailureOccurrence` | `append(String source, FailurePhase phase, String recipeId, Integer requirementIndex)` | Returns a new object with an appended trace frame, preserving the original reason/details; `recipeId` and `requirementIndex` may be `null`. |
+
+Here, `api` means `cn.howxu.mmcr.api`. Both IDs in `FailureOccurrence.append` must be strings together or `Identifier` objects together; the static factory `at(...)` has no new string overload.
+
+Source: [MachineRecipe](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/api/recipe/MachineRecipe.java), [ChemicalViewFacet](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/api/compat/mekanism/ChemicalViewFacet.java), [FailureOccurrence](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/api/capability/status/FailureOccurrence.java).
+
 ### `MachineIoView`
 
-> `cn.howxu.mmcr.api.machine.definition.MachineIoView` is the read-only capability view returned by `ctx.machineContext().ioView()` (recipe callbacks) or `ctx.ioView()` (machine/tick callbacks). Source: [MachineIoView.java](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/api/machine/definition/MachineIoView.java).
+> `cn.howxu.mmcr.api.machine.definition.MachineIoView` is the read-only capability view returned by `ctx.machineContext().ioView()` (recipe callbacks) or `ctx.ioView()` (machine/tick callbacks). Source: [MachineIoView.java](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/api/machine/definition/MachineIoView.java).
 
 #### Basic and Filtering Accessors
 
@@ -3657,9 +3729,9 @@ Accessors are `machineContext()`, `recipe()`, `recipeId()`, `requestedParallelis
 | Method | Returns | Meaning |
 | --- | --- | --- |
 | `chemicalInputs()` | `List<ResourceAmount<Identifier>>` | Aggregates all input capabilities by chemical ID. |
-| `chemicalAmount(Identifier chemicalId)` | `long` | Queries the total input amount of the specified chemical. Throws if the ID is `null`. |
-| `chemicalTagAmount(Identifier tagId)` | `long` | Queries the total chemical input amount matching the specified tag. Throws if the ID is `null`. |
-| `chemicalOutputCapacity(Identifier chemicalId)` | `long` | Queries the remaining output capacity for the specified chemical. Throws if the ID is `null`. |
+| `chemicalAmount(String chemicalId)` / `chemicalAmount(Identifier chemicalId)` | `long` | Queries the total input amount of the specified chemical. Throws if the ID is `null`. |
+| `chemicalTagAmount(String tagId)` / `chemicalTagAmount(Identifier tagId)` | `long` | Queries the total chemical input amount matching the specified tag. Throws if the ID is `null`. |
+| `chemicalOutputCapacity(String chemicalId)` / `chemicalOutputCapacity(Identifier chemicalId)` | `long` | Queries the remaining output capacity for the specified chemical. Throws if the ID is `null`. |
 | `heatInputs()` | `List<HeatState>` | Returns the list of heat input states. |
 | `heatOutputs()` | `List<HeatState>` | Returns the list of heat output states. |
 
@@ -3667,8 +3739,7 @@ Accessors are `machineContext()`, `recipe()`, `recipeId()`, `requestedParallelis
 
 ```javascript
 const view = ctx.machineContext().ioView()
-const Identifier = Java.loadClass("net.minecraft.resources.Identifier")
-const oxygen = view.chemicalAmount(Identifier.parse("mekanism:oxygen"))
+const oxygen = view.chemicalAmount("mekanism:oxygen")
 const heatStates = view.heatInputs()
 ```
 
@@ -3903,6 +3974,8 @@ event.createLevelType("example:coil").displayNameKey("level.example.coil").regis
 
 ### `MachineLevelBuilderJS`
 
+`type` provides `type(String typeId)` and `type(Identifier typeId)`, both setting the parent level type and returning the current builder; a `null` `Identifier` throws `NullPointerException`. `state` still has only a string entry point. Support for ID objects in `type` does not allow passing `BlockState` or `Identifier` to `state`.
+
 > `cn.howxu.mmcr.compat.kubejs.MachineLevelBuilderJS` is the builder for individual levels returned by `MMCRStartupEventJS.createLevel`.
 
 **Fields**
@@ -4017,6 +4090,8 @@ event.createLevel("example:coil_iron")
 ## 10. Controller Screen Text
 
 ### `ControllerScreenTextEventJS`
+
+`append`, `appendAfter`, `replace`, `appendTranslatable`, `appendAfterTranslatable`, `replaceTranslatable`, and `remove` retain the string line ID entry points below and provide corresponding `Identifier` overloads. Both line IDs in the `appendAfter` family change to `Identifier` together; scopes, translation keys, and translation arguments are unchanged. String line IDs still require an explicit namespace, while ID-object overloads use the already parsed IDs directly.
 
 > `cn.howxu.mmcr.compat.kubejs.ControllerScreenTextEventJS` is the event object passed to `MMCRStartupEventJS.registerControllerScreenText` callbacks, allowing you to add, modify, or remove text rows on the controller screen.
 
@@ -4176,7 +4251,7 @@ MMCREvents.startup(event => {
 
 > `cn.howxu.mmcr.compat.kubejs.KubeJSInterfaceHelpers` is the internal KubeJS-side factory for block predicates, port tiers, and smart interface requirements. All same-name methods in `KubeJSApi`, along with the port predicate and tier factories in `MachineBuilderJS`/`MachineStructureBuilderJS`/`MachineStructureStageBuilderJS`, delegate here; regular scripts do not need to call it directly.
 
-Although this class is a public factory, it has no global binding; regular scripts should prefer the facade/builders. It provides input/output/combined predicates for items, fluids, energy, chemicals, radioactive chemicals, and heat; upgrade bus predicates; `ports()`; `anyOfPort(String...)` / `anyOfPort(Identifier...)` / `anyOfPort(api.machine.definition.BlockPredicate...)`; and a zero-argument `anyOfPort()` that explicitly throws. It also provides `factoryController`, `parallelControllers`, `smartInterface`, `dataStorage`, `networkInterface`, `port(String)` / `port(Identifier)`, twelve port tier / presence factories, two `smartInterfaceInput` overloads (fixed value and range), and one `smartInterfaceOutput`. The private `convert(...)` method converts underlying definition predicates to `api.machine.BlockPredicate`.
+Although this class is a public factory, it has no global binding; regular scripts should prefer the facade/builders. It provides input/output/combined predicates for items, fluids, energy, chemicals, radioactive chemicals, and heat; upgrade bus predicates; `ports()`; `anyOfPort(String...)` / `anyOfPort(api.machine.definition.BlockPredicate...)`; and a zero-argument `anyOfPort()` that explicitly throws. `anyOfPort(Identifier...)` is marked `@HideFromJS` and is Java-only. It also provides `factoryController`, `parallelControllers`, `smartInterface`, `dataStorage`, `networkInterface`, `port(String)` / `port(Identifier)`, twelve port tier / presence factories, two `smartInterfaceInput` overloads (fixed value and range), and one `smartInterfaceOutput`. The private `convert(...)` method converts underlying definition predicates to `api.machine.BlockPredicate`.
 
 The facade and builders do not automatically expose every helper method: for example, the facade only exposes combined Mekanism port predicates, not `anyOfChemicalInput`; the machine builder has no `factoryController`, and the stage builder has no `dataStorage`.
 
@@ -4242,13 +4317,13 @@ This class is an internal bridge that is not visible to scripts.
 
 ## Appendix: Pinned Source Index
 
-The index below covers all 24 source files under `compat/kubejs` in this baseline, making it easier to check public entry points, hidden overloads, and internal calls. All links are pinned to `f234477b`.
+The index below covers all 24 source files under `compat/kubejs`, making it easier to check public entry points, hidden overloads, and internal calls. All links are pinned to `5912f92f`.
 
-- **Globals and events**: [MMCRKubeJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/compat/kubejs/MMCRKubeJS.java), [MMCRValues](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/compat/kubejs/MMCRValues.java), [MMCREvents](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/compat/kubejs/MMCREvents.java), [MMCRStartupEventJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/compat/kubejs/MMCRStartupEventJS.java), [MMCRServerEventJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/compat/kubejs/MMCRServerEventJS.java), [RecipeInformationEventJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/compat/kubejs/RecipeInformationEventJS.java).
-- **Machines and structures**: [MachineBuilderJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineBuilderJS.java), [MachineStructureBuilderJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineStructureBuilderJS.java), [MachineStructureStageBuilderJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineStructureStageBuilderJS.java), [MachineBehaviorBuilderJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineBehaviorBuilderJS.java), [MachineLevelBuilderJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineLevelBuilderJS.java), [LevelTypeBuilderJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/compat/kubejs/LevelTypeBuilderJS.java).
-- **Factories and recipes**: [KubeJSApi](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/compat/kubejs/KubeJSApi.java), [KubeJSInterfaceHelpers](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/compat/kubejs/KubeJSInterfaceHelpers.java), [MachineRecipeBuilderJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineRecipeBuilderJS.java), [MachineRecipeSchema](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineRecipeSchema.java), [MachineRecipeFactory](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineRecipeFactory.java).
-- **Text and updates**: [ControllerScreenTextEventJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/compat/kubejs/ControllerScreenTextEventJS.java), [SmartInterfaceEvents](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/compat/kubejs/SmartInterfaceEvents.java), [SmartInterfaceUpdateEventJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/compat/kubejs/SmartInterfaceUpdateEventJS.java).
-- **Loading and synchronization**: [Plugin](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/compat/kubejs/Plugin.java), [KubeJSContentReloadTransaction](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/compat/kubejs/KubeJSContentReloadTransaction.java), [KubeJSRecipeSync](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/compat/kubejs/KubeJSRecipeSync.java), [KubeJSReloadHooks](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/compat/kubejs/KubeJSReloadHooks.java).
+- **Globals and events**: [MMCRKubeJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/MMCRKubeJS.java), [MMCRValues](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/MMCRValues.java), [MMCREvents](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/MMCREvents.java), [MMCRStartupEventJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/MMCRStartupEventJS.java), [MMCRServerEventJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/MMCRServerEventJS.java), [RecipeInformationEventJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/RecipeInformationEventJS.java).
+- **Machines and structures**: [MachineBuilderJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineBuilderJS.java), [MachineStructureBuilderJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineStructureBuilderJS.java), [MachineStructureStageBuilderJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineStructureStageBuilderJS.java), [MachineBehaviorBuilderJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineBehaviorBuilderJS.java), [MachineLevelBuilderJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineLevelBuilderJS.java), [LevelTypeBuilderJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/LevelTypeBuilderJS.java).
+- **Factories and recipes**: [KubeJSApi](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/KubeJSApi.java), [KubeJSInterfaceHelpers](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/KubeJSInterfaceHelpers.java), [MachineRecipeBuilderJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineRecipeBuilderJS.java), [MachineRecipeSchema](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineRecipeSchema.java), [MachineRecipeFactory](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineRecipeFactory.java).
+- **Text and updates**: [ControllerScreenTextEventJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/ControllerScreenTextEventJS.java), [SmartInterfaceEvents](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/SmartInterfaceEvents.java), [SmartInterfaceUpdateEventJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/SmartInterfaceUpdateEventJS.java).
+- **Loading and synchronization**: [Plugin](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/Plugin.java), [KubeJSContentReloadTransaction](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/KubeJSContentReloadTransaction.java), [KubeJSRecipeSync](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/KubeJSRecipeSync.java), [KubeJSReloadHooks](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/KubeJSReloadHooks.java).
 
 ## Appendix: Cross-Section Notes
 
@@ -4258,4 +4333,4 @@ The index below covers all 24 source files under `compat/kubejs` in this baselin
 - **Network requests**: `sendRequest` throws `IllegalArgumentException` if the target interface cannot be found or is absent from `source`'s connection table; once queued, server-side network processing triggers `requestProcess` with the same ID. Failed checks during processing pass along the failure reason; the failure callback must already be registered on the source machine. The request body's root object must be a string-keyed map, with no empty or non-string keys; values are ultimately wrapped into `DataValue` by [`api.dataValue(...)`](#datavalue-object-value-→-datavalue).
 - **Smart interfaces**: A smart interface type registered through `MachineBuilderJS.smartInterface(type, ...)` is a machine-level declaration. Structures can also use `set(symbol, smartInterfaceBlock())` to determine which positions allow interfaces; interface values are stored by the smart interface block and read by its bound controller.
 - **Hot-reload scope**: Machine definitions, level types, levels, modifiers, and controller screen text are registered in startup scripts and require a game restart after changes; structures and recipe content can be reloaded with `/reload`.
-- **Language conventions**: KubeJS converts the relevant arguments, but this does not make same-name classes in different Java packages interchangeable. Overloads marked `@HideFromJS` are for Java-side use only; in this baseline, `extension(BlockArray...)`, `pattern(List<String>)`, and the `Identifier` overloads for machine textures/sounds are hidden, while `fullStructure(...)`, `controllerSpec(...)`, and the machine constructor do not have this annotation.
+- **Language conventions**: KubeJS converts the relevant arguments, but this does not make same-name classes in different Java packages interchangeable. Overloads marked `@HideFromJS` are for Java-side use only: `extension(BlockArray...)`, `pattern(List<String>)`, and the `Identifier...` overloads of `recipePool`, `host`, `requiredHosts`, and `anyOfPort` are hidden. Single-value or fixed-arity `Identifier` overloads for machine textures/sounds are now script-visible; `fullStructure(...)`, `controllerSpec(...)`, and the machine constructors also lack this annotation.

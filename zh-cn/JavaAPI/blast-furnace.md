@@ -69,7 +69,7 @@ public static void registerStructures(RegisterMachineStructuresEvent event) {
                                 .layer("AXA", "XIX", "XXX")
                                 .layer("XXX", "I I", "XBX")
                                 .layer("AXA", "XCX", "XXX")
-                                .where('X', block("mmcr:casing"))
+                                .where('X', block(Identifier.parse("mmcr:casing")))
                                 .where('A', any(
                                         block(Blocks.IRON_BLOCK),
                                         BlockConditions.parallelControllers()
@@ -98,7 +98,7 @@ public static void registerStructures(RegisterMachineStructuresEvent event) {
 
 | 字符 | 条件 | 用途 |
 | --- | --- | --- |
-| `X` | `block("mmcr:casing")` | 外壳，通过注册 ID 引用，教程无需导入内部 `ModBlocks` |
+| `X` | `block(Identifier.parse("mmcr:casing"))` | 外壳，通过注册 ID 引用，教程无需导入内部 `ModBlocks` |
 | `A` | 铁块或 `parallelControllers()` | 四个可替换位置，提供并行控制器安装点 |
 | `B` | 原版熔炉 | 固定炉心 |
 | `I` | `itemInput()` / `itemOutput()` / `energyInput()` | 接口安装点，条件只决定哪些方块可放 |

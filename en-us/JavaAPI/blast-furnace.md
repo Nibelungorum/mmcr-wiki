@@ -70,7 +70,7 @@ public static void registerStructures(RegisterMachineStructuresEvent event) {
                                 .layer("AXA", "XIX", "XXX")
                                 .layer("XXX", "I I", "XBX")
                                 .layer("AXA", "XCX", "XXX")
-                                .where('X', block("mmcr:casing"))
+                                .where('X', block(Identifier.parse("mmcr:casing")))
                                 .where('A', any(
                                         block(Blocks.IRON_BLOCK),
                                         BlockConditions.parallelControllers()
@@ -99,7 +99,7 @@ The three `layer(...)` calls form three pattern slices, each with 3 rows and 3 c
 
 | Character | Condition | Purpose |
 | --- | --- | --- |
-| `X` | `block("mmcr:casing")` | Casing, referenced by registered ID, so the tutorial need not import internal `ModBlocks` |
+| `X` | `block(Identifier.parse("mmcr:casing"))` | Casing, referenced by registered ID, so the tutorial need not import internal `ModBlocks` |
 | `A` | Iron block or `parallelControllers()` | Four replaceable positions for parallel-controller installation |
 | `B` | Vanilla furnace | Fixed furnace core |
 | `I` | `itemInput()` / `itemOutput()` / `energyInput()` | Port installation positions; conditions only decide which blocks may be placed |

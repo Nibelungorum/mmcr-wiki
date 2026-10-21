@@ -4,9 +4,9 @@ title: KubeJS API
 
 # KubeJS API
 
-本页是 MMCR 的 KubeJS 集成层的集中参考，固定对应 **Minecraft 26.1.2**，源码基线为提交 [`5912f92f`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/gradle.properties)。示例使用 KubeJS/Rhino 的 JavaScript 写法。
+本页是 MMCR 的 KubeJS 集成层的集中参考，固定对应 **Minecraft 26.1.2**，源码基线为提交 [`59943952`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/59943952980c1ae5048537a00b5978ef483e3818/gradle.properties)。示例使用 KubeJS/Rhino 的 JavaScript 写法。
 
-MMCR 的 KubeJS API 分为三个声明窗口：启动脚本中的机器、等级、修饰符和屏幕文本注册；服务端脚本加载中的结构与编程式配方注册；`ServerEvents.recipes` 中的数据驱动配方注册。启动声明修改后需要重启；服务端结构与配方可随资源重载替换。此外还有客户端配方说明事件和运行时智能接口更新事件。
+MMCR 的 KubeJS API 分为三个声明窗口：启动脚本中的机器、等级、修饰符和屏幕文本注册；服务端脚本加载中的结构与编程式配方注册；`ServerEvents.recipes` 中的数据驱动配方注册。启动声明修改后需要重启；服务端结构与配方可随资源重载替换。此外还有客户端配方说明事件。
 
 KubeJS 桥接直接使用 `cn.howxu.mmcr.api` 底层类型；面向附属 Mod 的 `cn.howxu.mmcr.publicapi` 是另一层接口，不能把本文签名或 `Java.loadClass` 路径机械替换为 `publicapi`。本页保留有效的注册、结构、等级、行为、网络和文本章节，新增入口也按真实调用实现说明。
 
@@ -232,37 +232,6 @@ MMCREvents.client(event => {
 ```
 
 未加载 JEI 时，这两个方法忽略注册并只输出一次警告。
-
-### 智能接口更新事件
-
-源码：[SmartInterfaceEvents](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/compat/kubejs/SmartInterfaceEvents.java)、[SmartInterfaceUpdateEventJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/compat/kubejs/SmartInterfaceUpdateEventJS.java)。
-
-这是独立的服务端事件组 `mmcr.smart_interface`，事件 ID 为 `mmcr.smart_interface.updated`，不是 `MMCREvents` 上的第四个监听方法。监听写在 `server_scripts`：
-
-```javascript
-this["mmcr.smart_interface"].updated(event => {
-    console.log(String(event.machineId()), event.type(), event.oldValue(), event.newValue())
-    console.log("controllers:", event.controllerCount())
-})
-```
-
-KubeJS 26.1.2-8.0.6 的内置 binding 按 `group.name` 原样注入全局键；这里的点属于键名，不表示 `mmcr` 对象中有 `smart_interface` 属性。因此在脚本顶层以 `this["mmcr.smart_interface"]` 取得事件组包装器，再调用 `updated`。
-
-`SmartInterfaceUpdateEventJS` 是不可变 record，提供以下访问器：
-
-| 方法 | 返回类型 | 含义 |
-| --- | --- | --- |
-| `interfacePos()` | `BlockPos` | 发生更新的智能接口位置，不可变副本。 |
-| `machineId()` | `Identifier` | 接口所绑定机器的 ID。 |
-| `type()` | `String` | 更新的参数类型名。 |
-| `oldValue()` / `newValue()` | 可空 `Float` | 更新前后的值；记录类型允许 `null`，处理器应判空。 |
-| `controllerPositions()` | `List<BlockPos>` | 不可变位置列表，按 `BlockPos.asLong()` 排序；构造时传 `null` 得到空列表。 |
-| `controllerCount()` | `int` | 上述列表大小。 |
-| `controllerPos()` | 可空 `BlockPos` | 排序后首个控制器，没有控制器时为 `null`。 |
-
-触发范围必须按实现理解：[SmartInterfaceBlockEntity.setValue](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/internal/tile/SmartInterfaceBlockEntity.java#L99) 仅在已有参数的有限新值与旧值不同、且接口位于服务端并具有 `machineId` 时发布事件；相同值返回成功但不发布。`claimController`、`releaseController`、`syncTypes` 和能力事务的 `applyCapabilityValues` 并不直接发布此事件，因此不能保证每次绑定/解绑或每次能力输出都触发。事件组注册完成且存在监听器时才进行分发。
-
-`SmartInterfaceEvents.group()` / `post(event)` 是 Java 生命周期与分发辅助，脚本只订阅 `updated`。事件记录没有取消或修改方法，回调不会自动改写接口值。
 
 ## 2. 启动期回调
 
@@ -4276,7 +4245,7 @@ helper 的 Mekanism 方向工厂完整名称为 `anyOfChemicalInput()` / `anyOfC
 
 ### `Plugin`
 
-> `cn.howxu.mmcr.compat.kubejs.Plugin` 是 MMCR 的 `KubeJSPlugin` 实现。它在 `registerBindings` 中注入 `MMCR` 与 `MMCREvents`，在 `registerEvents` 中注册 `mmcr` 和 `mmcr.smart_interface` 事件组；后三个注册方法分别提供 `MachineRecipeFactory.INSTANCE`、`JSON_ELEMENT` 与 `MachineRecipeSchema.SCHEMA`。
+> `cn.howxu.mmcr.compat.kubejs.Plugin` 是 MMCR 的 `KubeJSPlugin` 实现。它在 `registerBindings` 中注入 `MMCR` 与 `MMCREvents`，在 `registerEvents` 中只注册 `mmcr` 事件组；后三个注册方法分别提供 `MachineRecipeFactory.INSTANCE`、`JSON_ELEMENT` 与 `MachineRecipeSchema.SCHEMA`。
 
 具体方法为 `registerRecipeFactories(RecipeFactoryRegistry)`、`registerRecipeComponents(RecipeComponentTypeRegistry)`、`registerRecipeSchemas(RecipeSchemaRegistry)`，都由 KubeJS 调用，不是业务脚本注册入口。
 
@@ -4317,13 +4286,13 @@ helper 的 Mekanism 方向工厂完整名称为 `anyOfChemicalInput()` / `anyOfC
 
 ## 附：固定源码索引
 
-以下索引覆盖 `compat/kubejs` 下全部 24 个源文件，方便核对公开入口、隐藏重载和内部调用。链接均固定到 `5912f92f`。
+以下索引覆盖 `compat/kubejs` 下全部 22 个源文件，方便核对公开入口、隐藏重载和内部调用。链接固定到对应的源码提交。
 
 - **全局与事件**：[MMCRKubeJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/MMCRKubeJS.java)、[MMCRValues](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/MMCRValues.java)、[MMCREvents](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/MMCREvents.java)、[MMCRStartupEventJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/MMCRStartupEventJS.java)、[MMCRServerEventJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/MMCRServerEventJS.java)、[RecipeInformationEventJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/RecipeInformationEventJS.java)。
 - **机器与结构**：[MachineBuilderJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineBuilderJS.java)、[MachineStructureBuilderJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineStructureBuilderJS.java)、[MachineStructureStageBuilderJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineStructureStageBuilderJS.java)、[MachineBehaviorBuilderJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineBehaviorBuilderJS.java)、[MachineLevelBuilderJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineLevelBuilderJS.java)、[LevelTypeBuilderJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/LevelTypeBuilderJS.java)。
 - **工厂与配方**：[KubeJSApi](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/KubeJSApi.java)、[KubeJSInterfaceHelpers](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/KubeJSInterfaceHelpers.java)、[MachineRecipeBuilderJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineRecipeBuilderJS.java)、[MachineRecipeSchema](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineRecipeSchema.java)、[MachineRecipeFactory](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineRecipeFactory.java)。
-- **文本与更新**：[ControllerScreenTextEventJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/ControllerScreenTextEventJS.java)、[SmartInterfaceEvents](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/SmartInterfaceEvents.java)、[SmartInterfaceUpdateEventJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/SmartInterfaceUpdateEventJS.java)。
-- **加载与同步**：[Plugin](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/Plugin.java)、[KubeJSContentReloadTransaction](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/KubeJSContentReloadTransaction.java)、[KubeJSRecipeSync](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/KubeJSRecipeSync.java)、[KubeJSReloadHooks](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/KubeJSReloadHooks.java)。
+- **文本**：[ControllerScreenTextEventJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/ControllerScreenTextEventJS.java)。
+- **加载与同步**：[Plugin](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/59943952980c1ae5048537a00b5978ef483e3818/src/main/java/cn/howxu/mmcr/compat/kubejs/Plugin.java)、[KubeJSContentReloadTransaction](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/KubeJSContentReloadTransaction.java)、[KubeJSRecipeSync](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/KubeJSRecipeSync.java)、[KubeJSReloadHooks](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/KubeJSReloadHooks.java)。
 
 ## 附：跨节注意事项
 

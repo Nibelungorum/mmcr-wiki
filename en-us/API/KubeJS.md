@@ -4,9 +4,9 @@ title: KubeJS API
 
 # KubeJS API
 
-This page is a consolidated reference for MMCR's KubeJS integration, targeting **Minecraft 26.1.2**, with commit [`5912f92f`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/gradle.properties) as the source baseline. Examples use KubeJS/Rhino JavaScript syntax.
+This page is a consolidated reference for MMCR's KubeJS integration, targeting **Minecraft 26.1.2**, with commit [`59943952`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/59943952980c1ae5048537a00b5978ef483e3818/gradle.properties) as the source baseline. Examples use KubeJS/Rhino JavaScript syntax.
 
-MMCR's KubeJS API has three declaration windows: machine, tier, modifier, and screen text registration in startup scripts; structure and programmatic recipe registration during server script loading; and data-driven recipe registration in `ServerEvents.recipes`. Changes to startup declarations require a restart; server-side structures and recipes can be replaced during a resource reload. There are also client-side recipe information events and runtime smart interface update events.
+MMCR's KubeJS API has three declaration windows: machine, tier, modifier, and screen text registration in startup scripts; structure and programmatic recipe registration during server script loading; and data-driven recipe registration in `ServerEvents.recipes`. Changes to startup declarations require a restart; server-side structures and recipes can be replaced during a resource reload. There are also client-side recipe information events.
 
 The KubeJS bridge uses the underlying `cn.howxu.mmcr.api` types directly. The addon-facing `cn.howxu.mmcr.publicapi` is a separate interface layer; you cannot simply replace the signatures or `Java.loadClass` paths on this page with `publicapi`. This page retains the applicable registration, structure, tier, behavior, network, and text sections, and documents new entry points according to their actual implementations.
 
@@ -232,37 +232,6 @@ MMCREvents.client(event => {
 ```
 
 If JEI is not loaded, both methods ignore registration and emit a warning only once.
-
-### Smart Interface Update Event
-
-Source: [SmartInterfaceEvents](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/compat/kubejs/SmartInterfaceEvents.java), [SmartInterfaceUpdateEventJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/compat/kubejs/SmartInterfaceUpdateEventJS.java).
-
-This is a separate server-side event group, `mmcr.smart_interface`, with the event ID `mmcr.smart_interface.updated`; it is not a fourth listener method on `MMCREvents`. Define the listener in `server_scripts`:
-
-```javascript
-this["mmcr.smart_interface"].updated(event => {
-    console.log(String(event.machineId()), event.type(), event.oldValue(), event.newValue())
-    console.log("controllers:", event.controllerCount())
-})
-```
-
-KubeJS 26.1.2-8.0.6's built-in binding injects global keys using `group.name` as-is. The dot here is part of the key name; it does not indicate a `smart_interface` property on an `mmcr` object. At the top level of the script, use `this["mmcr.smart_interface"]` to obtain the event group wrapper, then call `updated`.
-
-`SmartInterfaceUpdateEventJS` is an immutable record with the following accessors:
-
-| Method | Return Type | Meaning |
-| --- | --- | --- |
-| `interfacePos()` | `BlockPos` | An immutable copy of the position of the updated smart interface. |
-| `machineId()` | `Identifier` | The ID of the machine bound to the interface. |
-| `type()` | `String` | The name of the updated parameter type. |
-| `oldValue()` / `newValue()` | Nullable `Float` | Values before and after the update; the record allows `null`, so handlers should check for it. |
-| `controllerPositions()` | `List<BlockPos>` | An immutable position list sorted by `BlockPos.asLong()`; passing `null` to the constructor produces an empty list. |
-| `controllerCount()` | `int` | The size of the list above. |
-| `controllerPos()` | Nullable `BlockPos` | The first controller after sorting, or `null` if there are no controllers. |
-
-The trigger conditions follow the implementation: [SmartInterfaceBlockEntity.setValue](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/internal/tile/SmartInterfaceBlockEntity.java#L99) posts the event only when an existing parameter's new value is finite and differs from its old value, and the interface is on the server side with a `machineId`. Setting the same value succeeds without posting an event. `claimController`, `releaseController`, `syncTypes`, and the capability transaction's `applyCapabilityValues` do not post this event directly, so it is not guaranteed to fire on every bind/unbind or every capability output. Dispatch occurs only after the event group is registered and when a listener exists.
-
-`SmartInterfaceEvents.group()` / `post(event)` are Java lifecycle and dispatch helpers; scripts should only subscribe to `updated`. The event record has no cancellation or modification methods, and callbacks do not automatically change interface values.
 
 ## 2. Startup Callbacks
 
@@ -4276,7 +4245,7 @@ Within the component, `type()` returns the `mmcr:json` component type key, `code
 
 ### `Plugin`
 
-> `cn.howxu.mmcr.compat.kubejs.Plugin` is MMCR's `KubeJSPlugin` implementation. It injects `MMCR` and `MMCREvents` in `registerBindings` and registers the `mmcr` and `mmcr.smart_interface` event groups in `registerEvents`; the three registration methods below provide `MachineRecipeFactory.INSTANCE`, `JSON_ELEMENT`, and `MachineRecipeSchema.SCHEMA`, respectively.
+> `cn.howxu.mmcr.compat.kubejs.Plugin` is MMCR's `KubeJSPlugin` implementation. It injects `MMCR` and `MMCREvents` in `registerBindings` and registers only the `mmcr` event group in `registerEvents`; the three registration methods below provide `MachineRecipeFactory.INSTANCE`, `JSON_ELEMENT`, and `MachineRecipeSchema.SCHEMA`, respectively.
 
 These methods are `registerRecipeFactories(RecipeFactoryRegistry)`, `registerRecipeComponents(RecipeComponentTypeRegistry)`, and `registerRecipeSchemas(RecipeSchemaRegistry)`. All are called by KubeJS and are not registration entry points for user scripts.
 
@@ -4317,13 +4286,13 @@ This class is an internal bridge that is not visible to scripts.
 
 ## Appendix: Pinned Source Index
 
-The index below covers all 24 source files under `compat/kubejs`, making it easier to check public entry points, hidden overloads, and internal calls. All links are pinned to `5912f92f`.
+The index below covers all 22 source files under `compat/kubejs`, making it easier to check public entry points, hidden overloads, and internal calls. Links are pinned to their corresponding source commits.
 
 - **Globals and events**: [MMCRKubeJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/MMCRKubeJS.java), [MMCRValues](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/MMCRValues.java), [MMCREvents](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/MMCREvents.java), [MMCRStartupEventJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/MMCRStartupEventJS.java), [MMCRServerEventJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/MMCRServerEventJS.java), [RecipeInformationEventJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/RecipeInformationEventJS.java).
 - **Machines and structures**: [MachineBuilderJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineBuilderJS.java), [MachineStructureBuilderJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineStructureBuilderJS.java), [MachineStructureStageBuilderJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineStructureStageBuilderJS.java), [MachineBehaviorBuilderJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineBehaviorBuilderJS.java), [MachineLevelBuilderJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineLevelBuilderJS.java), [LevelTypeBuilderJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/LevelTypeBuilderJS.java).
 - **Factories and recipes**: [KubeJSApi](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/KubeJSApi.java), [KubeJSInterfaceHelpers](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/KubeJSInterfaceHelpers.java), [MachineRecipeBuilderJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineRecipeBuilderJS.java), [MachineRecipeSchema](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineRecipeSchema.java), [MachineRecipeFactory](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineRecipeFactory.java).
-- **Text and updates**: [ControllerScreenTextEventJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/ControllerScreenTextEventJS.java), [SmartInterfaceEvents](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/SmartInterfaceEvents.java), [SmartInterfaceUpdateEventJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/SmartInterfaceUpdateEventJS.java).
-- **Loading and synchronization**: [Plugin](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/Plugin.java), [KubeJSContentReloadTransaction](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/KubeJSContentReloadTransaction.java), [KubeJSRecipeSync](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/KubeJSRecipeSync.java), [KubeJSReloadHooks](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/KubeJSReloadHooks.java).
+- **Text**: [ControllerScreenTextEventJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/ControllerScreenTextEventJS.java).
+- **Loading and synchronization**: [Plugin](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/59943952980c1ae5048537a00b5978ef483e3818/src/main/java/cn/howxu/mmcr/compat/kubejs/Plugin.java), [KubeJSContentReloadTransaction](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/KubeJSContentReloadTransaction.java), [KubeJSRecipeSync](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/KubeJSRecipeSync.java), [KubeJSReloadHooks](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/KubeJSReloadHooks.java).
 
 ## Appendix: Cross-Section Notes
 

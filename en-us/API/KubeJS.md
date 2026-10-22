@@ -4,7 +4,7 @@ title: KubeJS API
 
 # KubeJS API
 
-This page is a consolidated reference for MMCR's KubeJS integration, targeting **Minecraft 26.1.2**, with commit [`59943952`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/59943952980c1ae5048537a00b5978ef483e3818/gradle.properties) as the source baseline. Examples use KubeJS/Rhino JavaScript syntax.
+This page is a consolidated reference for MMCR's KubeJS integration, targeting **Minecraft 26.1.2**, with commit [`80fd9220`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/80fd9220075a26a4bb77386a31b83fccc9ec7c3f/gradle.properties) as the source baseline. Examples use KubeJS/Rhino JavaScript syntax.
 
 MMCR's KubeJS API has three declaration windows: machine, tier, modifier, and screen text registration in startup scripts; structure and programmatic recipe registration during server script loading; and data-driven recipe registration in `ServerEvents.recipes`. Changes to startup declarations require a restart; server-side structures and recipes can be replaced during a resource reload. There are also client-side recipe information events.
 
@@ -479,7 +479,7 @@ The following methods provide `Identifier` overloads alongside their original st
 
 | Method | Parameters Accepting `Identifier` |
 | --- | --- |
-| `block` / `state` | `blockId`; `state(Identifier)` uses the block's default state. Pass a string for expressions with properties. |
+| `block` | `blockId` |
 | `tag` / `tagInput` | `tagId` |
 | `itemInput` / `itemInputRequirement` / `itemOutputRequirement` / `itemOutputRequirementWithComponents` | `itemId` |
 | `fluidInput` / `fluidStack` / `fluidInputRequirement` / `fluidOutputRequirement` | `fluidId` |
@@ -492,6 +492,8 @@ The following methods provide `Identifier` overloads alongside their original st
 | `sendRequest` | `requestId` |
 
 `id(String)` itself remains a factory that parses a string into `Identifier`; there is no `id(Identifier)`. These overloads do not defer registry resolution for `api.block(...)` / `api.state(...)`, nor do they merge startup `event.levelSlot(...)` with the runtime registry query `api.levelSlot(...)`.
+
+`state` is an exception: since `80fd9220`, `KubeJSApi.state(Identifier)` is marked `@HideFromJS`. It remains callable from Java but is **not a script entry point**. Scripts should use `state(String)` with or without properties, passing the string directly instead of wrapping it with `api.id(...)`. This prevents Rhino from attempting to convert expressions containing `[...]` to `Identifier` before the string state parser runs. Other methods' `Identifier` overloads and the Java public layer's `BlockConditions.state(Identifier)` are unaffected.
 
 > `cn.howxu.mmcr.compat.kubejs.KubeJSApi` is the script-safe factory facade returned by the global `MMCR.getAPI()` or an event's `getAPI()`.
 
@@ -766,6 +768,7 @@ const casing = api.block("minecraft:iron_block")
 ##### `state(String blockStateId) → BlockPredicate`
 
 - **Parameters**: `blockStateId` (`String`) — `namespace:block[property=value,...]`; uses the block's default state if no brackets are present.
+- **Script visibility**: Only the string overload is exposed to scripts. `state(Identifier)` remains in the Java class but is hidden with `@HideFromJS`.
 - **Returns**: A predicate that exactly matches the block state and its property values.
 - **Throws**: `IllegalArgumentException` if the block does not exist, brackets are unclosed, properties are empty, a property name is unknown, or a property value is invalid.
 - **Default**: The default block state when no properties are specified.
@@ -773,7 +776,11 @@ const casing = api.block("minecraft:iron_block")
 
 ```javascript
 const log = api.state("minecraft:oak_log[axis=x]")
+const stone = api.state("minecraft:stone")
+const bars = api.state("minecraft:iron_bars[east=true,north=false,south=true,waterlogged=false,west=true]")
 ```
+
+Sources: [KubeJSApi](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/80fd9220075a26a4bb77386a31b83fccc9ec7c3f/src/main/java/cn/howxu/mmcr/compat/kubejs/KubeJSApi.java), [Rhino property-string regression test](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/80fd9220075a26a4bb77386a31b83fccc9ec7c3f/src/test/java/cn/howxu/mmcr/compat/kubejs/IdentifierOverloadsTest.java).
 
 ##### `tag(String tagId) → BlockPredicate`
 

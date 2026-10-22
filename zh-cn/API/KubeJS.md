@@ -4,7 +4,7 @@ title: KubeJS API
 
 # KubeJS API
 
-本页是 MMCR 的 KubeJS 集成层的集中参考，固定对应 **Minecraft 26.1.2**，源码基线为提交 [`59943952`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/59943952980c1ae5048537a00b5978ef483e3818/gradle.properties)。示例使用 KubeJS/Rhino 的 JavaScript 写法。
+本页是 MMCR 的 KubeJS 集成层的集中参考，固定对应 **Minecraft 26.1.2**，源码基线为提交 [`80fd9220`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/80fd9220075a26a4bb77386a31b83fccc9ec7c3f/gradle.properties)。示例使用 KubeJS/Rhino 的 JavaScript 写法。
 
 MMCR 的 KubeJS API 分为三个声明窗口：启动脚本中的机器、等级、修饰符和屏幕文本注册；服务端脚本加载中的结构与编程式配方注册；`ServerEvents.recipes` 中的数据驱动配方注册。启动声明修改后需要重启；服务端结构与配方可随资源重载替换。此外还有客户端配方说明事件。
 
@@ -479,7 +479,7 @@ MMCREvents.server(event => {
 
 | 方法 | 可传 `Identifier` 的参数 |
 | --- | --- |
-| `block` / `state` | `blockId`；`state(Identifier)` 取方块默认状态，带属性的表达式仍传字符串。 |
+| `block` | `blockId` |
 | `tag` / `tagInput` | `tagId` |
 | `itemInput` / `itemInputRequirement` / `itemOutputRequirement` / `itemOutputRequirementWithComponents` | `itemId` |
 | `fluidInput` / `fluidStack` / `fluidInputRequirement` / `fluidOutputRequirement` | `fluidId` |
@@ -492,6 +492,8 @@ MMCREvents.server(event => {
 | `sendRequest` | `requestId` |
 
 `id(String)` 本身仍是把字符串解析为 `Identifier` 的工厂，不存在 `id(Identifier)`。新增重载不使 `api.block(...)` / `api.state(...)` 延迟解析注册表，也不会把启动期的 `event.levelSlot(...)` 与运行时注册表查询的 `api.levelSlot(...)` 合并成同一入口。
+
+`state` 是例外：从 `80fd9220` 起，`KubeJSApi.state(Identifier)` 标记为 `@HideFromJS`，仅供 Java 调用。脚本应使用 `state(String)`，无论是否包含属性都直接传字符串，不要先用 `api.id(...)` 包装。这避免 Rhino 在字符串状态解析前尝试把含 `[...]` 的表达式转换为 `Identifier`。其他方法的 `Identifier` 重载及 Java 公共层的 `BlockConditions.state(Identifier)` 不受影响。
 
 > `cn.howxu.mmcr.compat.kubejs.KubeJSApi` 是由全局 `MMCR.getAPI()` 或事件 `getAPI()` 返回的脚本安全工厂门面。
 
@@ -766,6 +768,7 @@ const casing = api.block("minecraft:iron_block")
 ##### `state(String blockStateId) → BlockPredicate`
 
 - **参数表**：`blockStateId`（`String`）— `namespace:block[property=value,...]`；不含方括号时使用方块默认状态。
+- **脚本可见性**：仅字符串重载对脚本开放；`state(Identifier)` 仍存在于 Java 类中，但已通过 `@HideFromJS` 隐藏。
 - **返回**：精确匹配方块状态及其属性值的谓词。
 - **抛出**：`IllegalArgumentException`：方块不存在、方括号不闭合、属性为空、属性名未知或属性值无效。
 - **默认值**：不写属性时为默认方块状态。
@@ -773,7 +776,11 @@ const casing = api.block("minecraft:iron_block")
 
 ```javascript
 const log = api.state("minecraft:oak_log[axis=x]")
+const stone = api.state("minecraft:stone")
+const bars = api.state("minecraft:iron_bars[east=true,north=false,south=true,waterlogged=false,west=true]")
 ```
+
+源码：[KubeJSApi](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/80fd9220075a26a4bb77386a31b83fccc9ec7c3f/src/main/java/cn/howxu/mmcr/compat/kubejs/KubeJSApi.java)、[Rhino 属性字符串回归测试](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/80fd9220075a26a4bb77386a31b83fccc9ec7c3f/src/test/java/cn/howxu/mmcr/compat/kubejs/IdentifierOverloadsTest.java)。
 
 ##### `tag(String tagId) → BlockPredicate`
 

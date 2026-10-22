@@ -5,7 +5,7 @@ order: 0
 
 # API Reference
 
-This section is based on MMCR source commit [`5912f92f`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/tree/5912f92f611da4a94d85f26644a3f9b99e534d27) for Minecraft **26.1.2**. It documents the signatures, parameter constraints, execution semantics, and examples for the Java public API and KubeJS integration layer.
+This section is based on MMCR source commit [`80fd9220`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/tree/80fd9220075a26a4bb77386a31b83fccc9ec7c3f) for Minecraft **26.1.2**. It documents the signatures, parameter constraints, execution semantics, and examples for the Java public API and KubeJS integration layer.
 
 Java development uses **Java 25**, and the public API is located in `cn.howxu.mmcr.publicapi`. The script facade also returns underlying implementation objects, so the type names of the Java public interfaces cannot be applied directly.
 

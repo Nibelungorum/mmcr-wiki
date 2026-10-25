@@ -1,7 +1,7 @@
 ---
 layout: home
 
-title: 'Modular Machinery Community: Refoxed'
+title: 'Modular Machinery: Community Refoxed'
 titleTemplate: 高度自由可配置的多方块结构机械
 
 hero:

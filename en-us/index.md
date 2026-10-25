@@ -1,7 +1,7 @@
 ---
 layout: home
 
-title: 'Modular Machinery Community: Refoxed'
+title: 'Modular Machinery: Community Refoxed'
 titleTemplate: Highly Configurable Multiblock Machines
 
 hero:

@@ -325,7 +325,7 @@ MMCREvents.startup(event => {
 - **参数表**：`id`（`String`）— 具体机器等级注册 ID。
 - **返回**：绑定该 ID 的 `MachineLevelBuilderJS`。
 - **抛出**：`IllegalArgumentException`：ID 格式非法；缺少 `type()` 或 `state()` 会在构建/注册时抛 `IllegalStateException`。
-- **默认值**：优先级为 `0`，修饰符定义为 `ModifierDefinition.EMPTY`。
+- **默认值**：等级优先级 `priority` 为 `0`，同类型内数值越大等级越高；修饰符定义为 `ModifierDefinition.EMPTY`。
 - **示例**：
 
 ```javascript
@@ -2288,7 +2288,7 @@ machine.finishSound("minecraft:entity.ender_dragon.growl")
 - **参数表**：`type`（`String`）— 智能接口类型名；`defaultValue`（`float`）— 默认值，同时作为该重载的最低值。
 - **返回**：临时的 `SmartInterfaceTypeBuilderJS`，必须调用 `end()` 才会加入机器。
 - **抛出**：类型为空或最终范围非法时在 `end()`/机器构建阶段抛 `IllegalArgumentException`。
-- **默认值**：最大值为 `Float.MAX_VALUE`，优先级为 `0`，值类型为 `float`。
+- **默认值**：最大值为 `Float.MAX_VALUE`，`priority` 为 `0`（当前未参与运行时排序或接口选择），值类型为 `float`。
 - **示例**：
 
 ```javascript
@@ -2300,7 +2300,7 @@ machine.smartInterface("speed", 1).end()
 - **参数表**：`type`（`String`）— 类型名；`minValue`（`float`）— 最小值；`maxValue`（`float`）— 最大值。
 - **返回**：配置智能接口类型的临时构建器。
 - **抛出**：`IllegalArgumentException`：范围不是有限数、最小值大于最大值或整数类型范围含小数。
-- **默认值**：默认值为 `minValue`，优先级 `0`，值类型 `float`。
+- **默认值**：默认值为 `minValue`，`priority` 为 `0`（当前未参与运行时排序或接口选择），值类型 `float`。
 - **示例**：
 
 ```javascript
@@ -2627,14 +2627,14 @@ event.createMachine("example:press").displayNameKey("machine.example.press").reg
 | `type` | `String` | 智能接口类型名。 |
 | `minValue` | `float` | 最小值。 |
 | `maxValue` | `float` | 最大值。 |
-| `priority` | `int` | 优先级，初始 `0`。 |
+| `priority` | `int` | 声明中的优先级字段，初始 `0`；当前未参与运行时排序或接口选择。 |
 | `valueType` | `SmartInterfaceType.ValueType` | 值类型，初始 `FLOAT`。 |
 
 **方法**
 
 #### `priority(int priority) → SmartInterfaceTypeBuilderJS`
 
-- **参数表**：`priority`（`int`）— 数值越大越优先。
+- **参数表**：`priority`（`int`）— 保存到智能接口类型声明的字段；当前实现未按它排序或选择接口，因此没有数字大优先或数字小优先的生效规则。
 - **返回**：当前内部构建器。
 - **抛出**：无。
 - **默认值**：`0`。
@@ -2643,6 +2643,10 @@ event.createMachine("example:press").displayNameKey("machine.example.press").reg
 ```javascript
 machine.smartInterface("speed", 0, 100).priority(5).end()
 ```
+
+这里的 `5` 只会被保存，不能用它让某个接口类型先显示，或让某个接口方块的值覆盖其他方块；它也不控制配方搜索顺序。
+
+源码：[接口类型字段](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/80fd9220075a26a4bb77386a31b83fccc9ec7c3f/src/main/java/cn/howxu/mmcr/api/machine/SmartInterfaceType.java)、[接口类型同步与参数列表](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/80fd9220075a26a4bb77386a31b83fccc9ec7c3f/src/main/java/cn/howxu/mmcr/internal/tile/SmartInterfaceBlockEntity.java)。
 
 #### `valueType(String valueType) → SmartInterfaceTypeBuilderJS`
 
@@ -3216,7 +3220,7 @@ stage.pattern("X").set("X", "minecraft:iron_block").controller("X")
 | `id(String id)` | 替换配方 ID；解析失败抛异常。 |
 | `recipePool(String id)` | 设置单一配方池；当 `MachineRegistry.containsRecipePool` 为假时立即抛 `IllegalArgumentException`。 |
 | `tickTime(int ticks)` | 设置耗时；`createObject()` 要求至少 1 tick。 |
-| `priority(int priority)` | 设置配方优先级。 |
+| `priority(int priority)` | 设置配方搜索优先级，默认 `0`；**数值越小越先尝试**，例如 `0` 先于 `1`。 |
 | `maxThreads(int threads)` | 默认 1；构建时拒绝负数，源码允许 0。 |
 | `parallelized()` / `parallelized(boolean enabled)` | 无参设置 `true`，默认 `false`。 |
 | `cancelIfPerTickFails(boolean cancel)` | 设置每 tick 需求失败时的取消标志，默认 `false`。 |
@@ -3229,6 +3233,10 @@ stage.pattern("X").set("X", "minecraft:iron_block").controller("X")
 | `addRequirement(RecipeIoDeclaration)` | 追加底层需求；`CustomRecipeIo` 经底层 builder 解码到需求或自定义输出，其他实现被拒绝。 |
 | `custom(String typeId, RecipeModifier.IOType io, JsonElement payload)` | 构造 `CustomRecipeIo` 并交给 `addRequirement`；类型与 codec 必须匹配。 |
 | `conditions(List<MachineModifier>)` | 替换条件，通过 `MachineModifier.recipeModifiers` 转为配方修饰符；只保留 duration、energy、chemical、heat、output 数值目标，机器调度目标和布尔并行项会被忽略。 |
+
+配方 `priority` 与等级 `priority` 的方向相反。同配方优先级时，先尝试输入需求条目数较多的配方，再按配方 ID 升序排列；这里比较的是输入需求条目数，不计等级和阶段需求，也不是物品数量。优先级只决定候选顺序，配方仍须满足等级、输入、输出空间等执行条件。
+
+源码：[配方候选排序与最低等级检查](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/80fd9220075a26a4bb77386a31b83fccc9ec7c3f/src/main/java/cn/howxu/mmcr/api/recipe/RecipeSearchTask.java)。
 
 `deriveRequirements(false)` 不会自动把传统 `inputs` 转为需求。只有显式添加的需求会进入这一部分；传统物品/流体输出仍被建立为 canonical outputs。该开关适合已经完整提供显式需求的脚本，不能用它表示“不消耗输入”。
 
@@ -3299,7 +3307,7 @@ stage.pattern("X").set("X", "minecraft:iron_block").controller("X")
 | `smartInterfaceInput(String type, float value)` | 固定值输入需求。 |
 | `smartInterfaceInput(String type, float min, float max)` | 范围输入需求；不是 schema 的 `smartInterfaceInputRange`。 |
 | `smartInterfaceOutput(String type, float value)` | 固定值输出需求。 |
-| `requiresLevel(String typeId, String levelId)` | 检查等级存在且属于类型，追加输入需求；失败抛 `IllegalArgumentException`。 |
+| `requiresLevel(String typeId, String levelId)` | 检查等级存在且属于类型，追加最低等级输入需求；运行时要求同类型的 `实际 priority >= 所需 priority`，不是等级 ID 相等匹配；注册参数校验失败抛 `IllegalArgumentException`。 |
 | `requiresStage(int minStage)` | 最低结构阶段需求，范围 1..64。 |
 | `requiredHost(String hostId)` | 向宿主 ID 集合追加一项。 |
 | `requiredHosts(String... hostIds)` | 追加多项，忽略 `null` 数组/元素；ID 集合去重。 |
@@ -3369,7 +3377,7 @@ MMCREvents.server(event => {
 | `smartInterfaceOutput(type, value)` | `(String, float)` | 追加一条输出型智能接口需求。 |
 | `custom(typeId, io, payload)` | `(String, String, JsonElement)` | 通过底层 `RecipeIoValidation.custom(...)` 校验并把 codec 编码后的需求或输出追加到对应数组。`io` 仅取小写 `input` 或 `output`。 |
 | `requiredHost(hostId)` | `(String)` | 把宿主机器 ID 追加到 `required_host_ids`。 |
-| `requiresLevel(typeId, levelId)` | `(String, String)` | 校验等级与类型匹配，并把等级需求追加到 `requirements`。 |
+| `requiresLevel(typeId, levelId)` | `(String, String)` | 校验等级与类型匹配，追加最低等级需求；运行时要求同类型的 `实际 priority >= 所需 priority`，不是等级 ID 相等匹配。 |
 | `chemicalInput(chemicalId, amount)` | `(String, long)` | 追加具体化学品输入，完全消耗。 |
 | `chemicalTagInput(tagId, amount)` | `(String, long)` | 追加标签化学品输入，完全消耗。 |
 | `chemicalInputChance(chemicalId, amount, consumeChance)` | `(String, long, double)` | 追加具体化学品概率输入；概率 0..1。 |
@@ -3382,6 +3390,8 @@ MMCREvents.server(event => {
 | `lightningOutputChance(tierId, amount, chance)` | `(String, long, float)` | 追加概率闪电输出到 `outputs`，概率按闪电规则归一化。 |
 
 源码：[MachineRecipeSchema.java](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/fbb3198c/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineRecipeSchema.java)。以上是额外注册的全部 17 个 schema 函数。化学品与闪电数量的组件约束为正 `long`；温度和热量使用非负 `double` 组件，payload 继续校验有限值。不要据编程式构建器推导 schema 存在 `itemOutputWithComponents`、`requiresStage`、`requiredHosts`、三参数 `chemicalInput` 或三参数 `lightningOutput`，源码未注册这些函数。
+
+数据驱动配方 JSON 的顶层字段 `priority` 默认 `0`，同样是**数值越小越先尝试**，不是数字大优先。该字段没有对应的 schema 键或额外注册的 `priority(...)` 函数；需要设置时可在 `event.custom({...})` 的配方 JSON 中写入 `priority`。不要把编程式构建器的 `.priority(int)` 当成 schema 方法。
 
 schema 的必需键是 `recipe_pool`、`tick_time`、`requirements`；`outputs` 和 `modifiers` 默认空列表。`tick_time` 的 schema 组件允许非负整数，但合法机器配方仍受 MMCR 的执行/解码校验约束，示例使用正耗时。附加函数修改 `cx.recipe().json` 后调用 `save()`；它们操作的是 `KubeRecipe`，不是编程式 builder。
 
@@ -3959,7 +3969,7 @@ event.createLevelType("example:coil").displayNameKey("level.example.coil").regis
 | 名称 | 类型 | 默认值 | 描述 |
 |------|------|------|------|
 | `typeId` | `Identifier` | `null` | 父等级类型 ID。 |
-| `priority` | `int` | `0` | 等级优先级。 |
+| `priority` | `int` | `0` | 同类型内数值越大，等级越高；同类型不能重复。 |
 | `state` | `String` | `null` | 待解析的方块状态 ID，可含属性。 |
 | `modifier` | `ModifierDefinition` | `ModifierDefinition.EMPTY` | 等级生效时应用的修饰符集合。 |
 
@@ -3979,7 +3989,7 @@ event.createLevel("example:coil_iron").type("example:coil")
 
 #### `priority(int priority) → MachineLevelBuilderJS`
 
-- **参数表**：`priority`（`int`），等级优先级，数值越大越优先。
+- **参数表**：`priority`（`int`），同类型内数值越大等级越高，例如 `2` 高于 `1`，`1` 高于 `0`；与配方搜索“数值越小越先尝试”的方向相反。
 - **返回**：当前构建器。
 - **抛出**：无。
 - **默认值**：`0`。
@@ -4060,7 +4070,8 @@ event.createLevel("example:coil_iron")
 :::warning 注意事项
 
 - 等级类型应先于具体等级注册；先注册具体等级会因为找不到类型而被拒绝。
-- 等级的 `priority` 用于同类型等级选择，不能用它替代结构或配方等级需求。
+- 等级的 `priority` 表示同类型内的高低顺序；配方等级需求要求 `实际 priority >= 所需 priority`，高等级可以满足低等级需求，不要求等级 ID 相同。它不能替代结构等级槽位或配方的 `requiresLevel(...)` 声明。
+- 同类型的 `priority` 和代表方块状态都必须唯一，注册校验会拒绝重复声明；注册多个等级时不能全部保留默认 `0`。
 - `modifier` 采用统一的 `ModifierDefinition(List<MachineModifier>)`；这里没有 `parallelismBonus` / `factoryThreadBonus` / `IDENTITY` 旧字段。数值项需为有限数，目标、作用域与概率开关受 `MachineModifier` 校验；不能把所有操作的值都解释为正乘数。
 :::
 ## 10. 控制器屏幕文本

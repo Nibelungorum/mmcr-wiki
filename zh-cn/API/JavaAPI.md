@@ -782,6 +782,8 @@ ModifierBundle modifier();
 
 类型是等级组，具体等级描述匹配条件、优先级和修饰符。`Levels.level(...)` 现在只有五个参数，不再接受代表物品栈；工厂创建的声明使用空展示栈，`representative()` 访问器仍保留并返回副本。等级槽位使用类型 ID，配方需求使用类型 ID 加等级 ID。
 
+`priority` 在同一等级类型内**数值越大，等级越高**；例如 `2` 高于 `1`，`1` 高于 `0`。它与配方搜索的优先级方向相反。同类型的等级不能使用重复的 `priority` 或代表方块状态，注册校验会拒绝重复声明。配方的等级需求是最低门槛：实际等级必须属于所需类型，且 `实际 priority >= 所需 priority`，不是要求等级 ID 完全相等；也不能靠提高 `priority` 省略结构等级槽位或配方等级需求。
+
 ```java
 Identifier typeId = Identifier.fromNamespaceAndPath("my_mod", "casing");
 Identifier levelId = Identifier.fromNamespaceAndPath("my_mod", "steel");
@@ -845,6 +847,10 @@ RecipeSpec build();
 ```
 
 默认时长 1 tick、优先级 0、最大线程 1，三个布尔开关默认 `false`。时长/最大线程必须正数，优先级不得负。**配方池无默认值**，未设池时 `build()` 抛 `IllegalStateException`。输入输出与 requirement 为追加声明，不会因再次调用覆盖整个列表。
+
+`priority(int)` 控制配方搜索顺序，**数值越小，越先尝试**：`0` 先于 `1`，`1` 先于 `2`。同优先级时先尝试输入需求条目数较多的配方，再按配方 ID 升序排列；这里比较的是输入需求条目数，不计等级和阶段需求，也不是物品数量。优先级只决定候选顺序，配方仍须满足等级、输入、输出空间等执行条件，不保证优先级最高的候选一定能运行。
+
+源码：[候选排序与最低等级检查](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/80fd9220075a26a4bb77386a31b83fccc9ec7c3f/src/main/java/cn/howxu/mmcr/api/recipe/RecipeSearchTask.java)。
 
 物品数量/流体数量使用 `int`，能量是 `long` **FE/t**；化学品是 `long`。`iFEt`/`oFEt` 是能量输入/输出别名。`consumeChance` 是输入消耗概率，0 表示仍须匹配但不消耗；输出 `chance` 是产出概率，二者不能混淆。普通概率参数需有限且位于 `[0,1]`；闪电输出使用下节说明的概率归一化规则。
 
@@ -926,7 +932,7 @@ Set<HostConstraint> requiredHosts();
 Set<Identifier> requiredHostIds();
 ```
 
-这是构建后的声明，IO 列表是相应种类的投影视图；`requirements()` 保留需求声明，`customOutputs()` 保留注册输出类型的自定义产出。运行修饰后的需求/输出应查询运行时 `RecipeView`，不能直接把 `RecipeSpec` 当执行配方使用。
+这是构建后的声明，`priority()` 返回配方搜索优先级，数值越小越先尝试，与 `RecipeDraft.priority(int)` 的规则相同。IO 列表是相应种类的投影视图；`requirements()` 保留需求声明，`customOutputs()` 保留注册输出类型的自定义产出。运行修饰后的需求/输出应查询运行时 `RecipeView`，不能直接把 `RecipeSpec` 当执行配方使用。
 
 ### `IoDirection`、IO 值类型与 `IoValues`
 
@@ -1094,7 +1100,7 @@ public static SmartInterfaceRequirementSpec smartInput(String type, float min, f
 public static SmartInterfaceRequirementSpec smartOutput(String type, float value);
 ```
 
-优先用 `itemInput`/`itemOutput`、`fluidInput`/`fluidOutput` 避免混用流向和堆栈字段。省略方向的 `energy`、`level`、`stage` 是输入方向；等级/阶段是逻辑校验，不消耗一个物理资源槽。阶段范围为 1–64。`smartInput(type, value)` 表示精确值，范围重载表示区间；`smartOutput` 声明输出值。
+优先用 `itemInput`/`itemOutput`、`fluidInput`/`fluidOutput` 避免混用流向和堆栈字段。省略方向的 `energy`、`level`、`stage` 是输入方向；等级/阶段是逻辑校验，不消耗一个物理资源槽。`Requirements.level(typeId, levelId)` 指定同类型的最低等级，运行时要求 `实际 priority >= 所需 priority`，数值越大表示等级越高，不是等级 ID 相等匹配。阶段范围为 1–64。`smartInput(type, value)` 表示精确值，范围重载表示区间；`smartOutput` 声明输出值。
 
 示例：
 
@@ -1304,6 +1310,10 @@ float validatedValue(float value);
 
 type 名不可空白；数值须有限，`min ≤ default ≤ max`。只传 default 的重载将其同时用作最小值，上限为 `Float.MAX_VALUE`；只传 min/max 时默认值为 min。INTEGER 要求默认值和边界为整数，但公共数值类型仍是 `float`。`validatedValue` 对非法值返回 **minValue**，不是抛异常，也不是返回 defaultValue。
 
+`priority` 当前只作为智能接口类型的声明字段保存，运行时没有按它排序或选择接口，因此这里没有“数字大优先”或“数字小优先”的生效规则。它也不表示多个同类型接口方块中只取一份优先值，不能用它控制配方搜索顺序。
+
+源码：[接口类型字段](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/80fd9220075a26a4bb77386a31b83fccc9ec7c3f/src/main/java/cn/howxu/mmcr/api/machine/SmartInterfaceType.java)、[接口类型同步与参数列表](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/80fd9220075a26a4bb77386a31b83fccc9ec7c3f/src/main/java/cn/howxu/mmcr/internal/tile/SmartInterfaceBlockEntity.java)。
+
 `ValueType.byName` 接受 `float`、`int`、`integer`，忽略大小写；空白/null 返回 FLOAT，未知名称抛 `IllegalArgumentException`。翻译键为 `mmcr.smart_interface.type.<type>`，说明键再加 `.description`。
 
 ```java
@@ -1485,6 +1495,8 @@ List<RequirementSpec> requirements();
 List<OutputView> outputs();
 ```
 
+`RecipeView.priority()` 返回配方搜索优先级，数值越小越先尝试；同优先级时先比较输入需求条目数（不计等级和阶段需求，多者优先），再按配方 ID 升序排列。
+
 `runtimeRequirements` 和 `runtimeMachineOutputs` 生成应用修饰后的执行值；不要将其与原始声明列表混淆。`RecipeExecutionView` 来自启动上下文快照，包含本次回调调整结果。
 
 ### `IoSnapshot`
@@ -1606,7 +1618,11 @@ FailurePhase phase();
 @Nullable Integer requirementIndex();
 ```
 
-失败结果可能没有诊断对象（例如未模拟即提交或重复提交），因此 `failure()==null` 不等于 successful。`reasonTranslationKey` 是本地化键。失败模式 RESET/STILL/DECREASE 分别声明进度重置、保持或回退策略；默认 STILL。
+失败结果可能没有诊断对象（例如未模拟即提交或重复提交），因此 `failure()==null` 不等于 successful。`reasonTranslationKey` 是本地化键。`reasonPriority()` 返回失败原因优先级，没有原因时为 `null`；比较失败原因时**数值越大越优先**，与配方搜索的优先级方向相反。通常先比较原因优先级，再比较候选有效度；配方搜索中两个候选都属于需求规划失败时，先比较需求匹配进度（高者优先），再比较原因优先级，不能认为最大的 `reasonPriority` 总会成为主诊断。
+
+源码：[主诊断选择规则](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/80fd9220075a26a4bb77386a31b83fccc9ec7c3f/src/main/java/cn/howxu/mmcr/api/capability/status/FailureReport.java)。
+
+失败模式 RESET/STILL/DECREASE 分别声明进度重置、保持或回退策略；默认 STILL。
 
 ### `OutputView`、`ItemOutputView`、`FluidOutputView`
 
@@ -1798,6 +1814,10 @@ long transferLimit();
 
 public record ResourceAction<R>(int slot, R resource, long amount, boolean insert) {}
 ```
+
+`outputPriority()` 是能力的输出分配优先级，**数值越大，越先尝试向该能力输出**；例如 `10` 先于 `0`。优先级相同则保持传入能力列表的原有顺序。它不影响输入提取顺序，也不是配方选择优先级。
+
+源码：[输出能力排序](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/80fd9220075a26a4bb77386a31b83fccc9ec7c3f/src/main/java/cn/howxu/mmcr/api/recipe/requirement/RequirementHandlerSupport.java)。
 
 `ResourceStore`/`LongStore` 不是可自行实现后注册端口的公共 SPI。`prepareValue` 的 amount 是**已按并行度缩放的总量**，不要再乘一次 parallelism；资源 action 描述指定槽位的插入/提取。资源类型来自能力声明，先用 Optional 检查匹配。
 

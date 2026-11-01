@@ -325,7 +325,7 @@ MMCREvents.startup(event => {
 - **Parameters**: `id` (`String`) — Registration ID for a specific machine tier.
 - **Returns**: A `MachineLevelBuilderJS` bound to that ID.
 - **Throws**: `IllegalArgumentException` if the ID is malformed; missing `type()` or `state()` causes `IllegalStateException` during building or registration.
-- **Default**: Priority is `0`, and the modifier definition is `ModifierDefinition.EMPTY`.
+- **Default**: Level `priority` is `0`; larger values mean higher levels within the same type. The modifier definition is `ModifierDefinition.EMPTY`.
 - **Example**:
 
 ```javascript
@@ -2288,7 +2288,7 @@ machine.finishSound("minecraft:entity.ender_dragon.growl")
 - **Parameters**: `type` (`String`) — the smart interface type name; `defaultValue` (`float`) — the default value, also used as the minimum for this overload.
 - **Returns**: A temporary `SmartInterfaceTypeBuilderJS`; you must call `end()` to add it to the machine.
 - **Throws**: `IllegalArgumentException` during `end()`/machine construction if the type is empty or the final range is invalid.
-- **Default**: The maximum is `Float.MAX_VALUE`, the priority is `0`, and the value type is `float`.
+- **Default**: The maximum is `Float.MAX_VALUE`, `priority` is `0` (currently unused for runtime ordering or interface selection), and the value type is `float`.
 - **Example**:
 
 ```javascript
@@ -2300,7 +2300,7 @@ machine.smartInterface("speed", 1).end()
 - **Parameters**: `type` (`String`) — the type name; `minValue` (`float`) — the minimum; `maxValue` (`float`) — the maximum.
 - **Returns**: A temporary builder for configuring the smart interface type.
 - **Throws**: `IllegalArgumentException` if the range contains nonfinite values, the minimum exceeds the maximum, or an integer type's range contains fractional values.
-- **Default**: The default value is `minValue`, the priority is `0`, and the value type is `float`.
+- **Default**: The default value is `minValue`, `priority` is `0` (currently unused for runtime ordering or interface selection), and the value type is `float`.
 - **Example**:
 
 ```javascript
@@ -2627,14 +2627,14 @@ event.createMachine("example:press").displayNameKey("machine.example.press").reg
 | `type` | `String` | Smart interface type name. |
 | `minValue` | `float` | Minimum value. |
 | `maxValue` | `float` | Maximum value. |
-| `priority` | `int` | Priority, initially `0`. |
+| `priority` | `int` | Priority field in the declaration, initially `0`; currently unused for runtime ordering or interface selection. |
 | `valueType` | `SmartInterfaceType.ValueType` | Value type, initially `FLOAT`. |
 
 **Methods**
 
 #### `priority(int priority) → SmartInterfaceTypeBuilderJS`
 
-- **Parameters**: `priority` (`int`) — higher values take precedence.
+- **Parameters**: `priority` (`int`) — a field stored in the smart interface type declaration. The current implementation does not use it to sort or select interfaces, so neither larger nor smaller values take precedence.
 - **Returns**: The current inner builder.
 - **Throws**: None.
 - **Default**: `0`.
@@ -2643,6 +2643,10 @@ event.createMachine("example:press").displayNameKey("machine.example.press").reg
 ```javascript
 machine.smartInterface("speed", 0, 100).priority(5).end()
 ```
+
+The `5` is only stored. It cannot make an interface type appear first or make one interface block's value override another's, and it does not control recipe search order.
+
+Source: [Interface type fields](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/80fd9220075a26a4bb77386a31b83fccc9ec7c3f/src/main/java/cn/howxu/mmcr/api/machine/SmartInterfaceType.java), [Interface type synchronization and parameter lists](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/80fd9220075a26a4bb77386a31b83fccc9ec7c3f/src/main/java/cn/howxu/mmcr/internal/tile/SmartInterfaceBlockEntity.java).
 
 #### `valueType(String valueType) → SmartInterfaceTypeBuilderJS`
 
@@ -3216,7 +3220,7 @@ The single resource ID parameters of `id`, `recipePool`, `custom`, item/tag inpu
 | `id(String id)` | Replaces the recipe ID; throws if parsing fails. |
 | `recipePool(String id)` | Sets a single recipe pool; immediately throws `IllegalArgumentException` if `MachineRegistry.containsRecipePool` is false. |
 | `tickTime(int ticks)` | Sets the duration; `createObject()` requires at least 1 tick. |
-| `priority(int priority)` | Sets the recipe priority. |
+| `priority(int priority)` | Sets recipe search priority, default `0`; **smaller values are tried first**, so `0` precedes `1`. |
 | `maxThreads(int threads)` | Defaults to 1; negative values are rejected during construction, but the source allows 0. |
 | `parallelized()` / `parallelized(boolean enabled)` | The no-argument form sets `true`; defaults to `false`. |
 | `cancelIfPerTickFails(boolean cancel)` | Sets whether to cancel when a per-tick requirement fails; defaults to `false`. |
@@ -3229,6 +3233,10 @@ The single resource ID parameters of `id`, `recipePool`, `custom`, item/tag inpu
 | `addRequirement(RecipeIoDeclaration)` | Appends an underlying requirement; the underlying builder decodes `CustomRecipeIo` into a requirement or custom output, and rejects other implementations. |
 | `custom(String typeId, RecipeModifier.IOType io, JsonElement payload)` | Constructs a `CustomRecipeIo` and passes it to `addRequirement`; the type and codec must match. |
 | `conditions(List<MachineModifier>)` | Replaces conditions, converting them to recipe modifiers through `MachineModifier.recipeModifiers`; only numeric duration, energy, chemical, heat, and output targets are retained. Machine scheduling targets and boolean parallelization entries are ignored. |
+
+Recipe `priority` uses the opposite direction to level `priority`. At equal recipe priority, recipes with more input requirement entries are tried first, followed by recipe ID in ascending order. This counts input requirement entries, excluding level and stage requirements, not item quantities. Priority only determines candidate order; recipes must still satisfy level, input, output-space, and other execution conditions.
+
+Source: [Recipe candidate ordering and minimum-level checks](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/80fd9220075a26a4bb77386a31b83fccc9ec7c3f/src/main/java/cn/howxu/mmcr/api/recipe/RecipeSearchTask.java).
 
 `deriveRequirements(false)` does not automatically convert legacy `inputs` into requirements. Only explicitly added requirements are included in this part; legacy item/fluid outputs are still converted into canonical outputs. This option is intended for scripts that already provide a complete set of explicit requirements; it does not mean "do not consume inputs."
 
@@ -3299,7 +3307,7 @@ These entry points belong to the recipe builder, not to same-named factories on 
 | `smartInterfaceInput(String type, float value)` | Fixed-value input requirement. |
 | `smartInterfaceInput(String type, float min, float max)` | Range input requirement; distinct from the schema's `smartInterfaceInputRange`. |
 | `smartInterfaceOutput(String type, float value)` | Fixed-value output requirement. |
-| `requiresLevel(String typeId, String levelId)` | Checks that the level exists and belongs to the type, then appends an input requirement; throws `IllegalArgumentException` on failure. |
+| `requiresLevel(String typeId, String levelId)` | Checks that the level exists and belongs to the type, then appends a minimum-level input requirement. At runtime, the same type must satisfy `actual priority >= required priority`; exact level ID equality is not required. Throws `IllegalArgumentException` if registration argument validation fails. |
 | `requiresStage(int minStage)` | Minimum structure stage requirement, in the range 1..64. |
 | `requiredHost(String hostId)` | Adds one entry to the host ID set. |
 | `requiredHosts(String... hostIds)` | Adds multiple entries, ignoring `null` arrays/elements; the ID set removes duplicates. |
@@ -3369,7 +3377,7 @@ The following additional functions are registered on the data-driven recipe `Rec
 | `smartInterfaceOutput(type, value)` | `(String, float)` | Appends a smart interface output requirement. |
 | `custom(typeId, io, payload)` | `(String, String, JsonElement)` | Validates through the underlying `RecipeIoValidation.custom(...)` and appends the codec-encoded requirement or output to the corresponding array. `io` must be lowercase `input` or `output`. |
 | `requiredHost(hostId)` | `(String)` | Appends a host machine ID to `required_host_ids`. |
-| `requiresLevel(typeId, levelId)` | `(String, String)` | Validates that the level matches the type and appends the level requirement to `requirements`. |
+| `requiresLevel(typeId, levelId)` | `(String, String)` | Validates that the level matches the type and appends a minimum-level requirement. At runtime, the same type must satisfy `actual priority >= required priority`; exact level ID equality is not required. |
 | `chemicalInput(chemicalId, amount)` | `(String, long)` | Appends a specific chemical input with full consumption. |
 | `chemicalTagInput(tagId, amount)` | `(String, long)` | Appends a tag-based chemical input with full consumption. |
 | `chemicalInputChance(chemicalId, amount, consumeChance)` | `(String, long, double)` | Appends a chance-based specific chemical input; chance is 0..1. |
@@ -3382,6 +3390,8 @@ The following additional functions are registered on the data-driven recipe `Rec
 | `lightningOutputChance(tierId, amount, chance)` | `(String, long, float)` | Appends a chance-based lightning output to `outputs`, normalizing its chance using lightning rules. |
 
 Source: [MachineRecipeSchema.java](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/fbb3198c/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineRecipeSchema.java). These are all 17 additionally registered schema functions. Chemical and lightning amounts are constrained to positive `long` values by their component; temperature and heat use nonnegative `double` components, with payload validation also checking that values are finite. Do not infer from the programmatic builder that the schema has `itemOutputWithComponents`, `requiresStage`, `requiredHosts`, three-argument `chemicalInput`, or three-argument `lightningOutput`; the source does not register these functions.
+
+The top-level `priority` field in data-driven recipe JSON defaults to `0` and likewise uses **smaller values first**, not larger values first. There is no corresponding schema key or additionally registered `priority(...)` function. To set it, include `priority` in the recipe JSON passed to `event.custom({...})`. Do not treat the programmatic builder's `.priority(int)` as a schema method.
 
 The schema's required keys are `recipe_pool`, `tick_time`, and `requirements`; `outputs` and `modifiers` default to empty lists. The schema component for `tick_time` permits nonnegative integers, but valid machine recipes are still subject to MMCR's execution/decoding validation, so the examples use positive durations. Additional functions modify `cx.recipe().json` and then call `save()`; they operate on a `KubeRecipe`, not the programmatic builder.
 
@@ -3959,7 +3969,7 @@ event.createLevelType("example:coil").displayNameKey("level.example.coil").regis
 | Name | Type | Default | Description |
 |------|------|------|------|
 | `typeId` | `Identifier` | `null` | Parent level type ID. |
-| `priority` | `int` | `0` | Level priority. |
+| `priority` | `int` | `0` | Larger values mean higher levels within the same type; must be unique within that type. |
 | `state` | `String` | `null` | Deferred block-state ID, optionally including properties. |
 | `modifier` | `ModifierDefinition` | `ModifierDefinition.EMPTY` | Set of modifiers applied when the level is active. |
 
@@ -3979,7 +3989,7 @@ event.createLevel("example:coil_iron").type("example:coil")
 
 #### `priority(int priority) → MachineLevelBuilderJS`
 
-- **Parameters**: `priority` (`int`), the level priority; higher values take precedence.
+- **Parameters**: `priority` (`int`), where larger values mean higher levels within the same type: `2` is higher than `1`, and `1` is higher than `0`. This is the opposite of recipe search, where smaller values are tried first.
 - **Returns**: The current builder.
 - **Throws**: Nothing.
 - **Defaults**: `0`.
@@ -4060,7 +4070,8 @@ event.createLevel("example:coil_iron")
 :::warning Notes
 
 - Register level types before individual levels; registering a level first is rejected because its type cannot be found.
-- A level's `priority` selects among levels of the same type; it does not replace structure or recipe level requirements.
+- A level's `priority` represents its rank within the same type. Recipe level requirements check `actual priority >= required priority`, so higher levels can satisfy lower-level requirements without matching the level ID exactly. It does not replace structure level slots or recipe `requiresLevel(...)` declarations.
+- Both `priority` and representative block state must be unique within a type; registration validation rejects duplicates. Do not leave every level at the default `0` when registering multiple levels.
 - `modifier` uses the unified `ModifierDefinition(List<MachineModifier>)`; the old `parallelismBonus` / `factoryThreadBonus` / `IDENTITY` fields are not present here. Numeric entries must be finite, and targets, scopes, and chance flags are validated by `MachineModifier`; values for all operations should not be interpreted as positive multipliers.
 :::
 ## 10. Controller Screen Text

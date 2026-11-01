@@ -782,6 +782,8 @@ ModifierBundle modifier();
 
 Types group levels; individual levels describe matching conditions, priorities, and modifiers. `Levels.level(...)` now takes five parameters and no longer accepts a representative item stack. Factory-created declarations use an empty display stack; the `representative()` accessor remains and returns a copy. Level slots use type IDs, and recipe requirements use a type ID plus a level ID.
 
+Within the same level type, **a larger `priority` means a higher level**: `2` is higher than `1`, and `1` is higher than `0`. This is the opposite of recipe search priority. Levels of the same type cannot share a `priority` or representative block state; registration validation rejects duplicates. Recipe level requirements are minimum thresholds: the actual level must belong to the required type and satisfy `actual priority >= required priority`, rather than match the level ID exactly. Raising `priority` does not remove the need to declare structure level slots or recipe level requirements.
+
 ```java
 Identifier typeId = Identifier.fromNamespaceAndPath("my_mod", "casing");
 Identifier levelId = Identifier.fromNamespaceAndPath("my_mod", "steel");
@@ -845,6 +847,10 @@ RecipeSpec build();
 ```
 
 The default duration is 1 tick, priority is 0, maximum thread count is 1, and the three boolean switches default to `false`. Duration and maximum thread count must be positive, and priority must not be negative. **The recipe pool has no default value**; when no pool is set, `build()` throws `IllegalStateException`. Input, output, and requirement declarations are appended; repeated calls do not overwrite the entire list.
+
+`priority(int)` controls recipe search order: **smaller values are tried first**, so `0` precedes `1`, and `1` precedes `2`. At equal priority, recipes with more input requirement entries are tried first, followed by recipe ID in ascending order. This counts input requirement entries, excluding level and stage requirements, not item quantities. Priority only determines candidate order; recipes must still satisfy level, input, output-space, and other execution conditions, so the highest-priority candidate is not guaranteed to run.
+
+Source: [Candidate ordering and minimum-level checks](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/80fd9220075a26a4bb77386a31b83fccc9ec7c3f/src/main/java/cn/howxu/mmcr/api/recipe/RecipeSearchTask.java).
 
 Item and fluid amounts use `int`, energy uses `long` **FE/t** (not the recipe's total energy consumption), and chemical amounts use `long`. `iFEt`/`oFEt` are energy input/output aliases. `consumeChance` is the input consumption probability; 0 means the input must still match but is not consumed. Output `chance` is the production probability; do not confuse the two. Ordinary probability parameters must be finite and within `[0,1]`; lightning outputs use the normalization described in the next section.
 
@@ -926,7 +932,7 @@ Set<HostConstraint> requiredHosts();
 Set<Identifier> requiredHostIds();
 ```
 
-This is the built declaration; IO lists are projected views of the corresponding kinds. `requirements()` retains requirement declarations, and `customOutputs()` retains custom outputs of registered output types. Query the runtime `RecipeView` for requirements and outputs after runtime modifiers are applied; `RecipeSpec` cannot be used directly as an execution recipe.
+This is the built declaration. `priority()` returns the recipe search priority; smaller values are tried first, following the same rules as `RecipeDraft.priority(int)`. IO lists are projected views of the corresponding kinds. `requirements()` retains requirement declarations, and `customOutputs()` retains custom outputs of registered output types. Query the runtime `RecipeView` for requirements and outputs after runtime modifiers are applied; `RecipeSpec` cannot be used directly as an execution recipe.
 
 ### `IoDirection`, IO value type and `IoValues`
 
@@ -1094,7 +1100,7 @@ public static SmartInterfaceRequirementSpec smartInput(String type, float min, f
 public static SmartInterfaceRequirementSpec smartOutput(String type, float value);
 ```
 
-Use `itemInput`/`itemOutput` and `fluidInput`/`fluidOutput` first to avoid mixing flow and stack fields. `energy`, `level`, and `stage` that omit the direction are input directions; the level/stage is a logical check and does not consume a physical resource slot. Stage range is 1–64. `smartInput(type, value)` represents an exact value, and range overloading represents an interval; `smartOutput` declares an output value.
+Use `itemInput`/`itemOutput` and `fluidInput`/`fluidOutput` first to avoid mixing flow and stack fields. `energy`, `level`, and `stage` that omit the direction are input directions; the level/stage is a logical check and does not consume a physical resource slot. `Requirements.level(typeId, levelId)` specifies a minimum level within the same type. At runtime, `actual priority >= required priority` must hold; larger values mean higher levels, and exact level ID equality is not required. Stage range is 1–64. `smartInput(type, value)` represents an exact value, and range overloading represents an interval; `smartOutput` declares an output value.
 
 Example:
 
@@ -1304,6 +1310,10 @@ float validatedValue(float value);
 
 The type name cannot be blank; values must be finite, with `min ≤ default ≤ max`. The overload that accepts only a default value also uses it as the minimum, with an upper limit of `Float.MAX_VALUE`; when only min/max are supplied, the default is min. INTEGER requires integer default values and bounds, but the public numeric type remains `float`. `validatedValue` returns **minValue** for invalid values, rather than throwing an exception or returning defaultValue.
 
+`priority` is currently only stored as a field in the smart interface type declaration. The runtime does not use it to sort or select interfaces, so neither larger nor smaller values take precedence here. It also does not select a single preferred value among multiple interface blocks of the same type, and it cannot control recipe search order.
+
+Source: [Interface type fields](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/80fd9220075a26a4bb77386a31b83fccc9ec7c3f/src/main/java/cn/howxu/mmcr/api/machine/SmartInterfaceType.java), [Interface type synchronization and parameter lists](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/80fd9220075a26a4bb77386a31b83fccc9ec7c3f/src/main/java/cn/howxu/mmcr/internal/tile/SmartInterfaceBlockEntity.java).
+
 `ValueType.byName` accepts `float`, `int`, and `integer`, ignoring case; blank/null returns FLOAT, and unknown names throw `IllegalArgumentException`. The translation key is `mmcr.smart_interface.type.<type>`; append `.description` for the description key.
 
 ```java
@@ -1485,6 +1495,8 @@ List<RequirementSpec> requirements();
 List<OutputView> outputs();
 ```
 
+`RecipeView.priority()` returns the recipe search priority; smaller values are tried first. At equal priority, recipes with more input requirement entries (excluding level and stage requirements) come first, followed by recipe ID in ascending order.
+
 `runtimeRequirements` and `runtimeMachineOutputs` generate execution values with modifiers applied; do not confuse them with the original declaration lists. `RecipeExecutionView` comes from the recipe start context snapshot and contains the results of adjustments made by that callback.
 
 ### `IoSnapshot`
@@ -1606,7 +1618,11 @@ FailurePhase phase();
 @Nullable Integer requirementIndex();
 ```
 
-A failed result might have no diagnostic object (such as a commit without simulation or a duplicate commit), so `failure()==null` does not equal successful. `reasonTranslationKey` is the localization key. Failure mode RESET/STILL/DECREASE declares the progress reset, hold or rollback strategy respectively; the default is STILL.
+A failed result might have no diagnostic object (such as a commit without simulation or a duplicate commit), so `failure()==null` does not equal successful. `reasonTranslationKey` is the localization key. `reasonPriority()` returns the failure reason priority, or `null` when there is no reason. When comparing failure reasons, **larger values take precedence**, the opposite of recipe search priority. Normally, reason priority is compared first, followed by candidate validity. During recipe search, if both candidates are requirement-planning failures, requirement matching progress is compared first (higher progress wins), then reason priority. The largest `reasonPriority` therefore does not always determine the primary diagnostic.
+
+Source: [Primary diagnostic selection](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/80fd9220075a26a4bb77386a31b83fccc9ec7c3f/src/main/java/cn/howxu/mmcr/api/capability/status/FailureReport.java).
+
+Failure mode RESET/STILL/DECREASE declares the progress reset, hold or rollback strategy respectively; the default is STILL.
 
 ### `OutputView`, `ItemOutputView`, and `FluidOutputView`
 
@@ -1798,6 +1814,10 @@ long transferLimit();
 
 public record ResourceAction<R>(int slot, R resource, long amount, boolean insert) {}
 ```
+
+`outputPriority()` is the capability's output allocation priority: **larger values are tried first when sending outputs**. For example, `10` precedes `0`. Equal priorities preserve the original order of the supplied capability list. This does not affect input extraction order and is not a recipe selection priority.
+
+Source: [Output capability ordering](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/80fd9220075a26a4bb77386a31b83fccc9ec7c3f/src/main/java/cn/howxu/mmcr/api/recipe/requirement/RequirementHandlerSupport.java).
 
 `ResourceStore`/`LongStore` are not public SPIs that you can implement to register ports. The amount passed to `prepareValue` is the **total already scaled by parallelism**; do not multiply by parallelism again. A resource action describes insertion into or extraction from a specified slot. The resource type comes from the capability declaration; first use Optional to check that it matches.
 

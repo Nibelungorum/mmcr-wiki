@@ -4,7 +4,7 @@ title: KubeJS API
 
 # KubeJS API
 
-This page is a consolidated reference for MMCR's KubeJS integration, targeting **Minecraft 26.1.2**, with commit [`80fd9220`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/80fd9220075a26a4bb77386a31b83fccc9ec7c3f/gradle.properties) as the source baseline. Examples use KubeJS/Rhino JavaScript syntax.
+This page is a consolidated reference for MMCR's KubeJS integration, targeting **Minecraft 26.1.2**, with commit [`0b4e5f32`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/0b4e5f32265a19314bfca1134b74450f7d2e9018/gradle.properties) as the source baseline. Examples use KubeJS/Rhino JavaScript syntax.
 
 MMCR's KubeJS API has three declaration windows: machine, tier, modifier, and screen text registration in startup scripts; structure and programmatic recipe registration during server script loading; and data-driven recipe registration in `ServerEvents.recipes`. Changes to startup declarations require a restart; server-side structures and recipes can be replaced during a resource reload. There are also client-side recipe information events.
 
@@ -555,7 +555,7 @@ const policy = MMCR.getAPI().outputPolicy().ALLOW_PARTIAL
 
 ```javascript
 const operation = MMCR.getAPI().modifierOperation()
-machine.durationByInterface("temperature", 0, 100, 2, 0.5, operation.ADD)
+machine.durationByInterface("temperature", value => 2 - value * 0.015, operation.ADD)
 ```
 
 #### `ScreenScopeValues`
@@ -2331,226 +2331,241 @@ machine.shareSmartInterface()
 machine.shareSmartInterface(true)
 ```
 
-:::warning Current Implementation Note
+##### Smart Interface Function Modifiers
 
-After machine modifiers were unified, `itemInputByInterface(...)`, `itemInputChanceByInterface(...)`, `fluidInputByInterface(...)`, and `fluidInputChanceByInterface(...)` remain on the builder, but current target validation does not accept input scopes for `item` / `fluid`, so calling them throws `IllegalArgumentException`. `durationByInterface(...)`, `energyByInterface(...)`, chemical input/output methods, heat input/output methods, and the other output-side variants use supported targets.
+The old `min/max/atMin/atMax` endpoint overloads of `XxxByInterface` have been removed. Pass a `DoubleUnaryOperator mapping` instead; Rhino accepts JavaScript arrow functions directly. The function receives the actual interface value and returns an operation operand, not the final recipe value. For example, returning `0.5` with the default `MULTIPLY` means multiplying by `0.5`; returning `5` with `ADD` means adding `5`.
+
+Functions must depend only on the input value and return a finite number. Do not read the world, random numbers, or time, or modify external state. The library does not interpolate or clamp automatically; implement any piecewise logic or clamping inside the function. `smartInterface(type, min, max)` still declares the interface value range, but no longer provides endpoint mappings for modifier functions.
+
+All methods return the current `MachineBuilderJS`. Omitting the operation uses `MULTIPLY`. Methods with an operation overload accept `ADD` / `MULTIPLY` / `SUBTRACT` / `DIVIDE` from `api.modifierOperation()`, not arbitrary strings. Item, fluid, chemical, and heat quantity helpers have no additional operation-parameter overload. Resource output methods normalize the target to `output`, so their names do not restrict them to a single output resource type.
+
+Creating a declaration validates the interface type name, target, and chance flag without executing the mapping function. A `null` `mapping` throws `NullPointerException`; a blank type name or unsupported target combination throws `IllegalArgumentException`. Nonfinite inputs or results of `NaN` / positive or negative infinity are rejected during evaluation; exceptions from the function are not detected in advance during registration. The controller evaluates functions when refreshing smart modifiers, not necessarily every tick. If an individual mapping throws `RuntimeException`, it logs the error, skips that modifier, and continues with other rules. Each interface block with a value of the corresponding type generates modifiers for each rule. Multiple rules still stack; they are not automatically selected mutually exclusively by ranges inside the functions. JEI displays only function mapping metadata, without sampling functions or displaying the old endpoint ranges.
+
+Source (`0b4e5f32`): [Builder signatures](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/0b4e5f32265a19314bfca1134b74450f7d2e9018/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineBuilderJS.java), [Function evaluation and validation](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/0b4e5f32265a19314bfca1134b74450f7d2e9018/src/main/java/cn/howxu/mmcr/api/machine/SmartInterfaceModifier.java), [Rhino function tests](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/0b4e5f32265a19314bfca1134b74450f7d2e9018/src/test/java/cn/howxu/mmcr/compat/kubejs/KubeJSApiTest.java).
+
+:::warning Current Implementation Note
+`itemInputByInterface(...)`, `itemInputChanceByInterface(...)`, `fluidInputByInterface(...)`, and `fluidInputChanceByInterface(...)` have function signatures, but current target validation still rejects the `item` / `fluid` input scope. Calling them immediately throws `IllegalArgumentException` without executing the function.
 :::
 
-##### `durationByInterface(String type, float min, float max, float atMin, float atMax) → MachineBuilderJS`
+##### `durationByInterface(String type, DoubleUnaryOperator mapping) → MachineBuilderJS`
 
-- **Parameters**: `type` (`String`) — the smart interface type; `min`/`max` (`float`) — the active range; `atMin`/`atMax` (`float`) — the duration modifier values at the range endpoints.
-- **Returns**: The current builder; the default operation is `MULTIPLY`.
-- **Throws**: An exception during machine definition construction if the range or interface type is invalid.
-- **Default**: The operation is multiplication.
-- **Example**:
-
-```javascript
-machine.durationByInterface("temperature", 0, 100, 2, 0.5)
-```
-
-##### `durationByInterface(String type, float min, float max, float atMin, float atMax, RecipeModifier.Operation operation) → MachineBuilderJS`
-
-- **Parameters**: The first five parameters are the same as above; `operation` (`RecipeModifier.Operation`) — `ADD`, `MULTIPLY`, `SUBTRACT`, or `DIVIDE`.
+- **Parameters**: `type` (`String`) — the smart interface type name; `mapping` (`DoubleUnaryOperator`) — converts the actual interface value to an operation operand for recipe duration.
 - **Returns**: The current builder.
-- **Throws**: `IllegalArgumentException` if the smart interface range is invalid or `operation` is null or unsupported.
-- **Default**: No additional defaults; you must explicitly supply an operation unless you use the five-argument overload.
-- **Example**:
-
-```javascript
-const operation = MMCR.getAPI().modifierOperation()
-machine.durationByInterface("temperature", 0, 100, 2, 0.5, operation.ADD)
-```
-
-##### `energyByInterface(String type, float min, float max, float atMin, float atMax) → MachineBuilderJS`
-
-- **Parameters**: `type`, `min`, `max`, `atMin`, `atMax` — the same as `durationByInterface`, targeting energy consumption.
-- **Returns**: The current builder; the default operation is multiplication.
-- **Throws**: An exception during the final build if the range or type is invalid.
+- **Throws**: See the declaration validation and runtime evaluation rules at the start of this section.
 - **Default**: The operation is `MULTIPLY`.
-- **Example**:
 
 ```javascript
-machine.energyByInterface("mode", 1, 3, 1, 2)
+machine.durationByInterface("temperature", value => 2 - value * 0.015)
 ```
 
-##### `energyByInterface(String type, float min, float max, float atMin, float atMax, RecipeModifier.Operation operation) → MachineBuilderJS`
+##### `durationByInterface(String type, DoubleUnaryOperator mapping, RecipeModifier.Operation operation) → MachineBuilderJS`
 
-- **Parameters**: The first five parameters are the same as above; `operation` (`RecipeModifier.Operation`), the operation to apply.
+- **Parameters**: `type` (`String`) — the smart interface type name; `mapping` (`DoubleUnaryOperator`) — converts the actual interface value to an operation operand for recipe duration. `operation` (`RecipeModifier.Operation`) — the operation.
 - **Returns**: The current builder.
-- **Throws**: An exception if the operation or range is invalid.
-- **Default**: No additional defaults.
-- **Example**:
+- **Throws**: See the declaration validation and runtime evaluation rules at the start of this section.
+- **Default**: A `null` `operation` uses `MULTIPLY`.
 
 ```javascript
 const operation = MMCR.getAPI().modifierOperation()
-machine.energyByInterface("mode", 1, 3, 1, 2, operation.MULTIPLY)
+machine.durationByInterface("temperature", value => 2 - value * 0.015, operation.ADD)
 ```
 
-##### `itemInputByInterface(String type, float min, float max, float atMin, float atMax) → MachineBuilderJS`
+##### `energyByInterface(String type, DoubleUnaryOperator mapping) → MachineBuilderJS`
 
-- **Parameters**: `type`, `min`, `max`, `atMin`, `atMax`, the smart interface range and item input quantity modifier values.
-- **Returns**: The current builder; targets item input quantity, with multiplication as the fixed operation.
-- **Throws**: `IllegalArgumentException` when called, because current unified modifier target validation does not support `item` / `input`.
-
-##### `itemOutputByInterface(String type, float min, float max, float atMin, float atMax) → MachineBuilderJS`
-
-- **Parameters**: `type`, `min`, `max`, `atMin`, `atMax`, the item output quantity modifier parameters.
-- **Returns**: The current builder; the operation is fixed to multiplication.
-- **Throws**: An exception if the range or type is invalid.
-- **Default**: Does not affect output chance.
-- **Example**:
-
-```javascript
-machine.itemOutputByInterface("batch", 1, 4, 1, 4)
-```
-
-##### `itemInputChanceByInterface(String type, float min, float max, float atMin, float atMax) → MachineBuilderJS`
-
-- **Parameters**: `type`, `min`, `max`, `atMin`, `atMax`, the item input chance modifier parameters.
-- **Returns**: The current builder; the default operation is multiplication and affects only input chance.
-- **Throws**: `IllegalArgumentException` when called, because current unified modifier target validation does not support `item` / `input`.
-
-##### `itemInputChanceByInterface(String type, float min, float max, float atMin, float atMax, RecipeModifier.Operation operation) → MachineBuilderJS`
-
-- **Parameters**: The first five parameters are the same as above; `operation` (`RecipeModifier.Operation`), the operation applied to the chance.
+- **Parameters**: `type` (`String`) — the smart interface type name; `mapping` (`DoubleUnaryOperator`) — converts the actual interface value to an operation operand for energy input.
 - **Returns**: The current builder.
-- **Throws**: An exception if the operation or range is invalid; this input target also currently triggers `IllegalArgumentException` in unified modifier target validation.
-
-##### `itemOutputChanceByInterface(String type, float min, float max, float atMin, float atMax) → MachineBuilderJS`
-
-- **Parameters**: `type`, `min`, `max`, `atMin`, `atMax`, the item output chance modifier parameters.
-- **Returns**: The current builder; the default operation is multiplication, applied to output chance.
-- **Throws**: An exception if the range or type is invalid.
+- **Throws**: See the declaration validation and runtime evaluation rules at the start of this section.
 - **Default**: The operation is `MULTIPLY`.
-- **Example**:
 
 ```javascript
-machine.itemOutputChanceByInterface("quality", 0, 1, 0.5, 1)
+machine.energyByInterface("mode", value => Math.pow(2, value - 1))
 ```
 
-##### `itemOutputChanceByInterface(String type, float min, float max, float atMin, float atMax, RecipeModifier.Operation operation) → MachineBuilderJS`
+##### `energyByInterface(String type, DoubleUnaryOperator mapping, RecipeModifier.Operation operation) → MachineBuilderJS`
 
-- **Parameters**: The first five parameters are the same as above; `operation` (`RecipeModifier.Operation`), the operation applied to the chance.
+- **Parameters**: `type` (`String`) — the smart interface type name; `mapping` (`DoubleUnaryOperator`) — converts the actual interface value to an operation operand for energy input. `operation` (`RecipeModifier.Operation`) — the operation.
 - **Returns**: The current builder.
-- **Throws**: An exception if the operation, range, or type is invalid.
-- **Default**: No additional defaults.
-- **Example**:
+- **Throws**: See the declaration validation and runtime evaluation rules at the start of this section.
+- **Default**: A `null` `operation` uses `MULTIPLY`.
 
 ```javascript
 const operation = MMCR.getAPI().modifierOperation()
-machine.itemOutputChanceByInterface("quality", 0, 1, 0.5, 1, operation.MULTIPLY)
+machine.energyByInterface("mode", value => Math.pow(2, value - 1), operation.MULTIPLY)
 ```
 
-##### `fluidInputByInterface(String type, float min, float max, float atMin, float atMax) → MachineBuilderJS`
+##### `itemInputByInterface(String type, DoubleUnaryOperator mapping) → MachineBuilderJS`
 
-- **Parameters**: `type`, `min`, `max`, `atMin`, `atMax`, the fluid input quantity modifier parameters.
-- **Returns**: The current builder; the operation is fixed to multiplication.
-- **Throws**: `IllegalArgumentException` when called, because current unified modifier target validation does not support `fluid` / `input`.
-
-##### `fluidOutputByInterface(String type, float min, float max, float atMin, float atMax) → MachineBuilderJS`
-
-- **Parameters**: `type`, `min`, `max`, `atMin`, `atMax`, the fluid output quantity modifier parameters.
-- **Returns**: The current builder; the operation is fixed to multiplication.
-- **Throws**: An exception if the range or type is invalid.
-- **Default**: Does not affect fluid output chance.
-- **Example**:
-
-```javascript
-machine.fluidOutputByInterface("pressure", 0, 100, 1, 2)
-```
-
-##### `fluidInputChanceByInterface(String type, float min, float max, float atMin, float atMax) → MachineBuilderJS`
-
-- **Parameters**: `type`, `min`, `max`, `atMin`, `atMax`, the fluid input chance modifier parameters.
-- **Returns**: The current builder; the default operation is multiplication.
-- **Throws**: `IllegalArgumentException` when called, because current unified modifier target validation does not support `fluid` / `input`.
-
-##### `fluidInputChanceByInterface(String type, float min, float max, float atMin, float atMax, RecipeModifier.Operation operation) → MachineBuilderJS`
-
-- **Parameters**: The first five parameters are the same as above; `operation` (`RecipeModifier.Operation`) — the operation applied to the chance.
+- **Parameters**: `type` (`String`) — the smart interface type name; `mapping` (`DoubleUnaryOperator`) — converts the actual interface value to an operation operand for item input amount.
 - **Returns**: The current builder.
-- **Throws**: An exception if the operation or range is invalid; this input target also currently triggers `IllegalArgumentException` in unified modifier target validation.
-
-##### `fluidOutputChanceByInterface(String type, float min, float max, float atMin, float atMax) → MachineBuilderJS`
-
-- **Parameters**: `type`, `min`, `max`, `atMin`, `atMax`, the fluid output chance modifier parameters.
-- **Returns**: The current builder; the default operation is multiplication.
-- **Throws**: An exception if the range or type is invalid.
+- **Throws**: Current target validation does not support `item` / `input`; calling this method throws `IllegalArgumentException`.
 - **Default**: The operation is `MULTIPLY`.
-- **Example**:
+
+##### `itemOutputByInterface(String type, DoubleUnaryOperator mapping) → MachineBuilderJS`
+
+- **Parameters**: `type` (`String`) — the smart interface type name; `mapping` (`DoubleUnaryOperator`) — converts the actual interface value to an operation operand for output amount.
+- **Returns**: The current builder.
+- **Throws**: See the declaration validation and runtime evaluation rules at the start of this section.
+- **Default**: The operation is `MULTIPLY`.
 
 ```javascript
-machine.fluidOutputChanceByInterface("quality", 0, 1, 0.5, 1)
+machine.itemOutputByInterface("batch", value => value)
 ```
 
-##### `fluidOutputChanceByInterface(String type, float min, float max, float atMin, float atMax, RecipeModifier.Operation operation) → MachineBuilderJS`
+##### `itemInputChanceByInterface(String type, DoubleUnaryOperator mapping) → MachineBuilderJS`
 
-- **Parameters**: The first five parameters are the same as above; `operation` (`RecipeModifier.Operation`), the operation applied to the chance.
+- **Parameters**: `type` (`String`) — the smart interface type name; `mapping` (`DoubleUnaryOperator`) — converts the actual interface value to an operation operand for item input consumption chance.
 - **Returns**: The current builder.
-- **Throws**: An exception if the operation or range is invalid.
-- **Default**: No additional defaults.
-- **Example**:
+- **Throws**: Current target validation does not support `item` / `input`; calling this method throws `IllegalArgumentException`.
+- **Default**: The operation is `MULTIPLY`.
+
+##### `itemInputChanceByInterface(String type, DoubleUnaryOperator mapping, RecipeModifier.Operation operation) → MachineBuilderJS`
+
+- **Parameters**: `type` (`String`) — the smart interface type name; `mapping` (`DoubleUnaryOperator`) — converts the actual interface value to an operation operand for item input consumption chance. `operation` (`RecipeModifier.Operation`) — the operation.
+- **Returns**: The current builder.
+- **Throws**: Current target validation does not support `item` / `input`; calling this method throws `IllegalArgumentException`.
+- **Default**: A `null` `operation` uses `MULTIPLY`.
+
+##### `itemOutputChanceByInterface(String type, DoubleUnaryOperator mapping) → MachineBuilderJS`
+
+- **Parameters**: `type` (`String`) — the smart interface type name; `mapping` (`DoubleUnaryOperator`) — converts the actual interface value to an operation operand for output chance.
+- **Returns**: The current builder.
+- **Throws**: See the declaration validation and runtime evaluation rules at the start of this section.
+- **Default**: The operation is `MULTIPLY`.
+
+```javascript
+machine.itemOutputChanceByInterface("quality", value => 0.5 + value * 0.5)
+```
+
+##### `itemOutputChanceByInterface(String type, DoubleUnaryOperator mapping, RecipeModifier.Operation operation) → MachineBuilderJS`
+
+- **Parameters**: `type` (`String`) — the smart interface type name; `mapping` (`DoubleUnaryOperator`) — converts the actual interface value to an operation operand for output chance. `operation` (`RecipeModifier.Operation`) — the operation.
+- **Returns**: The current builder.
+- **Throws**: See the declaration validation and runtime evaluation rules at the start of this section.
+- **Default**: A `null` `operation` uses `MULTIPLY`.
 
 ```javascript
 const operation = MMCR.getAPI().modifierOperation()
-machine.fluidOutputChanceByInterface("quality", 0, 1, 0.5, 1, operation.ADD)
+machine.itemOutputChanceByInterface("quality", value => 0.5 + value * 0.5, operation.MULTIPLY)
 ```
 
-##### `chemicalInputByInterface(String type, float min, float max, float atMin, float atMax) → MachineBuilderJS`
+##### `fluidInputByInterface(String type, DoubleUnaryOperator mapping) → MachineBuilderJS`
 
-- **Parameters**: `type`, `min`, `max`, `atMin`, `atMax`: the smart interface type, input value range, and endpoint modifier values for chemical input quantity, respectively.
-- **Returns**: The current builder; the default operation is `MULTIPLY`, applied to chemical input quantity.
-- **Throws**: `IllegalArgumentException` if the smart interface range or type is invalid.
+- **Parameters**: `type` (`String`) — the smart interface type name; `mapping` (`DoubleUnaryOperator`) — converts the actual interface value to an operation operand for fluid input amount.
+- **Returns**: The current builder.
+- **Throws**: Current target validation does not support `fluid` / `input`; calling this method throws `IllegalArgumentException`.
+- **Default**: The operation is `MULTIPLY`.
 
-##### `chemicalOutputByInterface(String type, float min, float max, float atMin, float atMax) → MachineBuilderJS`
+##### `fluidOutputByInterface(String type, DoubleUnaryOperator mapping) → MachineBuilderJS`
 
-- **Parameters**: Same as `chemicalInputByInterface`, with endpoint modifier values applied to chemical output quantity.
-- **Returns**: The current builder; the default operation is `MULTIPLY`.
-- **Throws**: `IllegalArgumentException` if the smart interface range or type is invalid.
+- **Parameters**: `type` (`String`) — the smart interface type name; `mapping` (`DoubleUnaryOperator`) — converts the actual interface value to an operation operand for output amount.
+- **Returns**: The current builder.
+- **Throws**: See the declaration validation and runtime evaluation rules at the start of this section.
+- **Default**: The operation is `MULTIPLY`.
 
-##### `chemicalInputChanceByInterface(String type, float min, float max, float atMin, float atMax) → MachineBuilderJS`
+```javascript
+machine.fluidOutputByInterface("pressure", value => 1 + value / 100)
+```
 
-- **Parameters**: Same as `chemicalInputByInterface`, with endpoint modifier values applied to the chance of consuming chemical inputs.
-- **Returns**: The current builder; the default operation is `MULTIPLY`.
-- **Throws**: `IllegalArgumentException` if the smart interface range or type is invalid.
+##### `fluidInputChanceByInterface(String type, DoubleUnaryOperator mapping) → MachineBuilderJS`
 
-##### `chemicalInputChanceByInterface(String type, float min, float max, float atMin, float atMax, RecipeModifier.Operation operation) → MachineBuilderJS`
+- **Parameters**: `type` (`String`) — the smart interface type name; `mapping` (`DoubleUnaryOperator`) — converts the actual interface value to an operation operand for fluid input consumption chance.
+- **Returns**: The current builder.
+- **Throws**: Current target validation does not support `fluid` / `input`; calling this method throws `IllegalArgumentException`.
+- **Default**: The operation is `MULTIPLY`.
 
-- **Parameters**: The first five parameters are the same as above; `operation` (`RecipeModifier.Operation`) — `ADD`, `MULTIPLY`, `SUBTRACT`, or `DIVIDE`.
-- **Returns**: The current builder; affects the chance of consuming chemical inputs.
-- **Throws**: `IllegalArgumentException` if the operation, range, or type is invalid.
+##### `fluidInputChanceByInterface(String type, DoubleUnaryOperator mapping, RecipeModifier.Operation operation) → MachineBuilderJS`
 
-##### `chemicalOutputChanceByInterface(String type, float min, float max, float atMin, float atMax) → MachineBuilderJS`
+- **Parameters**: `type` (`String`) — the smart interface type name; `mapping` (`DoubleUnaryOperator`) — converts the actual interface value to an operation operand for fluid input consumption chance. `operation` (`RecipeModifier.Operation`) — the operation.
+- **Returns**: The current builder.
+- **Throws**: Current target validation does not support `fluid` / `input`; calling this method throws `IllegalArgumentException`.
+- **Default**: A `null` `operation` uses `MULTIPLY`.
 
-- **Parameters**: Same as `chemicalInputByInterface`, with endpoint modifier values applied to chemical output chance.
-- **Returns**: The current builder; the default operation is `MULTIPLY`.
-- **Throws**: `IllegalArgumentException` if the smart interface range or type is invalid.
+##### `fluidOutputChanceByInterface(String type, DoubleUnaryOperator mapping) → MachineBuilderJS`
 
-##### `chemicalOutputChanceByInterface(String type, float min, float max, float atMin, float atMax, RecipeModifier.Operation operation) → MachineBuilderJS`
+- **Parameters**: `type` (`String`) — the smart interface type name; `mapping` (`DoubleUnaryOperator`) — converts the actual interface value to an operation operand for output chance.
+- **Returns**: The current builder.
+- **Throws**: See the declaration validation and runtime evaluation rules at the start of this section.
+- **Default**: The operation is `MULTIPLY`.
 
-- **Parameters**: The first five parameters are the same as above; `operation` (`RecipeModifier.Operation`) — the operation applied to the chance.
-- **Returns**: The current builder; affects chemical output chance.
-- **Throws**: `IllegalArgumentException` if the operation, range, or type is invalid.
+```javascript
+machine.fluidOutputChanceByInterface("quality", value => 0.5 + value * 0.5)
+```
 
-##### `heatInputByInterface(String type, float min, float max, float atMin, float atMax) → MachineBuilderJS`
+##### `fluidOutputChanceByInterface(String type, DoubleUnaryOperator mapping, RecipeModifier.Operation operation) → MachineBuilderJS`
 
-- **Parameters**: `type`, `min`, `max`, `atMin`, `atMax`: the smart interface type, input value range, and endpoint modifier values for heat input, respectively.
-- **Returns**: The current builder; the default operation is `MULTIPLY`, applied to the heat input value.
-- **Throws**: `IllegalArgumentException` if the smart interface range or type is invalid.
+- **Parameters**: `type` (`String`) — the smart interface type name; `mapping` (`DoubleUnaryOperator`) — converts the actual interface value to an operation operand for output chance. `operation` (`RecipeModifier.Operation`) — the operation.
+- **Returns**: The current builder.
+- **Throws**: See the declaration validation and runtime evaluation rules at the start of this section.
+- **Default**: A `null` `operation` uses `MULTIPLY`.
 
-##### `heatOutputByInterface(String type, float min, float max, float atMin, float atMax) → MachineBuilderJS`
+```javascript
+const operation = MMCR.getAPI().modifierOperation()
+machine.fluidOutputChanceByInterface("quality", value => 0.5 + value * 0.5, operation.ADD)
+```
 
-- **Parameters**: Same as `heatInputByInterface`, with endpoint modifier values applied to the heat output value.
-- **Returns**: The current builder; the default operation is `MULTIPLY`.
-- **Throws**: `IllegalArgumentException` if the smart interface range or type is invalid.
+##### `chemicalInputByInterface(String type, DoubleUnaryOperator mapping) → MachineBuilderJS`
+
+- **Parameters**: `type` (`String`) — the smart interface type name; `mapping` (`DoubleUnaryOperator`) — converts the actual interface value to an operation operand for chemical input amount.
+- **Returns**: The current builder.
+- **Throws**: See the declaration validation and runtime evaluation rules at the start of this section.
+- **Default**: The operation is `MULTIPLY`.
+
+##### `chemicalOutputByInterface(String type, DoubleUnaryOperator mapping) → MachineBuilderJS`
+
+- **Parameters**: `type` (`String`) — the smart interface type name; `mapping` (`DoubleUnaryOperator`) — converts the actual interface value to an operation operand for output amount.
+- **Returns**: The current builder.
+- **Throws**: See the declaration validation and runtime evaluation rules at the start of this section.
+- **Default**: The operation is `MULTIPLY`.
+
+##### `chemicalInputChanceByInterface(String type, DoubleUnaryOperator mapping) → MachineBuilderJS`
+
+- **Parameters**: `type` (`String`) — the smart interface type name; `mapping` (`DoubleUnaryOperator`) — converts the actual interface value to an operation operand for chemical input consumption chance.
+- **Returns**: The current builder.
+- **Throws**: See the declaration validation and runtime evaluation rules at the start of this section.
+- **Default**: The operation is `MULTIPLY`.
+
+##### `chemicalInputChanceByInterface(String type, DoubleUnaryOperator mapping, RecipeModifier.Operation operation) → MachineBuilderJS`
+
+- **Parameters**: `type` (`String`) — the smart interface type name; `mapping` (`DoubleUnaryOperator`) — converts the actual interface value to an operation operand for chemical input consumption chance. `operation` (`RecipeModifier.Operation`) — the operation.
+- **Returns**: The current builder.
+- **Throws**: See the declaration validation and runtime evaluation rules at the start of this section.
+- **Default**: A `null` `operation` uses `MULTIPLY`.
+
+##### `chemicalOutputChanceByInterface(String type, DoubleUnaryOperator mapping) → MachineBuilderJS`
+
+- **Parameters**: `type` (`String`) — the smart interface type name; `mapping` (`DoubleUnaryOperator`) — converts the actual interface value to an operation operand for output chance.
+- **Returns**: The current builder.
+- **Throws**: See the declaration validation and runtime evaluation rules at the start of this section.
+- **Default**: The operation is `MULTIPLY`.
+
+##### `chemicalOutputChanceByInterface(String type, DoubleUnaryOperator mapping, RecipeModifier.Operation operation) → MachineBuilderJS`
+
+- **Parameters**: `type` (`String`) — the smart interface type name; `mapping` (`DoubleUnaryOperator`) — converts the actual interface value to an operation operand for output chance. `operation` (`RecipeModifier.Operation`) — the operation.
+- **Returns**: The current builder.
+- **Throws**: See the declaration validation and runtime evaluation rules at the start of this section.
+- **Default**: A `null` `operation` uses `MULTIPLY`.
+
+##### `heatInputByInterface(String type, DoubleUnaryOperator mapping) → MachineBuilderJS`
+
+- **Parameters**: `type` (`String`) — the smart interface type name; `mapping` (`DoubleUnaryOperator`) — converts the actual interface value to an operation operand for heat input.
+- **Returns**: The current builder.
+- **Throws**: See the declaration validation and runtime evaluation rules at the start of this section.
+- **Default**: The operation is `MULTIPLY`.
+
+##### `heatOutputByInterface(String type, DoubleUnaryOperator mapping) → MachineBuilderJS`
+
+- **Parameters**: `type` (`String`) — the smart interface type name; `mapping` (`DoubleUnaryOperator`) — converts the actual interface value to an operation operand for output amount.
+- **Returns**: The current builder.
+- **Throws**: See the declaration validation and runtime evaluation rules at the start of this section.
+- **Default**: The operation is `MULTIPLY`.
 
 Example:
 
 ```javascript
 machine
-    .chemicalInputByInterface("chemical_rate", 0, 100, 1, 2)
-    .chemicalOutputChanceByInterface("quality", 0, 100, 0.5, 1, MMCR.getAPI().modifierOperation().MULTIPLY)
-    .heatInputByInterface("temperature", 0, 100, 1, 1.5)
+    .chemicalInputByInterface("chemical_rate", value => 1 + value / 100)
+    .chemicalOutputChanceByInterface("quality", value => 0.5 + value / 200, MMCR.getAPI().modifierOperation().MULTIPLY)
+    .heatInputByInterface("temperature", value => 1 + value / 200)
 ```
 
 #### Port Predicate and Tier Shortcuts
@@ -4307,7 +4322,7 @@ This class is an internal bridge that is not visible to scripts.
 The index below covers all 22 source files under `compat/kubejs`, making it easier to check public entry points, hidden overloads, and internal calls. Links are pinned to their corresponding source commits.
 
 - **Globals and events**: [MMCRKubeJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/MMCRKubeJS.java), [MMCRValues](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/MMCRValues.java), [MMCREvents](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/MMCREvents.java), [MMCRStartupEventJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/MMCRStartupEventJS.java), [MMCRServerEventJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/MMCRServerEventJS.java), [RecipeInformationEventJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/RecipeInformationEventJS.java).
-- **Machines and structures**: [MachineBuilderJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineBuilderJS.java), [MachineStructureBuilderJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineStructureBuilderJS.java), [MachineStructureStageBuilderJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineStructureStageBuilderJS.java), [MachineBehaviorBuilderJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineBehaviorBuilderJS.java), [MachineLevelBuilderJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineLevelBuilderJS.java), [LevelTypeBuilderJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/LevelTypeBuilderJS.java).
+- **Machines and structures**: [MachineBuilderJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/0b4e5f32265a19314bfca1134b74450f7d2e9018/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineBuilderJS.java), [MachineStructureBuilderJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineStructureBuilderJS.java), [MachineStructureStageBuilderJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineStructureStageBuilderJS.java), [MachineBehaviorBuilderJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineBehaviorBuilderJS.java), [MachineLevelBuilderJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineLevelBuilderJS.java), [LevelTypeBuilderJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/LevelTypeBuilderJS.java).
 - **Factories and recipes**: [KubeJSApi](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/KubeJSApi.java), [KubeJSInterfaceHelpers](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/KubeJSInterfaceHelpers.java), [MachineRecipeBuilderJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineRecipeBuilderJS.java), [MachineRecipeSchema](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineRecipeSchema.java), [MachineRecipeFactory](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineRecipeFactory.java).
 - **Text**: [ControllerScreenTextEventJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/ControllerScreenTextEventJS.java).
 - **Loading and synchronization**: [Plugin](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/59943952980c1ae5048537a00b5978ef483e3818/src/main/java/cn/howxu/mmcr/compat/kubejs/Plugin.java), [KubeJSContentReloadTransaction](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/KubeJSContentReloadTransaction.java), [KubeJSRecipeSync](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/KubeJSRecipeSync.java), [KubeJSReloadHooks](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/KubeJSReloadHooks.java).

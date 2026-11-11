@@ -37,7 +37,7 @@ Smart Interface affects both "whether a recipe is selected" (filtered by `min_va
 
 | KubeJS API | Documentation Location |
 | --- | --- |
-| `smartInterface(String, float)` / `(String, float, float)`, `shareSmartInterface()` / `(boolean)`, and the 5 / 6-parameter versions of `energyByInterface` / `durationByInterface` | [API/KubeJS#machinebuilderjs](../API/KubeJS#machinebuilderjs) |
+| `smartInterface(String, float)` / `(String, float, float)`, `shareSmartInterface()` / `(boolean)`, and the function-based 2 / 3-parameter versions of `energyByInterface` / `durationByInterface` | [API/KubeJS#machinebuilderjs](../API/KubeJS#machinebuilderjs) |
 | `SmartInterfaceTypeBuilderJS` | [API/KubeJS#smartinterfacetypebuilderjs](../API/KubeJS#smartinterfacetypebuilderjs) |
 | `smartInterface()`, `smartInterfaceInput(String, float, float)`, `smartInterfaceOutput(String, float)` | [API/KubeJS#kubejsapi](../API/KubeJS#kubejsapi) |
 | `MachineRecipeBuilderJS.smartInterfaceInput(String, float)` / `(String, float, float)`, `smartInterfaceOutput(String, float)` | [API/KubeJS#machinerecipebuilderjs](../API/KubeJS#machinerecipebuilderjs) |
@@ -45,7 +45,7 @@ Smart Interface affects both "whether a recipe is selected" (filtered by `min_va
 
 ## Machine Definition
 
-[A_Smart_Machine.js](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/example/startup_scripts/A_Smart_Machine.js) in the `startup_scripts/` directory:
+[A_Smart_Machine.js](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/0b4e5f32265a19314bfca1134b74450f7d2e9018/example/startup_scripts/A_Smart_Machine.js) in the `startup_scripts/` directory:
 
 ```js
 // Use the smart interface system to control machine parameters.
@@ -64,11 +64,12 @@ MMCREvents.startup(event => {
         // Register a smart interface.
         .smartInterface('kubejs_mode', 1, 3).priority(1).valueType('integer').end()
         .smartInterface('kubejs_conversation', 0, 1).priority(0).valueType('float').end()
-        // After end(), machine parameters can be modified according to the interface value.
-        .energyByInterface('kubejs_mode', 1, 2, 1.0, 2.0)
-        .energyByInterface('kubejs_mode', 2, 3, 2.0, 4.0)
-        .durationByInterface('kubejs_conversation', 0, 0.5, 1.0, 1.5)
-        .durationByInterface('kubejs_conversation', 0.5, 1, 1.5, 2.5)
+        // Functions receive the actual interface value and return a multiplier; MULTIPLY is the default.
+        .energyByInterface('kubejs_mode', value => Math.pow(2, value - 1))
+        .durationByInterface('kubejs_conversation', value => {
+            if (value <= 0.5) return 1 + value
+            return 0.5 + 2 * value
+        })
 
     builder.register()
 })
@@ -101,7 +102,7 @@ Three methods on the temporary builder ([API/KubeJS#smartinterfacetypebuilderjs]
 
 | Method | Default | Purpose |
 | --- | --- | --- |
-| `.priority(int)` | `0` | Sorting priority of the interface type, not a rule for choosing a "winner" among interface blocks of the same type. |
+| `.priority(int)` | `0` | Stored in the interface type declaration; currently unused for sorting or interface selection, so neither larger nor smaller values take precedence. |
 | `.valueType(String)` | `'float'` | Interface value type. Accepts `'float'` / `'int'` / `'integer'` (case-insensitive). `null` or blank falls back to `FLOAT`. |
 | `.end()` | — | Close the current interface definition and return to the parent `MachineBuilderJS`. **Must be called**. |
 
@@ -120,35 +121,36 @@ Each `.smartInterface(...)` must end with `.end()`. The next `.smartInterface(..
 
 The two interface definitions can coexist.
 
-### `.energyByInterface(type, min, max, atMin, atMax)` Maps Interface Values to Energy Consumption
+### `.energyByInterface(type, mapping)` Maps Interface Values to Energy Consumption
 
 ```js
-.energyByInterface('kubejs_mode', 1, 2, 1.0, 2.0)
-.energyByInterface('kubejs_mode', 2, 3, 2.0, 4.0)
+.energyByInterface('kubejs_mode', value => Math.pow(2, value - 1))
 ```
 
-Five parameters: `type` (the registered smart interface type name), `min` / `max` (range endpoints), and `atMin` / `atMax` (modifier values corresponding to the range endpoints).
+Two parameters: `type` is the declared smart interface type name; `mapping` is a JavaScript function that Rhino converts to `DoubleUnaryOperator`. The function receives the interface's actual current value and returns a modifier operand. The default operation here is `MULTIPLY`, so mode = 1 / 2 / 3 returns energy multipliers of **1 / 2 / 4**, rather than directly setting FE/t to 1 / 2 / 4.
 
-The first mapping linearly maps `[1, 2]` to `[1.0, 2.0]`, and the second maps `[2, 3]` to `[2.0, 4.0]`.
+The optional third parameter is a `RecipeModifier.Operation`, such as `api.modifierOperation().ADD` / `.MULTIPLY` / `.SUBTRACT` / `.DIVIDE`, not an arbitrary string. Here, `api` can come from `MMCR.getAPI()` or the event's `getAPI()`.
 
-Values outside the range are explicitly clamped to the nearest endpoint. **Both mappings are applied every time, rather than selected mutually exclusively by range**: with one interface block, mode = 1 / 2 / 3 produces total energy multipliers of `1×2=2`, `2×2=4`, and `2×4=8`, respectively. These are the actual results of the official script at this commit, not merely 1 / 2 / 4 times.
-
-The default operation is `MULTIPLY`; the sixth parameter is a `RecipeModifier.Operation`, passed through `api.modifierOperation().ADD` / `.MULTIPLY` / `.SUBTRACT` / `.DIVIDE`, rather than an arbitrary string. Here, `api` can come from `MMCR.getAPI()` or the event's `getAPI()`.
+:::warning 0b4e5f32 Parameter Migration
+The old five- and six-parameter endpoint overloads have been removed; they no longer accept `min/max/atMin/atMax`. Implement any piecewise logic or clamping inside the function. The interface's own `smartInterface(type, min, max)` range declaration is unchanged.
+:::
 
 See [API/KubeJS#machinebuilderjs](../API/KubeJS#machinebuilderjs) for details.
 
-### `.durationByInterface(type, ...)` Maps Interface Values to Duration
+### `.durationByInterface(type, mapping)` Maps Interface Values to Duration
 
 ```js
-.durationByInterface('kubejs_conversation', 0, 0.5, 1.0, 1.5)
-.durationByInterface('kubejs_conversation', 0.5, 1, 1.5, 2.5)
+.durationByInterface('kubejs_conversation', value => {
+    if (value <= 0.5) return 1 + value
+    return 0.5 + 2 * value
+})
 ```
 
-It has the same form as `energyByInterface`, but applies to duration.
+It has the same form as `energyByInterface`, but applies to duration. The two branches inside this single function are mutually exclusive: conversation = 0 / 0.5 / 1 produces duration multipliers of **1 / 1.5 / 2.5**. A base duration of 200 ticks becomes 200 / 300 / 500 ticks, respectively; whether a recipe can be selected still depends on its interface requirements.
 
-The two duration mappings are likewise applied individually and multiplied: conversation = 0 / 0.5 / 1 produces total duration multipliers of `1×1.5=1.5`, `1.5×1.5=2.25`, and `1.5×2.5=3.75`. If the machine has multiple smart interface blocks, the controller iterates over each block and then each mapping; you cannot assume it takes only one value with the highest priority.
+Functions must depend only on the input value and return a finite number. Do not read the world, random numbers, or time, or modify external state. Registration validates only the declaration without executing the function. The controller evaluates it when refreshing modifiers, not necessarily every tick. If it returns `NaN` / positive or negative infinity, or throws `RuntimeException`, the controller logs an error, skips that modifier for the current refresh, and continues with other rules.
 
-Do not assume an `XxxByInterface` method is usable based on its name alone. For example, although this commit declares helpers for item / fluid input amounts and chances, constructing a mapping invokes `ModifierTarget` validation, and `item/input` and `fluid/input` are not valid targets. Here, only `duration/input` and `energy/input`, verified to be constructible, are used; other targets require individual verification and cannot be generalized as "all usable with the same form".
+Do not assume an `XxxByInterface` method is usable based on its name alone. Although item / fluid input amount and chance helpers now have function signatures, `item/input` and `fluid/input` remain invalid targets. Calling them fails validation immediately, without executing the function. This example uses only the supported `duration/input` and `energy/input` targets.
 
 See [API/KubeJS#machinebuilderjs](../API/KubeJS#machinebuilderjs) for details.
 
@@ -387,7 +389,7 @@ An overview of all methods in [API/KubeJS#smartinterfacetypebuilderjs](../API/Ku
 ```js
 machine
     .smartInterface(type, min, max)        // 入口（也可以 (type, default)）
-        .priority(1)                       // 可选：类型排序优先级，默认 0
+        .priority(1)                       // Optional declaration field, default 0; currently unused for sorting
         .valueType('integer')              // 可选：float / int / integer，默认 float
         .end()                              // 必填：回到 MachineBuilderJS
 ```
@@ -428,9 +430,9 @@ All three systems read signals from structures / slots / interface values, but S
 
 ## Further Reading
 
-- [MachineBuilderJS: temporary builders, mapping signatures, and submission with end](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineBuilderJS.java)
-- [SmartInterfaceModifier: range clamping and linear mapping](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/api/machine/SmartInterfaceModifier.java)
-- [Controller: collecting modifiers for each block and each mapping](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/internal/tile/MachineControllerBlockEntity.java#L3076-L3101)
+- [MachineBuilderJS: function mapping signatures and submission with end](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/0b4e5f32265a19314bfca1134b74450f7d2e9018/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineBuilderJS.java)
+- [SmartInterfaceModifier: pure function evaluation and finite-value validation](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/0b4e5f32265a19314bfca1134b74450f7d2e9018/src/main/java/cn/howxu/mmcr/api/machine/SmartInterfaceModifier.java)
+- [Controller: collecting modifiers per block and function with exception isolation](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/0b4e5f32265a19314bfca1134b74450f7d2e9018/src/main/java/cn/howxu/mmcr/internal/tile/MachineControllerBlockEntity.java#L3401-L3431)
 - [SmartInterfaceBlockEntity: multiple value types and shared bindings](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/internal/tile/SmartInterfaceBlockEntity.java)
 - [SmartInterfaceRequirement codec](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/api/recipe/requirement/SmartInterfaceRequirement.java) / [RecipeSchema function names](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineRecipeSchema.java)
 

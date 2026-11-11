@@ -7,7 +7,7 @@ order: 5
 
 紫珀炉使用**智能接口**作为运行时调节器：整数 `mode` 选择配方，浮点 `conversation` 增加配方筛选条件，两者还通过数值映射修正能耗与耗时。接口名 `conversation` 沿用源码拼写，不应自行改成另一个名字。
 
-本文以 [PURPUR_FURNACE.java（5912f92f）](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/org/nibelungorum/builtin/PURPUR_FURNACE.java) 为准。
+本文以 [PURPUR_FURNACE.java（0b4e5f32）](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/0b4e5f32265a19314bfca1134b74450f7d2e9018/src/main/java/org/nibelungorum/builtin/PURPUR_FURNACE.java) 为准。
 
 ## 入口与类型签名
 
@@ -15,7 +15,7 @@ order: 5
 | --- | --- | --- |
 | `Machines` / `MachineDraft` | `machine(Identifier)`；`build()` → `MachineSpec` | [参考](../API/JavaAPI#machinedraft) |
 | `SmartInterfaces` | `type(String, float min, float max, int priority, ValueType)` → `SmartInterfaceSpec`；省略值类型时使用浮点类型 | [参考](../API/JavaAPI#smartinterfaces) |
-| `Modifiers` | `smartEnergy(...)` / `smartDuration(...)` → `SmartModifierSpec` | [参考](../API/JavaAPI#modifiers) |
+| `Modifiers` | `smartEnergy(String, DoubleUnaryOperator, ModifierOperation)` / `smartDuration(String, DoubleUnaryOperator, ModifierOperation)` → `SmartModifierSpec` | [参考](../API/JavaAPI#modifiers) |
 | `MachineDraft` | `smartInterface(SmartInterfaceSpec)`；`smartInterfaceModifier(SmartModifierSpec)` | [参考](../API/JavaAPI#smartinterfacespec) |
 | `Structures` / `StructureDraft` | `fullStructure(Consumer<StructureStageDraft>)`；`build(Identifier)` → `StructureSpec` | [参考](../API/JavaAPI#structuredraft) |
 | `PatternDraft` / `BlockConditions` | `where(char, BlockCondition)`；`state(String)`；`smartInterface()` | [模式](../API/JavaAPI#patterndraft)、[条件](../API/JavaAPI#blockconditions) |
@@ -38,10 +38,11 @@ public static void registerDefinitions(RegisterMachineDefinitionsEvent event) {
                 .maxParallelism(32).parallelizable(true)
                 .smartInterface(SmartInterfaces.type("mode", 1F, 3F, 1, SmartInterfaces.ValueType.INTEGER))
                 .smartInterface(SmartInterfaces.type("conversation", 0F, 1F, 0))
-                .smartInterfaceModifier(Modifiers.smartEnergy("mode", 1F, 2F, 1F, 2F, ModifierOperation.MULTIPLY))
-                .smartInterfaceModifier(Modifiers.smartEnergy("mode", 2F, 3F, 2F, 4F, ModifierOperation.MULTIPLY))
-                .smartInterfaceModifier(Modifiers.smartDuration("conversation", 0F, .5F, 1F, 1.5F, ModifierOperation.MULTIPLY))
-                .smartInterfaceModifier(Modifiers.smartDuration("conversation", .5F, 1F, 1.5F, 2.5F, ModifierOperation.MULTIPLY))
+                .smartInterfaceModifier(Modifiers.smartEnergy("mode",
+                        value -> Math.pow(2D, value - 1D), ModifierOperation.MULTIPLY))
+                .smartInterfaceModifier(Modifiers.smartDuration("conversation",
+                        value -> value <= 0.5D ? 1D + value : 0.5D + 2D * value,
+                        ModifierOperation.MULTIPLY))
                 .runningSound(Identifier.parse("minecraft:block.furnace.fire_crackle"))
                 .finishSound(Identifier.parse("minecraft:entity.ender_dragon.growl"))
                 .build();
@@ -52,24 +53,22 @@ public static void registerDefinitions(RegisterMachineDefinitionsEvent event) {
 
 `SmartInterfaces.type(...)` 声明接口值规格：`mode` 范围 1–3、优先级 1、值类型为整数；`conversation` 范围 0–1、优先级 0，默认浮点。`maxParallelism(32).parallelizable(true)` 是机器的并行声明；运行与完成音效分别指定熔炉燃烧声和末影龙咆哮声。
 
-### 智能映射是逐条插值再叠加
+### 用函数明确计算修饰值
 
-`Modifiers.smartEnergy` 与 `smartDuration` 的参数为接口名、区间最小值、区间最大值、最小端点映射值、最大端点映射值和操作枚举。每条映射在自己的区间内线性插值，区间外夹紧到端点值。
+`Modifiers.smartEnergy` 与 `smartDuration` 现在各接收接口名、`DoubleUnaryOperator` 函数和操作枚举。函数取得接口实际值，返回操作数；本例使用 `MULTIPLY`，所以返回值是倍率，不是最终能耗或耗时。库不再自动插值或夹紧，分段逻辑由函数自身决定。
 
-| 规则 | 自变量区间 | 映射值 |
+| 规则 | 函数 | 输入示例 → 倍率 |
 | --- | --- | --- |
-| 第一条能量规则 | `mode` 1–2 | 1 → 2 |
-| 第二条能量规则 | `mode` 2–3 | 2 → 4 |
-| 第一条耗时规则 | `conversation` 0–0.5 | 1 → 1.5 |
-| 第二条耗时规则 | `conversation` 0.5–1 | 1.5 → 2.5 |
+| 能量 | `Math.pow(2D, value - 1D)` | `mode=1/2/3` → `1/2/4` |
+| 耗时 | `value <= 0.5D ? 1D + value : 0.5D + 2D * value` | `conversation=0/0.5/1` → `1/1.5/2.5` |
 
-:::warning
-这四条声明不是“落在哪个区间，只用那一条”。当前实现对找到的智能接口逐条生成修饰符：区间外也有端点映射值，随后各条乘法规则叠加。
+只有一个提供这些值的智能接口时，基础耗时 200 tick 分别变为 200 / 300 / 500 tick。`conversation=1` 只用于说明函数结果，不表示第三条配方的 `[0, 0.31]` 筛选条件也允许该值。
 
-只有一个提供这些值的智能接口时，`mode=1/2/3` 的两条能量规则合计乘数分别为 **2 / 4 / 8**；`conversation=0/0.5/1` 的两条耗时规则合计乘数分别为 **1.5 / 2.25 / 3.75**。结构内放置多个提供相同值的智能接口，还需考虑各接口产生的修饰符继续叠加，不能照搬单接口结果。
+:::warning 迁移与求值
+旧的六参数端点重载已删除。新的能量与耗时规则各只有一条，不再得到旧示例叠加后的 `2/4/8` 与 `1.5/2.25/3.75` 倍率。单个函数可以写成互斥的分支，但额外声明的函数、其他接口方块产生的修饰符仍会继续叠加。
+
+函数必须只依赖输入值、返回有限数值；注册时不执行，控制器刷新修饰符时才求值，不保证每 tick 调用。单条函数返回非有限值或抛 `RuntimeException` 时，控制器记录错误并跳过该条，继续处理其他规则。没有提供相应类型值的接口组件时，不会凭空得到修正。
 :::
-
-因此，虽然声明区间看起来相接，也不能将其描述为互斥的分段函数。映射与接口存在性、接口当前值相关；没有相应接口组件时，不会凭空得到这些修正。
 
 ## 完整结构
 
@@ -194,7 +193,7 @@ public static void register(RegisterMachineRecipesEvent event) {
 2. 配方匹配用 `smartInput(...)` 检查当前值，选出满足条件、材料和端口要求的配方。
 3. 机器声明的智能映射将接口值转成修饰符，逐条应用能耗 / 耗时修正。
 
-“要求匹配”与“数值映射”并不互相替代：每条配方声明自己的接口条件，机器声明共享的修正规则。多个区间或多个接口的叠加会影响实际数值，应先计算结果，再设计玩家能理解的模式。
+“要求匹配”与“数值映射”并不互相替代：每条配方声明自己的接口条件，机器声明共享的函数修正规则。分段函数只选择自身的分支，不会阻止其他函数或其他接口产生的修饰符叠加；应先计算结果，再设计玩家能理解的模式。
 
 ## 延伸阅读
 

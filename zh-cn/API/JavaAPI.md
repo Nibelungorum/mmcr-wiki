@@ -1202,21 +1202,19 @@ public static double apply(Collection<RecipeAdjustmentSpec> modifiers, String ta
         IoDirection io, double value, boolean chance);
 public static List<RecipeAdjustmentSpec> recipeModifiers(Collection<ModifierSpec> modifiers);
 public static SmartModifierSpec smart(String type, String target, ModifierScope scope, boolean chance,
-        float min, float max, float atMin, float atMax, ModifierOperation operation);
+        DoubleUnaryOperator mapping, ModifierOperation operation);
 public static SmartModifierSpec smart(String type, String target, IoDirection io, boolean chance,
-        float min, float max, float atMin, float atMax, ModifierOperation operation);
-public static SmartModifierSpec smartDuration(String type, float min, float max,
-        float atMin, float atMax, ModifierOperation op);
-public static SmartModifierSpec smartEnergy(String type, float min, float max,
-        float atMin, float atMax, ModifierOperation op);
+        DoubleUnaryOperator mapping, ModifierOperation operation);
+public static SmartModifierSpec smartDuration(String type, DoubleUnaryOperator mapping, ModifierOperation op);
+public static SmartModifierSpec smartEnergy(String type, DoubleUnaryOperator mapping, ModifierOperation op);
 public static SmartModifierSpec smartItem(String type, IoDirection io, boolean chance,
-        float min, float max, float atMin, float atMax, ModifierOperation op);
+        DoubleUnaryOperator mapping, ModifierOperation op);
 public static SmartModifierSpec smartFluid(String type, IoDirection io, boolean chance,
-        float min, float max, float atMin, float atMax, ModifierOperation op);
+        DoubleUnaryOperator mapping, ModifierOperation op);
 public static SmartModifierSpec smartChemical(String type, IoDirection io, boolean chance,
-        float min, float max, float atMin, float atMax, ModifierOperation op);
-public static SmartModifierSpec smartHeat(String type, IoDirection io, float min, float max,
-        float atMin, float atMax, ModifierOperation op);
+        DoubleUnaryOperator mapping, ModifierOperation op);
+public static SmartModifierSpec smartHeat(String type, IoDirection io,
+        DoubleUnaryOperator mapping, ModifierOperation op);
 ```
 
 ### 修饰符视图与枚举
@@ -1248,13 +1246,9 @@ String interfaceType();
 String target();
 ModifierScope scope();
 boolean affectsChance();
-float minValue();
-float maxValue();
-float atMin();
-float atMax();
 ModifierOperation operation();
 IoDirection io();
-float mappedValue(float value);
+double mappedValue(float value);
 NumericModifierSpec toModifier(float value);
 ```
 
@@ -1270,9 +1264,23 @@ NumericModifierSpec toModifier(float value);
 | `parallelism`、`factory_threads` | MACHINE | 否 |
 | `recipe_threads` | RECIPE | 否 |
 
-`parallelized` 是布尔修饰，使用专门工厂。智能修饰符 `toModifier` 同样受数值 target/scope 约束；存在 `smartItem` 等映射工厂不表示可任意将其转换为未受支持的机器数值修饰目标。
+`parallelized` 是布尔修饰，使用专门工厂。智能修饰符在创建时就校验 target/scope 与概率标志，不执行映射函数；`toModifier` 仍受同一套数值目标约束。
 
-`apply` 按 target、方向和概率/数量标志筛选：累加加减项、累乘乘除项，最后计算 `(原值 + 加减总量) × 乘除总量`；不是简单按列表逐项执行。除数 0 在底层计算中被忽略。`smartDuration` 默认目标 `duration`、输入 scope；`smartEnergy` 为 `energy`、输入 scope。智能修饰符将接口值映射到 `atMin`–`atMax` 的修饰值。
+`smartItem` / `smartFluid` 的输入侧不受支持，创建时抛 `IllegalArgumentException`；资源输出侧快捷工厂会将目标归一为 `output`，不是仅按方法名限定一种输出资源。
+
+`apply` 按 target、方向和概率/数量标志筛选：累加加减项、累乘乘除项，最后计算 `(原值 + 加减总量) × 乘除总量`。除数 0 在底层计算中被忽略。`smartDuration` 默认目标 `duration`、输入 scope；`smartEnergy` 为 `energy`、输入 scope。
+
+:::warning 0b4e5f32 智能修饰符迁移
+旧的 `min/max/atMin/atMax` 端点参数重载已删除，改用 `java.util.function.DoubleUnaryOperator`：`mapping` 接收接口当前实际值，返回运算操作数。例如 `MULTIPLY` 下返回 `0.5` 表示乘以 `0.5`，`ADD` 下返回 `5` 表示加 `5`。需要线性、分段曲线或限幅时，在函数内明确计算。
+
+`SmartModifierSpec` 不再有 `minValue()` / `maxValue()` / `atMin()` / `atMax()`；`mappedValue(float)` 改为返回 `double`。
+:::
+
+映射必须是只依赖输入值的纯函数，返回有限 `double`，不要读取世界、随机数、时间或修改外部状态。创建声明时不采样函数；控制器在刷新智能修饰符时求值，不保证每 tick 调用。每个有对应类型值的接口方块都会按声明生成修饰符，多条规则仍按上面的聚合公式叠加。
+
+`mapping` 为 `null` 时创建声明抛 `NullPointerException`；接口类型为空白或数值目标组合非法时抛 `IllegalArgumentException`。直接调用 `mappedValue` / `toModifier`，输入非有限或函数返回 `NaN` / 正负无穷时抛 `IllegalArgumentException`，函数自身异常向调用方传播。控制器刷新时会捕获单条映射的 `RuntimeException`，记录机器、接口、位置、目标和输入值，跳过本次该条修饰符，继续处理其他规则。JEI 仅展示函数映射的类型、目标、作用域、概率/数量与操作元数据，不采样函数或显示旧端点区间。
+
+源码`0b4e5f32`：[公共工厂](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/0b4e5f32265a19314bfca1134b74450f7d2e9018/src/main/java/cn/howxu/mmcr/publicapi/recipe/modifier/Modifiers.java)、[SmartModifierSpec](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/0b4e5f32265a19314bfca1134b74450f7d2e9018/src/main/java/cn/howxu/mmcr/publicapi/recipe/modifier/SmartModifierSpec.java)、[函数求值与校验](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/0b4e5f32265a19314bfca1134b74450f7d2e9018/src/main/java/cn/howxu/mmcr/api/machine/SmartInterfaceModifier.java)、[控制器刷新](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/0b4e5f32265a19314bfca1134b74450f7d2e9018/src/main/java/cn/howxu/mmcr/internal/tile/MachineControllerBlockEntity.java#L3401-L3431)。
 
 ```java
 event.registerModifier(Identifier.fromNamespaceAndPath("my_mod", "fast"),
@@ -1319,8 +1327,8 @@ type 名不可空白；数值须有限，`min ≤ default ≤ max`。只传 defa
 ```java
 machine.smartInterface(SmartInterfaces.type("speed", 1F, 1F, 4F, 0,
                 SmartInterfaces.ValueType.INTEGER))
-        .smartInterfaceModifier(Modifiers.smartDuration("speed", 1F, 4F,
-                1F, 0.25F, ModifierOperation.MULTIPLY));
+        .smartInterfaceModifier(Modifiers.smartDuration("speed",
+                value -> 1D / value, ModifierOperation.MULTIPLY));
 ```
 
 ## 10. 行为 hooks 与上下文

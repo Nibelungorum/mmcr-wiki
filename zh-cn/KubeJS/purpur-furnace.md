@@ -37,7 +37,7 @@ Smart Interface 既影响"配方是否被选中"（按 `min_value`/`max_value` �
 
 | KubeJS API | 文档位置 |
 | --- | --- |
-| `smartInterface(String, float)` / `(String, float, float)`、`shareSmartInterface()` / `(boolean)`、`energyByInterface` / `durationByInterface` 的 5 / 6 参数版本 | [API/KubeJS#machinebuilderjs](../API/KubeJS#machinebuilderjs) |
+| `smartInterface(String, float)` / `(String, float, float)`、`shareSmartInterface()` / `(boolean)`、`energyByInterface` / `durationByInterface` 的函数式 2 / 3 参数版本 | [API/KubeJS#machinebuilderjs](../API/KubeJS#machinebuilderjs) |
 | `SmartInterfaceTypeBuilderJS` | [API/KubeJS#smartinterfacetypebuilderjs](../API/KubeJS#smartinterfacetypebuilderjs) |
 | `smartInterface()`、`smartInterfaceInput(String, float, float)`、`smartInterfaceOutput(String, float)` | [API/KubeJS#kubejsapi](../API/KubeJS#kubejsapi) |
 | `MachineRecipeBuilderJS.smartInterfaceInput(String, float)` / `(String, float, float)`、`smartInterfaceOutput(String, float)` | [API/KubeJS#machinerecipebuilderjs](../API/KubeJS#machinerecipebuilderjs) |
@@ -45,7 +45,7 @@ Smart Interface 既影响"配方是否被选中"（按 `min_value`/`max_value` �
 
 ## 机器定义
 
-`startup_scripts/` 目录下的 [A_Smart_Machine.js](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/example/startup_scripts/A_Smart_Machine.js)：
+`startup_scripts/` 目录下的 [A_Smart_Machine.js](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/0b4e5f32265a19314bfca1134b74450f7d2e9018/example/startup_scripts/A_Smart_Machine.js)：
 
 ```js
 // Use the smart interface system to control machine parameters.
@@ -64,11 +64,12 @@ MMCREvents.startup(event => {
         // Register a smart interface.
         .smartInterface('kubejs_mode', 1, 3).priority(1).valueType('integer').end()
         .smartInterface('kubejs_conversation', 0, 1).priority(0).valueType('float').end()
-        // After end(), machine parameters can be modified according to the interface value.
-        .energyByInterface('kubejs_mode', 1, 2, 1.0, 2.0)
-        .energyByInterface('kubejs_mode', 2, 3, 2.0, 4.0)
-        .durationByInterface('kubejs_conversation', 0, 0.5, 1.0, 1.5)
-        .durationByInterface('kubejs_conversation', 0.5, 1, 1.5, 2.5)
+        // 函数接收接口实际值，返回倍率；默认操作为 MULTIPLY。
+        .energyByInterface('kubejs_mode', value => Math.pow(2, value - 1))
+        .durationByInterface('kubejs_conversation', value => {
+            if (value <= 0.5) return 1 + value
+            return 0.5 + 2 * value
+        })
 
     builder.register()
 })
@@ -101,7 +102,7 @@ MMCREvents.startup(event => {
 
 | 方法 | 默认值 | 作用 |
 | --- | --- | --- |
-| `.priority(int)` | `0` | 接口类型的排序优先级，不是同类型接口方块的“胜出者”选择规则。 |
+| `.priority(int)` | `0` | 保存到接口类型声明；当前不参与排序或接口选择，没有数字大 / 小优先的生效规则。 |
 | `.valueType(String)` | `'float'` | 接口值类型。可选 `'float'` / `'int'` / `'integer'`（不区分大小写）。`null` 或空白回退到 `FLOAT`。 |
 | `.end()` | — | 关闭当前接口定义，回到父 `MachineBuilderJS`。**必须调用**。 |
 
@@ -120,35 +121,36 @@ MMCREvents.startup(event => {
 
 两段接口可以并存。
 
-### `.energyByInterface(type, min, max, atMin, atMax)` 把接口值映射到能耗
+### `.energyByInterface(type, mapping)` 把接口值映射到能耗
 
 ```js
-.energyByInterface('kubejs_mode', 1, 2, 1.0, 2.0)
-.energyByInterface('kubejs_mode', 2, 3, 2.0, 4.0)
+.energyByInterface('kubejs_mode', value => Math.pow(2, value - 1))
 ```
 
-五个参数：`type`（已注册的智能接口类型名）、`min` / `max`（区间端点）、`atMin` / `atMax`（区间端点对应的修饰值）。
+两个参数：`type` 是已声明的智能接口类型名；`mapping` 是 JavaScript 函数，由 Rhino 转为 `DoubleUnaryOperator`。函数接收接口当前实际值，返回修饰操作数。这里默认操作为 `MULTIPLY`，因此 mode = 1 / 2 / 3 分别返回能耗倍率 **1 / 2 / 4**，不是直接把 FE/t 设为 1 / 2 / 4。
 
-第一条映射将 `[1, 2]` 线性映射到 `[1.0, 2.0]`，第二条将 `[2, 3]` 映射到 `[2.0, 4.0]`。
+第三参数可显式传 `RecipeModifier.Operation`，例如 `api.modifierOperation().ADD` / `.MULTIPLY` / `.SUBTRACT` / `.DIVIDE`，不是任意字符串。这里的 `api` 可取 `MMCR.getAPI()` 或事件的 `getAPI()`。
 
-区间外明确夹紧到最近端点。**两条映射每次都应用，不会按区间互斥选择**：一个接口方块时，mode = 1 / 2 / 3 的总能耗倍率分别为 `1×2=2`、`2×2=4`、`2×4=8`。这是官方脚本在此提交上的实际结果，不是仅 1 / 2 / 4 倍。
-
-默认操作是 `MULTIPLY`，第六参数是 `RecipeModifier.Operation`，可通过 `api.modifierOperation().ADD` / `.MULTIPLY` / `.SUBTRACT` / `.DIVIDE` 传入，不是随意传字符串。这里的 `api` 可取 `MMCR.getAPI()` 或事件的 `getAPI()`。
+:::warning 0b4e5f32 参数迁移
+旧的五 / 六参数端点重载已删除，不再接收 `min/max/atMin/atMax`。需要分段或限幅时必须在函数中计算。接口自身的 `smartInterface(type, min, max)` 范围声明不变。
+:::
 
 详见 [API/KubeJS#machinebuilderjs](../API/KubeJS#machinebuilderjs)。
 
-### `.durationByInterface(type, ...)` 把接口值映射到耗时
+### `.durationByInterface(type, mapping)` 把接口值映射到耗时
 
 ```js
-.durationByInterface('kubejs_conversation', 0, 0.5, 1.0, 1.5)
-.durationByInterface('kubejs_conversation', 0.5, 1, 1.5, 2.5)
+.durationByInterface('kubejs_conversation', value => {
+    if (value <= 0.5) return 1 + value
+    return 0.5 + 2 * value
+})
 ```
 
-与 `energyByInterface` 同形，作用于耗时。
+与 `energyByInterface` 同形，作用于耗时。单个函数内的两个分支互斥：conversation = 0 / 0.5 / 1 时，耗时倍率为 **1 / 1.5 / 2.5**。基础耗时 200 tick 分别变为 200 / 300 / 500 tick；能否选择某条配方仍由其接口需求决定。
 
-两个耗时映射同样逐条应用并相乘：conversation = 0 / 0.5 / 1 时，总耗时倍率为 `1×1.5=1.5`、`1.5×1.5=2.25`、`1.5×2.5=3.75`。若机器有多个智能接口方块，控制器会遍历每个方块再遍历每条映射，不能假设只取一份最高 priority 的值。
+函数必须只依赖输入值、返回有限数值，不要读取世界、随机数、时间或修改外部状态。注册时只校验声明，不执行函数；控制器刷新修饰符时求值，不保证每 tick 调用。返回 `NaN` / 正负无穷或抛 `RuntimeException` 时，控制器会记录错误并跳过本次该条修饰符，继续处理其他规则。
 
-不要只看 `XxxByInterface` 的方法名就认定它可用。例如此提交虽声明了物品 / 流体输入数量与概率辅助方法，但构造映射时会进入 `ModifierTarget` 校验，`item/input`、`fluid/input` 并不是有效目标。这里仅使用已经核对可构造的 `duration/input` 与 `energy/input`；其他目标需逐项核对，不能概括成“全部同形可用”。
+不要只看 `XxxByInterface` 的方法名就认定它可用。物品 / 流体输入数量与概率辅助方法虽改成函数签名，`item/input`、`fluid/input` 仍不是有效目标，调用时就会被校验拒绝，函数不会执行。这里仅使用受支持的 `duration/input` 与 `energy/input`。
 
 详见 [API/KubeJS#machinebuilderjs](../API/KubeJS#machinebuilderjs)。
 
@@ -387,7 +389,7 @@ ServerEvents.recipes(event => {
 ```js
 machine
     .smartInterface(type, min, max)        // 入口（也可以 (type, default)）
-        .priority(1)                       // 可选：类型排序优先级，默认 0
+        .priority(1)                       // 可选：声明字段，默认 0；当前不参与排序
         .valueType('integer')              // 可选：float / int / integer，默认 float
         .end()                              // 必填：回到 MachineBuilderJS
 ```
@@ -428,9 +430,9 @@ machine
 
 ## 延伸阅读
 
-- [MachineBuilderJS：临时构建器、映射签名和 end 提交](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineBuilderJS.java)
-- [SmartInterfaceModifier：区间夹紧与线性映射](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/api/machine/SmartInterfaceModifier.java)
-- [控制器：逐方块、逐映射收集修饰器](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/internal/tile/MachineControllerBlockEntity.java#L3076-L3101)
+- [MachineBuilderJS：函数式映射签名和 end 提交](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/0b4e5f32265a19314bfca1134b74450f7d2e9018/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineBuilderJS.java)
+- [SmartInterfaceModifier：纯函数求值与有限数值校验](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/0b4e5f32265a19314bfca1134b74450f7d2e9018/src/main/java/cn/howxu/mmcr/api/machine/SmartInterfaceModifier.java)
+- [控制器：逐方块、逐函数收集修饰符与异常隔离](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/0b4e5f32265a19314bfca1134b74450f7d2e9018/src/main/java/cn/howxu/mmcr/internal/tile/MachineControllerBlockEntity.java#L3401-L3431)
 - [SmartInterfaceBlockEntity：多类型值与共享绑定](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/internal/tile/SmartInterfaceBlockEntity.java)
 - [SmartInterfaceRequirement codec](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/api/recipe/requirement/SmartInterfaceRequirement.java) / [RecipeSchema 的函数名称](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineRecipeSchema.java)
 

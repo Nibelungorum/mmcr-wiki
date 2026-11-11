@@ -4,7 +4,7 @@ title: KubeJS API
 
 # KubeJS API
 
-本页是 MMCR 的 KubeJS 集成层的集中参考，固定对应 **Minecraft 26.1.2**，源码基线为提交 [`80fd9220`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/80fd9220075a26a4bb77386a31b83fccc9ec7c3f/gradle.properties)。示例使用 KubeJS/Rhino 的 JavaScript 写法。
+本页是 MMCR 的 KubeJS 集成层的集中参考，固定对应 **Minecraft 26.1.2**，源码基线为提交 [`0b4e5f32`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/0b4e5f32265a19314bfca1134b74450f7d2e9018/gradle.properties)。示例使用 KubeJS/Rhino 的 JavaScript 写法。
 
 MMCR 的 KubeJS API 分为三个声明窗口：启动脚本中的机器、等级、修饰符和屏幕文本注册；服务端脚本加载中的结构与编程式配方注册；`ServerEvents.recipes` 中的数据驱动配方注册。启动声明修改后需要重启；服务端结构与配方可随资源重载替换。此外还有客户端配方说明事件。
 
@@ -555,7 +555,7 @@ const policy = MMCR.getAPI().outputPolicy().ALLOW_PARTIAL
 
 ```javascript
 const operation = MMCR.getAPI().modifierOperation()
-machine.durationByInterface("temperature", 0, 100, 2, 0.5, operation.ADD)
+machine.durationByInterface("temperature", value => 2 - value * 0.015, operation.ADD)
 ```
 
 #### `ScreenScopeValues`
@@ -2331,226 +2331,241 @@ machine.shareSmartInterface()
 machine.shareSmartInterface(true)
 ```
 
-:::warning 当前实现注意
+##### 智能接口函数修饰符
 
-统一机器修饰符后，`itemInputByInterface(...)`、`itemInputChanceByInterface(...)`、`fluidInputByInterface(...)` 和 `fluidInputChanceByInterface(...)` 仍存在于构建器上，但当前目标校验不接受 `item` / `fluid` 的输入作用域，调用会抛 `IllegalArgumentException`。`durationByInterface(...)`、`energyByInterface(...)`、化学品输入 / 输出方法、热量输入 / 输出方法与其他输出侧变体使用受支持的目标。
+`XxxByInterface` 的旧 `min/max/atMin/atMax` 端点参数重载已删除。现在传入 `DoubleUnaryOperator mapping`，Rhino 可直接接收 JavaScript 箭头函数；函数接收接口的实际值，返回运算操作数，不是配方最终值。例如默认 `MULTIPLY` 下返回 `0.5` 表示乘以 `0.5`，`ADD` 下返回 `5` 表示加 `5`。
+
+函数必须只依赖输入值、返回有限数值；不要读取世界、随机数、时间或修改外部状态。库不自动插值或夹紧；需要分段或限幅时写在函数里。`smartInterface(type, min, max)` 仍声明接口值范围，但不再给修饰函数提供端点映射。
+
+所有方法均返回当前 `MachineBuilderJS`。不传操作时为 `MULTIPLY`；支持操作重载的方法可显式传 `api.modifierOperation()` 的 `ADD` / `MULTIPLY` / `SUBTRACT` / `DIVIDE`，不是任意字符串。数量型物品、流体、化学品与热量快捷方法没有额外的操作参数重载。资源输出方法会将目标归一为 `output`，不能仅凭方法名认为它只影响一种输出资源。
+
+创建声明时校验接口类型名、目标与概率标志，不执行映射函数。`mapping` 为 `null` 时抛 `NullPointerException`；类型名空白或目标组合不受支持时抛 `IllegalArgumentException`。在求值时，非有限输入或 `NaN` / 正负无穷返回值会被拒绝；函数抛出的异常不在注册时提前发现。控制器刷新智能修饰符时求值，不保证每 tick 调用；单条映射求值抛 `RuntimeException` 时记录错误并跳过该条，其他规则继续处理。每个有对应类型值的接口方块都会逐条生成修饰符，多条规则仍会叠加，不会按函数中的区间自动互斥选择。JEI 仅展示函数映射元数据，不采样函数或展示旧端点区间。
+
+源码（`0b4e5f32`）：[构建器签名](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/0b4e5f32265a19314bfca1134b74450f7d2e9018/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineBuilderJS.java)、[函数求值与校验](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/0b4e5f32265a19314bfca1134b74450f7d2e9018/src/main/java/cn/howxu/mmcr/api/machine/SmartInterfaceModifier.java)、[Rhino 函数测试](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/0b4e5f32265a19314bfca1134b74450f7d2e9018/src/test/java/cn/howxu/mmcr/compat/kubejs/KubeJSApiTest.java)。
+
+:::warning 当前实现注意
+`itemInputByInterface(...)`、`itemInputChanceByInterface(...)`、`fluidInputByInterface(...)` 和 `fluidInputChanceByInterface(...)` 虽有函数签名，但当前目标校验仍不接受 `item` / `fluid` 的输入作用域，调用即抛 `IllegalArgumentException`，不执行函数。
 :::
 
-##### `durationByInterface(String type, float min, float max, float atMin, float atMax) → MachineBuilderJS`
+##### `durationByInterface(String type, DoubleUnaryOperator mapping) → MachineBuilderJS`
 
-- **参数表**：`type`（`String`）— 智能接口类型；`min`/`max`（`float`）— 生效区间；`atMin`/`atMax`（`float`）— 区间端点对应的时长修饰值。
-- **返回**：当前构建器；默认操作为 `MULTIPLY`。
-- **抛出**：范围和接口类型不合法时在机器定义构建阶段抛异常。
-- **默认值**：操作为乘法。
-- **示例**：
-
-```javascript
-machine.durationByInterface("temperature", 0, 100, 2, 0.5)
-```
-
-##### `durationByInterface(String type, float min, float max, float atMin, float atMax, RecipeModifier.Operation operation) → MachineBuilderJS`
-
-- **参数表**：前五个参数同上；`operation`（`RecipeModifier.Operation`）— `ADD`、`MULTIPLY`、`SUBTRACT` 或 `DIVIDE`。
+- **参数表**：`type`（`String`）— 智能接口类型名；`mapping`（`DoubleUnaryOperator`）— 将实际接口值转换为配方耗时的运算操作数。
 - **返回**：当前构建器。
-- **抛出**：`IllegalArgumentException`：智能接口范围无效；`operation` 为空或不支持。
-- **默认值**：无额外默认；不调用五参数重载时必须显式传操作。
-- **示例**：
-
-```javascript
-const operation = MMCR.getAPI().modifierOperation()
-machine.durationByInterface("temperature", 0, 100, 2, 0.5, operation.ADD)
-```
-
-##### `energyByInterface(String type, float min, float max, float atMin, float atMax) → MachineBuilderJS`
-
-- **参数表**：`type`、`min`、`max`、`atMin`、`atMax`— 同 `durationByInterface`，目标为能量消耗。
-- **返回**：当前构建器，默认操作为乘法。
-- **抛出**：范围或类型非法时在最终构建阶段抛异常。
+- **抛出**：声明校验与运行时求值规则见本节开头。
 - **默认值**：操作为 `MULTIPLY`。
-- **示例**：
 
 ```javascript
-machine.energyByInterface("mode", 1, 3, 1, 2)
+machine.durationByInterface("temperature", value => 2 - value * 0.015)
 ```
 
-##### `energyByInterface(String type, float min, float max, float atMin, float atMax, RecipeModifier.Operation operation) → MachineBuilderJS`
+##### `durationByInterface(String type, DoubleUnaryOperator mapping, RecipeModifier.Operation operation) → MachineBuilderJS`
 
-- **参数表**：前五个参数同上；`operation`（`RecipeModifier.Operation`），运算方式。
+- **参数表**：`type`（`String`）— 智能接口类型名；`mapping`（`DoubleUnaryOperator`）— 将实际接口值转换为配方耗时的运算操作数。 `operation`（`RecipeModifier.Operation`）— 运算方式。
 - **返回**：当前构建器。
-- **抛出**：操作或范围非法时抛异常。
-- **默认值**：无额外默认。
-- **示例**：
+- **抛出**：声明校验与运行时求值规则见本节开头。
+- **默认值**：`operation` 为 `null` 时使用 `MULTIPLY`。
 
 ```javascript
 const operation = MMCR.getAPI().modifierOperation()
-machine.energyByInterface("mode", 1, 3, 1, 2, operation.MULTIPLY)
+machine.durationByInterface("temperature", value => 2 - value * 0.015, operation.ADD)
 ```
 
-##### `itemInputByInterface(String type, float min, float max, float atMin, float atMax) → MachineBuilderJS`
+##### `energyByInterface(String type, DoubleUnaryOperator mapping) → MachineBuilderJS`
 
-- **参数表**：`type`、`min`、`max`、`atMin`、`atMax`，智能接口区间及物品输入数量修饰值。
-- **返回**：当前构建器；目标为物品输入数量，操作固定为乘法。
-- **抛出**：当前统一修饰符目标校验不支持 `item` / `input`，调用时抛 `IllegalArgumentException`。
-
-##### `itemOutputByInterface(String type, float min, float max, float atMin, float atMax) → MachineBuilderJS`
-
-- **参数表**：`type`、`min`、`max`、`atMin`、`atMax`，物品输出数量修饰参数。
-- **返回**：当前构建器；操作固定为乘法。
-- **抛出**：范围或类型非法时抛异常。
-- **默认值**：不影响输出概率。
-- **示例**：
-
-```javascript
-machine.itemOutputByInterface("batch", 1, 4, 1, 4)
-```
-
-##### `itemInputChanceByInterface(String type, float min, float max, float atMin, float atMax) → MachineBuilderJS`
-
-- **参数表**：`type`、`min`、`max`、`atMin`、`atMax`，物品输入概率修饰参数。
-- **返回**：当前构建器；默认操作为乘法，且只作用于输入概率。
-- **抛出**：当前统一修饰符目标校验不支持 `item` / `input`，调用时抛 `IllegalArgumentException`。
-
-##### `itemInputChanceByInterface(String type, float min, float max, float atMin, float atMax, RecipeModifier.Operation operation) → MachineBuilderJS`
-
-- **参数表**：前五个参数同上；`operation`（`RecipeModifier.Operation`），概率运算方式。
+- **参数表**：`type`（`String`）— 智能接口类型名；`mapping`（`DoubleUnaryOperator`）— 将实际接口值转换为能量输入的运算操作数。
 - **返回**：当前构建器。
-- **抛出**：操作或范围非法时抛异常；该输入目标当前还会因统一修饰符目标校验抛 `IllegalArgumentException`。
-
-##### `itemOutputChanceByInterface(String type, float min, float max, float atMin, float atMax) → MachineBuilderJS`
-
-- **参数表**：`type`、`min`、`max`、`atMin`、`atMax`，物品输出概率修饰参数。
-- **返回**：当前构建器；默认操作为乘法，作用于输出概率。
-- **抛出**：范围或类型非法时抛异常。
+- **抛出**：声明校验与运行时求值规则见本节开头。
 - **默认值**：操作为 `MULTIPLY`。
-- **示例**：
 
 ```javascript
-machine.itemOutputChanceByInterface("quality", 0, 1, 0.5, 1)
+machine.energyByInterface("mode", value => Math.pow(2, value - 1))
 ```
 
-##### `itemOutputChanceByInterface(String type, float min, float max, float atMin, float atMax, RecipeModifier.Operation operation) → MachineBuilderJS`
+##### `energyByInterface(String type, DoubleUnaryOperator mapping, RecipeModifier.Operation operation) → MachineBuilderJS`
 
-- **参数表**：前五个参数同上；`operation`（`RecipeModifier.Operation`），概率运算方式。
+- **参数表**：`type`（`String`）— 智能接口类型名；`mapping`（`DoubleUnaryOperator`）— 将实际接口值转换为能量输入的运算操作数。 `operation`（`RecipeModifier.Operation`）— 运算方式。
 - **返回**：当前构建器。
-- **抛出**：操作、范围或类型非法时抛异常。
-- **默认值**：无额外默认。
-- **示例**：
+- **抛出**：声明校验与运行时求值规则见本节开头。
+- **默认值**：`operation` 为 `null` 时使用 `MULTIPLY`。
 
 ```javascript
 const operation = MMCR.getAPI().modifierOperation()
-machine.itemOutputChanceByInterface("quality", 0, 1, 0.5, 1, operation.MULTIPLY)
+machine.energyByInterface("mode", value => Math.pow(2, value - 1), operation.MULTIPLY)
 ```
 
-##### `fluidInputByInterface(String type, float min, float max, float atMin, float atMax) → MachineBuilderJS`
+##### `itemInputByInterface(String type, DoubleUnaryOperator mapping) → MachineBuilderJS`
 
-- **参数表**：`type`、`min`、`max`、`atMin`、`atMax`，流体输入数量修饰参数。
-- **返回**：当前构建器；操作固定为乘法。
-- **抛出**：当前统一修饰符目标校验不支持 `fluid` / `input`，调用时抛 `IllegalArgumentException`。
-
-##### `fluidOutputByInterface(String type, float min, float max, float atMin, float atMax) → MachineBuilderJS`
-
-- **参数表**：`type`、`min`、`max`、`atMin`、`atMax`，流体输出数量修饰参数。
-- **返回**：当前构建器；操作固定为乘法。
-- **抛出**：范围或类型非法时抛异常。
-- **默认值**：不影响流体输出概率。
-- **示例**：
-
-```javascript
-machine.fluidOutputByInterface("pressure", 0, 100, 1, 2)
-```
-
-##### `fluidInputChanceByInterface(String type, float min, float max, float atMin, float atMax) → MachineBuilderJS`
-
-- **参数表**：`type`、`min`、`max`、`atMin`、`atMax`，流体输入概率修饰参数。
-- **返回**：当前构建器；默认操作为乘法。
-- **抛出**：当前统一修饰符目标校验不支持 `fluid` / `input`，调用时抛 `IllegalArgumentException`。
-
-##### `fluidInputChanceByInterface(String type, float min, float max, float atMin, float atMax, RecipeModifier.Operation operation) → MachineBuilderJS`
-
-- **参数表**：前五个参数同上；`operation`（`RecipeModifier.Operation`）— 概率运算方式。
+- **参数表**：`type`（`String`）— 智能接口类型名；`mapping`（`DoubleUnaryOperator`）— 将实际接口值转换为物品输入数量的运算操作数。
 - **返回**：当前构建器。
-- **抛出**：操作或范围非法时抛异常；该输入目标当前还会因统一修饰符目标校验抛 `IllegalArgumentException`。
-
-##### `fluidOutputChanceByInterface(String type, float min, float max, float atMin, float atMax) → MachineBuilderJS`
-
-- **参数表**：`type`、`min`、`max`、`atMin`、`atMax`，流体输出概率修饰参数。
-- **返回**：当前构建器；默认操作为乘法。
-- **抛出**：范围或类型非法时抛异常。
+- **抛出**：当前目标校验不支持 `item` / `input`，调用时抛 `IllegalArgumentException`。
 - **默认值**：操作为 `MULTIPLY`。
-- **示例**：
+
+##### `itemOutputByInterface(String type, DoubleUnaryOperator mapping) → MachineBuilderJS`
+
+- **参数表**：`type`（`String`）— 智能接口类型名；`mapping`（`DoubleUnaryOperator`）— 将实际接口值转换为输出数量的运算操作数。
+- **返回**：当前构建器。
+- **抛出**：声明校验与运行时求值规则见本节开头。
+- **默认值**：操作为 `MULTIPLY`。
 
 ```javascript
-machine.fluidOutputChanceByInterface("quality", 0, 1, 0.5, 1)
+machine.itemOutputByInterface("batch", value => value)
 ```
 
-##### `fluidOutputChanceByInterface(String type, float min, float max, float atMin, float atMax, RecipeModifier.Operation operation) → MachineBuilderJS`
+##### `itemInputChanceByInterface(String type, DoubleUnaryOperator mapping) → MachineBuilderJS`
 
-- **参数表**：前五个参数同上；`operation`（`RecipeModifier.Operation`），概率运算方式。
+- **参数表**：`type`（`String`）— 智能接口类型名；`mapping`（`DoubleUnaryOperator`）— 将实际接口值转换为物品输入消耗概率的运算操作数。
 - **返回**：当前构建器。
-- **抛出**：操作或范围非法时抛异常。
-- **默认值**：无额外默认。
-- **示例**：
+- **抛出**：当前目标校验不支持 `item` / `input`，调用时抛 `IllegalArgumentException`。
+- **默认值**：操作为 `MULTIPLY`。
+
+##### `itemInputChanceByInterface(String type, DoubleUnaryOperator mapping, RecipeModifier.Operation operation) → MachineBuilderJS`
+
+- **参数表**：`type`（`String`）— 智能接口类型名；`mapping`（`DoubleUnaryOperator`）— 将实际接口值转换为物品输入消耗概率的运算操作数。 `operation`（`RecipeModifier.Operation`）— 运算方式。
+- **返回**：当前构建器。
+- **抛出**：当前目标校验不支持 `item` / `input`，调用时抛 `IllegalArgumentException`。
+- **默认值**：`operation` 为 `null` 时使用 `MULTIPLY`。
+
+##### `itemOutputChanceByInterface(String type, DoubleUnaryOperator mapping) → MachineBuilderJS`
+
+- **参数表**：`type`（`String`）— 智能接口类型名；`mapping`（`DoubleUnaryOperator`）— 将实际接口值转换为输出概率的运算操作数。
+- **返回**：当前构建器。
+- **抛出**：声明校验与运行时求值规则见本节开头。
+- **默认值**：操作为 `MULTIPLY`。
+
+```javascript
+machine.itemOutputChanceByInterface("quality", value => 0.5 + value * 0.5)
+```
+
+##### `itemOutputChanceByInterface(String type, DoubleUnaryOperator mapping, RecipeModifier.Operation operation) → MachineBuilderJS`
+
+- **参数表**：`type`（`String`）— 智能接口类型名；`mapping`（`DoubleUnaryOperator`）— 将实际接口值转换为输出概率的运算操作数。 `operation`（`RecipeModifier.Operation`）— 运算方式。
+- **返回**：当前构建器。
+- **抛出**：声明校验与运行时求值规则见本节开头。
+- **默认值**：`operation` 为 `null` 时使用 `MULTIPLY`。
 
 ```javascript
 const operation = MMCR.getAPI().modifierOperation()
-machine.fluidOutputChanceByInterface("quality", 0, 1, 0.5, 1, operation.ADD)
+machine.itemOutputChanceByInterface("quality", value => 0.5 + value * 0.5, operation.MULTIPLY)
 ```
 
-##### `chemicalInputByInterface(String type, float min, float max, float atMin, float atMax) → MachineBuilderJS`
+##### `fluidInputByInterface(String type, DoubleUnaryOperator mapping) → MachineBuilderJS`
 
-- **参数表**：`type`、`min`、`max`、`atMin`、`atMax`，分别为智能接口类型、输入值范围和化学品输入数量的端点修饰值。
-- **返回**：当前构建器；默认操作为 `MULTIPLY`，作用于化学品输入数量。
-- **抛出**：智能接口范围或类型非法时抛 `IllegalArgumentException`。
+- **参数表**：`type`（`String`）— 智能接口类型名；`mapping`（`DoubleUnaryOperator`）— 将实际接口值转换为流体输入数量的运算操作数。
+- **返回**：当前构建器。
+- **抛出**：当前目标校验不支持 `fluid` / `input`，调用时抛 `IllegalArgumentException`。
+- **默认值**：操作为 `MULTIPLY`。
 
-##### `chemicalOutputByInterface(String type, float min, float max, float atMin, float atMax) → MachineBuilderJS`
+##### `fluidOutputByInterface(String type, DoubleUnaryOperator mapping) → MachineBuilderJS`
 
-- **参数表**：同 `chemicalInputByInterface`，端点修饰值作用于化学品输出数量。
-- **返回**：当前构建器；默认操作为 `MULTIPLY`。
-- **抛出**：智能接口范围或类型非法时抛 `IllegalArgumentException`。
+- **参数表**：`type`（`String`）— 智能接口类型名；`mapping`（`DoubleUnaryOperator`）— 将实际接口值转换为输出数量的运算操作数。
+- **返回**：当前构建器。
+- **抛出**：声明校验与运行时求值规则见本节开头。
+- **默认值**：操作为 `MULTIPLY`。
 
-##### `chemicalInputChanceByInterface(String type, float min, float max, float atMin, float atMax) → MachineBuilderJS`
+```javascript
+machine.fluidOutputByInterface("pressure", value => 1 + value / 100)
+```
 
-- **参数表**：同 `chemicalInputByInterface`，端点修饰值作用于化学品输入消耗概率。
-- **返回**：当前构建器；默认操作为 `MULTIPLY`。
-- **抛出**：智能接口范围或类型非法时抛 `IllegalArgumentException`。
+##### `fluidInputChanceByInterface(String type, DoubleUnaryOperator mapping) → MachineBuilderJS`
 
-##### `chemicalInputChanceByInterface(String type, float min, float max, float atMin, float atMax, RecipeModifier.Operation operation) → MachineBuilderJS`
+- **参数表**：`type`（`String`）— 智能接口类型名；`mapping`（`DoubleUnaryOperator`）— 将实际接口值转换为流体输入消耗概率的运算操作数。
+- **返回**：当前构建器。
+- **抛出**：当前目标校验不支持 `fluid` / `input`，调用时抛 `IllegalArgumentException`。
+- **默认值**：操作为 `MULTIPLY`。
 
-- **参数表**：前五个参数同上；`operation`（`RecipeModifier.Operation`）— `ADD`、`MULTIPLY`、`SUBTRACT` 或 `DIVIDE`。
-- **返回**：当前构建器；作用于化学品输入消耗概率。
-- **抛出**：操作、范围或类型非法时抛 `IllegalArgumentException`。
+##### `fluidInputChanceByInterface(String type, DoubleUnaryOperator mapping, RecipeModifier.Operation operation) → MachineBuilderJS`
 
-##### `chemicalOutputChanceByInterface(String type, float min, float max, float atMin, float atMax) → MachineBuilderJS`
+- **参数表**：`type`（`String`）— 智能接口类型名；`mapping`（`DoubleUnaryOperator`）— 将实际接口值转换为流体输入消耗概率的运算操作数。 `operation`（`RecipeModifier.Operation`）— 运算方式。
+- **返回**：当前构建器。
+- **抛出**：当前目标校验不支持 `fluid` / `input`，调用时抛 `IllegalArgumentException`。
+- **默认值**：`operation` 为 `null` 时使用 `MULTIPLY`。
 
-- **参数表**：同 `chemicalInputByInterface`，端点修饰值作用于化学品输出概率。
-- **返回**：当前构建器；默认操作为 `MULTIPLY`。
-- **抛出**：智能接口范围或类型非法时抛 `IllegalArgumentException`。
+##### `fluidOutputChanceByInterface(String type, DoubleUnaryOperator mapping) → MachineBuilderJS`
 
-##### `chemicalOutputChanceByInterface(String type, float min, float max, float atMin, float atMax, RecipeModifier.Operation operation) → MachineBuilderJS`
+- **参数表**：`type`（`String`）— 智能接口类型名；`mapping`（`DoubleUnaryOperator`）— 将实际接口值转换为输出概率的运算操作数。
+- **返回**：当前构建器。
+- **抛出**：声明校验与运行时求值规则见本节开头。
+- **默认值**：操作为 `MULTIPLY`。
 
-- **参数表**：前五个参数同上；`operation`（`RecipeModifier.Operation`）— 概率运算方式。
-- **返回**：当前构建器；作用于化学品输出概率。
-- **抛出**：操作、范围或类型非法时抛 `IllegalArgumentException`。
+```javascript
+machine.fluidOutputChanceByInterface("quality", value => 0.5 + value * 0.5)
+```
 
-##### `heatInputByInterface(String type, float min, float max, float atMin, float atMax) → MachineBuilderJS`
+##### `fluidOutputChanceByInterface(String type, DoubleUnaryOperator mapping, RecipeModifier.Operation operation) → MachineBuilderJS`
 
-- **参数表**：`type`、`min`、`max`、`atMin`、`atMax`，分别为智能接口类型、输入值范围和热量输入的端点修饰值。
-- **返回**：当前构建器；默认操作为 `MULTIPLY`，作用于热量输入值。
-- **抛出**：智能接口范围或类型非法时抛 `IllegalArgumentException`。
+- **参数表**：`type`（`String`）— 智能接口类型名；`mapping`（`DoubleUnaryOperator`）— 将实际接口值转换为输出概率的运算操作数。 `operation`（`RecipeModifier.Operation`）— 运算方式。
+- **返回**：当前构建器。
+- **抛出**：声明校验与运行时求值规则见本节开头。
+- **默认值**：`operation` 为 `null` 时使用 `MULTIPLY`。
 
-##### `heatOutputByInterface(String type, float min, float max, float atMin, float atMax) → MachineBuilderJS`
+```javascript
+const operation = MMCR.getAPI().modifierOperation()
+machine.fluidOutputChanceByInterface("quality", value => 0.5 + value * 0.5, operation.ADD)
+```
 
-- **参数表**：同 `heatInputByInterface`，端点修饰值作用于热量输出值。
-- **返回**：当前构建器；默认操作为 `MULTIPLY`。
-- **抛出**：智能接口范围或类型非法时抛 `IllegalArgumentException`。
+##### `chemicalInputByInterface(String type, DoubleUnaryOperator mapping) → MachineBuilderJS`
+
+- **参数表**：`type`（`String`）— 智能接口类型名；`mapping`（`DoubleUnaryOperator`）— 将实际接口值转换为化学品输入数量的运算操作数。
+- **返回**：当前构建器。
+- **抛出**：声明校验与运行时求值规则见本节开头。
+- **默认值**：操作为 `MULTIPLY`。
+
+##### `chemicalOutputByInterface(String type, DoubleUnaryOperator mapping) → MachineBuilderJS`
+
+- **参数表**：`type`（`String`）— 智能接口类型名；`mapping`（`DoubleUnaryOperator`）— 将实际接口值转换为输出数量的运算操作数。
+- **返回**：当前构建器。
+- **抛出**：声明校验与运行时求值规则见本节开头。
+- **默认值**：操作为 `MULTIPLY`。
+
+##### `chemicalInputChanceByInterface(String type, DoubleUnaryOperator mapping) → MachineBuilderJS`
+
+- **参数表**：`type`（`String`）— 智能接口类型名；`mapping`（`DoubleUnaryOperator`）— 将实际接口值转换为化学品输入消耗概率的运算操作数。
+- **返回**：当前构建器。
+- **抛出**：声明校验与运行时求值规则见本节开头。
+- **默认值**：操作为 `MULTIPLY`。
+
+##### `chemicalInputChanceByInterface(String type, DoubleUnaryOperator mapping, RecipeModifier.Operation operation) → MachineBuilderJS`
+
+- **参数表**：`type`（`String`）— 智能接口类型名；`mapping`（`DoubleUnaryOperator`）— 将实际接口值转换为化学品输入消耗概率的运算操作数。 `operation`（`RecipeModifier.Operation`）— 运算方式。
+- **返回**：当前构建器。
+- **抛出**：声明校验与运行时求值规则见本节开头。
+- **默认值**：`operation` 为 `null` 时使用 `MULTIPLY`。
+
+##### `chemicalOutputChanceByInterface(String type, DoubleUnaryOperator mapping) → MachineBuilderJS`
+
+- **参数表**：`type`（`String`）— 智能接口类型名；`mapping`（`DoubleUnaryOperator`）— 将实际接口值转换为输出概率的运算操作数。
+- **返回**：当前构建器。
+- **抛出**：声明校验与运行时求值规则见本节开头。
+- **默认值**：操作为 `MULTIPLY`。
+
+##### `chemicalOutputChanceByInterface(String type, DoubleUnaryOperator mapping, RecipeModifier.Operation operation) → MachineBuilderJS`
+
+- **参数表**：`type`（`String`）— 智能接口类型名；`mapping`（`DoubleUnaryOperator`）— 将实际接口值转换为输出概率的运算操作数。 `operation`（`RecipeModifier.Operation`）— 运算方式。
+- **返回**：当前构建器。
+- **抛出**：声明校验与运行时求值规则见本节开头。
+- **默认值**：`operation` 为 `null` 时使用 `MULTIPLY`。
+
+##### `heatInputByInterface(String type, DoubleUnaryOperator mapping) → MachineBuilderJS`
+
+- **参数表**：`type`（`String`）— 智能接口类型名；`mapping`（`DoubleUnaryOperator`）— 将实际接口值转换为热量输入的运算操作数。
+- **返回**：当前构建器。
+- **抛出**：声明校验与运行时求值规则见本节开头。
+- **默认值**：操作为 `MULTIPLY`。
+
+##### `heatOutputByInterface(String type, DoubleUnaryOperator mapping) → MachineBuilderJS`
+
+- **参数表**：`type`（`String`）— 智能接口类型名；`mapping`（`DoubleUnaryOperator`）— 将实际接口值转换为输出数量的运算操作数。
+- **返回**：当前构建器。
+- **抛出**：声明校验与运行时求值规则见本节开头。
+- **默认值**：操作为 `MULTIPLY`。
 
 示例：
 
 ```javascript
 machine
-    .chemicalInputByInterface("chemical_rate", 0, 100, 1, 2)
-    .chemicalOutputChanceByInterface("quality", 0, 100, 0.5, 1, MMCR.getAPI().modifierOperation().MULTIPLY)
-    .heatInputByInterface("temperature", 0, 100, 1, 1.5)
+    .chemicalInputByInterface("chemical_rate", value => 1 + value / 100)
+    .chemicalOutputChanceByInterface("quality", value => 0.5 + value / 200, MMCR.getAPI().modifierOperation().MULTIPLY)
+    .heatInputByInterface("temperature", value => 1 + value / 200)
 ```
 
 #### 端口谓词与等级快捷
@@ -4307,7 +4322,7 @@ helper 的 Mekanism 方向工厂完整名称为 `anyOfChemicalInput()` / `anyOfC
 以下索引覆盖 `compat/kubejs` 下全部 22 个源文件，方便核对公开入口、隐藏重载和内部调用。链接固定到对应的源码提交。
 
 - **全局与事件**：[MMCRKubeJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/MMCRKubeJS.java)、[MMCRValues](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/MMCRValues.java)、[MMCREvents](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/MMCREvents.java)、[MMCRStartupEventJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/MMCRStartupEventJS.java)、[MMCRServerEventJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/MMCRServerEventJS.java)、[RecipeInformationEventJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/RecipeInformationEventJS.java)。
-- **机器与结构**：[MachineBuilderJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineBuilderJS.java)、[MachineStructureBuilderJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineStructureBuilderJS.java)、[MachineStructureStageBuilderJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineStructureStageBuilderJS.java)、[MachineBehaviorBuilderJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineBehaviorBuilderJS.java)、[MachineLevelBuilderJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineLevelBuilderJS.java)、[LevelTypeBuilderJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/LevelTypeBuilderJS.java)。
+- **机器与结构**：[MachineBuilderJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/0b4e5f32265a19314bfca1134b74450f7d2e9018/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineBuilderJS.java)、[MachineStructureBuilderJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineStructureBuilderJS.java)、[MachineStructureStageBuilderJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineStructureStageBuilderJS.java)、[MachineBehaviorBuilderJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineBehaviorBuilderJS.java)、[MachineLevelBuilderJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineLevelBuilderJS.java)、[LevelTypeBuilderJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/LevelTypeBuilderJS.java)。
 - **工厂与配方**：[KubeJSApi](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/KubeJSApi.java)、[KubeJSInterfaceHelpers](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/KubeJSInterfaceHelpers.java)、[MachineRecipeBuilderJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineRecipeBuilderJS.java)、[MachineRecipeSchema](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineRecipeSchema.java)、[MachineRecipeFactory](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/MachineRecipeFactory.java)。
 - **文本**：[ControllerScreenTextEventJS](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/ControllerScreenTextEventJS.java)。
 - **加载与同步**：[Plugin](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/59943952980c1ae5048537a00b5978ef483e3818/src/main/java/cn/howxu/mmcr/compat/kubejs/Plugin.java)、[KubeJSContentReloadTransaction](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/KubeJSContentReloadTransaction.java)、[KubeJSRecipeSync](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/KubeJSRecipeSync.java)、[KubeJSReloadHooks](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/compat/kubejs/KubeJSReloadHooks.java)。

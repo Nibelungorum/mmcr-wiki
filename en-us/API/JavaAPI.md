@@ -1202,21 +1202,19 @@ public static double apply(Collection<RecipeAdjustmentSpec> modifiers, String ta
         IoDirection io, double value, boolean chance);
 public static List<RecipeAdjustmentSpec> recipeModifiers(Collection<ModifierSpec> modifiers);
 public static SmartModifierSpec smart(String type, String target, ModifierScope scope, boolean chance,
-        float min, float max, float atMin, float atMax, ModifierOperation operation);
+        DoubleUnaryOperator mapping, ModifierOperation operation);
 public static SmartModifierSpec smart(String type, String target, IoDirection io, boolean chance,
-        float min, float max, float atMin, float atMax, ModifierOperation operation);
-public static SmartModifierSpec smartDuration(String type, float min, float max,
-        float atMin, float atMax, ModifierOperation op);
-public static SmartModifierSpec smartEnergy(String type, float min, float max,
-        float atMin, float atMax, ModifierOperation op);
+        DoubleUnaryOperator mapping, ModifierOperation operation);
+public static SmartModifierSpec smartDuration(String type, DoubleUnaryOperator mapping, ModifierOperation op);
+public static SmartModifierSpec smartEnergy(String type, DoubleUnaryOperator mapping, ModifierOperation op);
 public static SmartModifierSpec smartItem(String type, IoDirection io, boolean chance,
-        float min, float max, float atMin, float atMax, ModifierOperation op);
+        DoubleUnaryOperator mapping, ModifierOperation op);
 public static SmartModifierSpec smartFluid(String type, IoDirection io, boolean chance,
-        float min, float max, float atMin, float atMax, ModifierOperation op);
+        DoubleUnaryOperator mapping, ModifierOperation op);
 public static SmartModifierSpec smartChemical(String type, IoDirection io, boolean chance,
-        float min, float max, float atMin, float atMax, ModifierOperation op);
-public static SmartModifierSpec smartHeat(String type, IoDirection io, float min, float max,
-        float atMin, float atMax, ModifierOperation op);
+        DoubleUnaryOperator mapping, ModifierOperation op);
+public static SmartModifierSpec smartHeat(String type, IoDirection io,
+        DoubleUnaryOperator mapping, ModifierOperation op);
 ```
 
 ### Modifier views and enumerations
@@ -1248,13 +1246,9 @@ String interfaceType();
 String target();
 ModifierScope scope();
 boolean affectsChance();
-float minValue();
-float maxValue();
-float atMin();
-float atMax();
 ModifierOperation operation();
 IoDirection io();
-float mappedValue(float value);
+double mappedValue(float value);
 NumericModifierSpec toModifier(float value);
 ```
 
@@ -1270,9 +1264,23 @@ The underlying implementation validates the target/scope combination of `numeric
 | `parallelism`, `factory_threads` | MACHINE | NO |
 | `recipe_threads` | RECIPE | NO |
 
-`parallelized` is a Boolean modification, using specialized factories. The smart modifier `toModifier` is also bound by a numeric target/scope; the existence of a mapping factory such as `smartItem` does not mean that it can be arbitrarily converted to an unsupported machine numeric modification target.
+`parallelized` is a Boolean modifier with a dedicated factory. Smart modifiers validate the target/scope combination and chance flag when created, without executing the mapping function; `toModifier` remains subject to the same numeric target constraints.
 
-`apply` filters by target, direction, and the probability/quantity flag. It sums the additive terms and combines the multiplicative terms, then calculates `(original value + additive total) × multiplicative factor`; it does not simply apply each modifier in list order. Division by 0 is ignored in the underlying calculation. `smartDuration` defaults to target `duration` with input scope; `smartEnergy` uses `energy` with input scope. Smart modifiers map interface values to modifier values in the `atMin`–`atMax` range.
+The input variants of `smartItem` / `smartFluid` are unsupported and throw `IllegalArgumentException` during creation. Resource output helper factories normalize the target to `output`; their method names do not restrict them to a single output resource type.
+
+`apply` filters by target, direction, and the probability/quantity flag. It sums the additive terms and combines the multiplicative terms, then calculates `(original value + additive total) × multiplicative factor`. Division by 0 is ignored in the underlying calculation. `smartDuration` defaults to target `duration` with input scope; `smartEnergy` uses `energy` with input scope.
+
+:::warning 0b4e5f32 Smart Modifier Migration
+The old `min/max/atMin/atMax` endpoint overloads have been removed in favor of `java.util.function.DoubleUnaryOperator`. The `mapping` function receives the interface's actual current value and returns an operation operand. For example, returning `0.5` with `MULTIPLY` means multiplying by `0.5`; returning `5` with `ADD` means adding `5`. Calculate any linear or piecewise curves or clamping explicitly inside the function.
+
+`SmartModifierSpec` no longer has `minValue()` / `maxValue()` / `atMin()` / `atMax()`; `mappedValue(float)` now returns `double`.
+:::
+
+Mappings must be pure functions that depend only on the input value and return a finite `double`. Do not read the world, random numbers, or time, or modify external state. Functions are not sampled when declarations are created; the controller evaluates them when refreshing smart modifiers, not necessarily every tick. Each interface block with a value of the corresponding type generates modifiers from the declarations, and multiple rules still stack according to the aggregation formula above.
+
+A `null` `mapping` throws `NullPointerException` when creating the declaration; a blank interface type or invalid numeric target combination throws `IllegalArgumentException`. Direct calls to `mappedValue` / `toModifier` throw `IllegalArgumentException` for nonfinite inputs or a function result of `NaN` / positive or negative infinity, and exceptions from the function propagate to the caller. During refresh, the controller catches a `RuntimeException` from an individual mapping, logs the machine, interface, position, target, and input value, skips that modifier for the current refresh, and continues with other rules. JEI displays only the function mapping's type, target, scope, chance/amount, and operation metadata; it does not sample functions or display the old endpoint ranges.
+
+Source: `0b4e5f32`：[Public factories](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/0b4e5f32265a19314bfca1134b74450f7d2e9018/src/main/java/cn/howxu/mmcr/publicapi/recipe/modifier/Modifiers.java), [SmartModifierSpec](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/0b4e5f32265a19314bfca1134b74450f7d2e9018/src/main/java/cn/howxu/mmcr/publicapi/recipe/modifier/SmartModifierSpec.java), [Function evaluation and validation](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/0b4e5f32265a19314bfca1134b74450f7d2e9018/src/main/java/cn/howxu/mmcr/api/machine/SmartInterfaceModifier.java), [Controller refresh](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/0b4e5f32265a19314bfca1134b74450f7d2e9018/src/main/java/cn/howxu/mmcr/internal/tile/MachineControllerBlockEntity.java#L3401-L3431).
 
 ```java
 event.registerModifier(Identifier.fromNamespaceAndPath("my_mod", "fast"),
@@ -1319,8 +1327,8 @@ Source: [Interface type fields](https://github.com/Nibelungorum/ModularMachinery
 ```java
 machine.smartInterface(SmartInterfaces.type("speed", 1F, 1F, 4F, 0,
                 SmartInterfaces.ValueType.INTEGER))
-        .smartInterfaceModifier(Modifiers.smartDuration("speed", 1F, 4F,
-                1F, 0.25F, ModifierOperation.MULTIPLY));
+        .smartInterfaceModifier(Modifiers.smartDuration("speed",
+                value -> 1D / value, ModifierOperation.MULTIPLY));
 ```
 
 ## 10. Behavior hooks and context

@@ -7,7 +7,7 @@ order: 5
 
 The purpur furnace uses **smart interfaces** as runtime regulators: the integer `mode` selects recipes, the float `conversation` adds recipe filtering conditions, and both adjust energy consumption and duration through value mappings. The interface name `conversation` follows the source spelling and must not be changed to another name.
 
-This document is based on [PURPUR_FURNACE.java (5912f92f)](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/org/nibelungorum/builtin/PURPUR_FURNACE.java).
+This document is based on [PURPUR_FURNACE.java (0b4e5f32)](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/0b4e5f32265a19314bfca1134b74450f7d2e9018/src/main/java/org/nibelungorum/builtin/PURPUR_FURNACE.java).
 
 ## Entry Points and Type Signatures
 
@@ -15,7 +15,7 @@ This document is based on [PURPUR_FURNACE.java (5912f92f)](https://github.com/Ni
 | --- | --- | --- |
 | `Machines` / `MachineDraft` | `machine(Identifier)`; `build()` → `MachineSpec` | [Reference](../API/JavaAPI#machinedraft) |
 | `SmartInterfaces` | `type(String, float min, float max, int priority, ValueType)` → `SmartInterfaceSpec`; defaults to floating-point values when the value type is omitted | [Reference](../API/JavaAPI#smartinterfaces-and-smartinterfacespec) |
-| `Modifiers` | `smartEnergy(...)` / `smartDuration(...)` → `SmartModifierSpec` | [Reference](../API/JavaAPI#modifiers) |
+| `Modifiers` | `smartEnergy(String, DoubleUnaryOperator, ModifierOperation)` / `smartDuration(String, DoubleUnaryOperator, ModifierOperation)` → `SmartModifierSpec` | [Reference](../API/JavaAPI#modifiers) |
 | `MachineDraft` | `smartInterface(SmartInterfaceSpec)`; `smartInterfaceModifier(SmartModifierSpec)` | [Reference](../API/JavaAPI#smartinterfaces-and-smartinterfacespec) |
 | `Structures` / `StructureDraft` | `fullStructure(Consumer<StructureStageDraft>)`; `build(Identifier)` → `StructureSpec` | [Reference](../API/JavaAPI#structuredraft-and-structurespec) |
 | `PatternDraft` / `BlockConditions` | `where(char, BlockCondition)`; `state(String)`; `smartInterface()` | [Patterns](../API/JavaAPI#patterndraft-and-patternspec), [Conditions](../API/JavaAPI#blockconditions-and-blockcondition) |
@@ -38,10 +38,11 @@ public static void registerDefinitions(RegisterMachineDefinitionsEvent event) {
                 .maxParallelism(32).parallelizable(true)
                 .smartInterface(SmartInterfaces.type("mode", 1F, 3F, 1, SmartInterfaces.ValueType.INTEGER))
                 .smartInterface(SmartInterfaces.type("conversation", 0F, 1F, 0))
-                .smartInterfaceModifier(Modifiers.smartEnergy("mode", 1F, 2F, 1F, 2F, ModifierOperation.MULTIPLY))
-                .smartInterfaceModifier(Modifiers.smartEnergy("mode", 2F, 3F, 2F, 4F, ModifierOperation.MULTIPLY))
-                .smartInterfaceModifier(Modifiers.smartDuration("conversation", 0F, .5F, 1F, 1.5F, ModifierOperation.MULTIPLY))
-                .smartInterfaceModifier(Modifiers.smartDuration("conversation", .5F, 1F, 1.5F, 2.5F, ModifierOperation.MULTIPLY))
+                .smartInterfaceModifier(Modifiers.smartEnergy("mode",
+                        value -> Math.pow(2D, value - 1D), ModifierOperation.MULTIPLY))
+                .smartInterfaceModifier(Modifiers.smartDuration("conversation",
+                        value -> value <= 0.5D ? 1D + value : 0.5D + 2D * value,
+                        ModifierOperation.MULTIPLY))
                 .runningSound(Identifier.parse("minecraft:block.furnace.fire_crackle"))
                 .finishSound(Identifier.parse("minecraft:entity.ender_dragon.growl"))
                 .build();
@@ -52,24 +53,22 @@ public static void registerDefinitions(RegisterMachineDefinitionsEvent event) {
 
 `SmartInterfaces.type(...)` declares the interface value specifications: `mode` has a range of 1–3, a priority of 1, and an integer value type; `conversation` has a range of 0–1, a priority of 0, and the default floating-point value type. `maxParallelism(32).parallelizable(true)` declares the machine's parallel processing settings. The running and completion sounds are set to furnace crackling and the Ender Dragon's growl, respectively.
 
-### Smart Mappings Interpolate and Then Stack Individually
+### Calculate Modifier Values Explicitly with Functions
 
-The parameters for `Modifiers.smartEnergy` and `smartDuration` are the interface name, the range minimum, the range maximum, the mapped value at the minimum endpoint, the mapped value at the maximum endpoint, and the operation enum. Each mapping interpolates linearly within its own range and clamps to the endpoint values outside that range.
+`Modifiers.smartEnergy` and `smartDuration` now each take an interface name, a `DoubleUnaryOperator` function, and an operation enum. The function receives the actual interface value and returns an operand. This example uses `MULTIPLY`, so the result is a multiplier, not the final energy consumption or duration. The library no longer interpolates or clamps automatically; the function itself defines any piecewise logic.
 
-| Rule | Input Range | Mapped Values |
+| Rule | Function | Example Input → Multiplier |
 | --- | --- | --- |
-| First energy rule | `mode` 1–2 | 1 → 2 |
-| Second energy rule | `mode` 2–3 | 2 → 4 |
-| First duration rule | `conversation` 0–0.5 | 1 → 1.5 |
-| Second duration rule | `conversation` 0.5–1 | 1.5 → 2.5 |
+| Energy | `Math.pow(2D, value - 1D)` | `mode=1/2/3` → `1/2/4` |
+| Duration | `value <= 0.5D ? 1D + value : 0.5D + 2D * value` | `conversation=0/0.5/1` → `1/1.5/2.5` |
 
-:::warning
-These four declarations do not mean that only the rule whose range contains the value applies. The current implementation generates a modifier for each rule for each smart interface it finds. Values outside a rule's range still map to an endpoint value, and all multiplication rules then stack.
+With one smart interface providing these values, a base duration of 200 ticks becomes 200 / 300 / 500 ticks, respectively. `conversation=1` only illustrates the function's result; it does not mean that the third recipe's `[0, 0.31]` filter permits that value.
 
-With only one smart interface providing these values, the two energy rules produce combined multipliers of **2 / 4 / 8** for `mode=1/2/3`, respectively. The two duration rules produce combined multipliers of **1.5 / 2.25 / 3.75** for `conversation=0/0.5/1`, respectively. If the structure contains multiple smart interfaces providing the same values, the modifiers from each interface also stack, so the single-interface results no longer apply.
+:::warning Migration and Evaluation
+The old six-parameter endpoint overloads have been removed. The new energy and duration rules each use a single declaration, so they no longer produce the old example's stacked multipliers of `2/4/8` and `1.5/2.25/3.75`. A single function can have mutually exclusive branches, but additional function declarations and modifiers from other interface blocks still stack.
+
+Functions must depend only on the input value and return a finite number. They are not executed during registration; the controller evaluates them when refreshing modifiers, not necessarily every tick. If an individual function returns a nonfinite value or throws `RuntimeException`, the controller logs an error, skips that rule, and continues with the others. No modifier is generated without an interface component providing a value of the corresponding type.
 :::
-
-Although the declared ranges appear to meet at their endpoints, they must not be described as mutually exclusive branches of a piecewise function. The mappings depend on the presence of an interface and its current values; these modifiers are not applied without the corresponding interface component.
 
 ## Complete Structure
 
@@ -194,7 +193,7 @@ All three recipes have a base duration of 200 ticks. The third recipe still meet
 2. Recipe matching uses `smartInput(...)` to check the current values and select a recipe that meets the conditions, ingredient requirements, and port requirements.
 3. The machine's declared smart mappings convert interface values into modifiers, applying energy and duration adjustments rule by rule.
 
-Requirement matching and value mapping do not replace each other: each recipe declares its own interface conditions, while the machine declares the shared modifier rules. Stacking across multiple ranges or interfaces affects the actual values. Calculate the results first, then design modes that players can understand.
+Requirement matching and value mapping do not replace each other: each recipe declares its own interface conditions, while the machine declares shared function-based modifier rules. A piecewise function selects only its own branch; it does not prevent modifiers from other functions or interfaces from stacking. Calculate the results first, then design modes that players can understand.
 
 ## Further Reading
 

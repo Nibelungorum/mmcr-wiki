@@ -259,9 +259,9 @@ const Items = Java.loadClass("net.minecraft.world.item.Items")
 const changed = ctx.replaceExactItemInputCount(Items.GOLD_INGOT, 32, 1)
 ```
 
-它只替换**第一条**匹配的内置物品输入，未命中返回 `false`；与官方手动遍历可能替换多条的行为并不完全等价。两个数量参数必须为正。它也通过 `setRequirements(...)` 应用修改，不能绕过该方法对自定义输出的限制。
+它只替换**第一条**匹配的内置物品输入，未命中返回 `false`；与官方手动遍历可能替换多条的行为并不完全等价。两个数量参数必须为正。它也通过 `setRequirements(...)` 应用修改，不能绕过该方法对输出无损重建的检查。
 
-`requirements()` 使用 `MachineRequirement.copyList(...)`，返回按注册需求类型复制的不可修改列表；修改容器后必须调用 `setRequirements(...)`。该方法会由需求重新推导内置物品 / 流体输出；若当前输出包含注册的自定义输出类型，它会抛 `IllegalStateException`，不能泛化为任意输出的重建工具。
+`requirements()` 使用 `MachineRequirement.copyList(...)`，返回按注册需求类型复制的不可修改列表；修改容器后必须调用 `setRequirements(...)`。该方法通过输出注册表重新推导输出，不再仅限于内置物品 / 流体。当前每项输出必须能够经“输出 → 需求 → 输出”保留类型、资源数量和概率等信息，不能重建时仍抛 `IllegalStateException`；仅注册自定义输出类型并不保证满足条件。新需求通过校验后才会一起替换需求和输出。当前规则见 [API：RecipeStartContext](../API/KubeJS#recipestartcontext)，[实现源码（`6f9d7070`）](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/6f9d7070dcbddbd7556da6f0b8c56ff9a1814187/src/main/java/cn/howxu/mmcr/api/machine/definition/RecipeStartContext.java)。
 
 ### `recipeTick`：配方每 tick 触发
 

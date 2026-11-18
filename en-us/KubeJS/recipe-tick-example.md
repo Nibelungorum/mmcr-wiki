@@ -259,9 +259,9 @@ const Items = Java.loadClass("net.minecraft.world.item.Items")
 const changed = ctx.replaceExactItemInputCount(Items.GOLD_INGOT, 32, 1)
 ```
 
-It replaces only the **first** matching built-in item input and returns `false` if none matches; it is not fully equivalent to the official manual iteration, which may replace multiple entries. Both count arguments must be positive. It also applies changes through `setRequirements(...)` and cannot bypass that method's restrictions on custom outputs.
+It replaces only the **first** matching built-in item input and returns `false` if none matches; it is not fully equivalent to the official manual iteration, which may replace multiple entries. Both count arguments must be positive. It also applies changes through `setRequirements(...)` and cannot bypass that method's lossless output reconstruction check.
 
-`requirements()` uses `MachineRequirement.copyList(...)` to return an unmodifiable list copied according to registered requirement types; after changing the container, you must call `setRequirements(...)`. That method re-derives built-in item / fluid outputs from the requirements; if current outputs contain registered custom output types, it throws `IllegalStateException`, so it cannot be generalized into a reconstruction tool for arbitrary outputs.
+`requirements()` uses `MachineRequirement.copyList(...)` to return an unmodifiable list copied according to registered requirement types; after changing the container, you must call `setRequirements(...)`. That method re-derives outputs through the output registry and is no longer limited to built-in items / fluids. Every current output must preserve its type, resource quantity, chance, and other information through "output → requirement → output"; outputs that cannot be rebuilt still cause `IllegalStateException`. Registering a custom output type alone does not guarantee this support. Requirements and outputs are replaced together only after the new requirements pass validation. See [API: RecipeStartContext](../API/KubeJS#recipestartcontext) for the current rules and the [implementation source (`6f9d7070`)](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/6f9d7070dcbddbd7556da6f0b8c56ff9a1814187/src/main/java/cn/howxu/mmcr/api/machine/definition/RecipeStartContext.java).
 
 ### `recipeTick`: Triggered Every Recipe Tick
 

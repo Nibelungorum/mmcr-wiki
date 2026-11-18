@@ -4,7 +4,7 @@ title: JavaAPI
 
 # Java Public API Reference
 
-This page lists the Java public layer's entry points, declarations, runtime views, and extension contracts.
+This page lists the Java public layer's entry points, declarations, runtime views, and extension contracts for **Minecraft 26.1.2**, with commit [`6f9d7070`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/6f9d7070dcbddbd7556da6f0b8c56ff9a1814187/gradle.properties) as the source baseline.
 
 ## Package paths and boundaries
 
@@ -578,9 +578,9 @@ List<BlockCondition> alternatives();
 
 For startup references to another mod's blocks, prefer `block(Identifier)` or `state(String/Identifier)` instead of obtaining block objects early. `block`, `port`, and `ports` overloads with arguments no longer accept string IDs; `state(String)` remains available for state expressions such as `minecraft:oak_log[axis=y]`. Creating a `state(...)` declaration validates only the resource ID and bracket form; block existence, property names, and property values are checked when `blockState()` is read or the declaration is converted to a runtime predicate. Unknown blocks fail instead of silently falling back to air. This applies to Java public declarations, not to KubeJS `api.state(...)`, which still queries the registry immediately.
 
-Port family factories collect blocks from the corresponding registered family; no-argument `ports()` returns the port collection, while overloads with arguments match only the specified ports. `parallelControllers`, `factoryController`, `smartInterface`, `dataStorage`, and `networkInterface` correspond to their respective built-in blocks. Whether Mekanism family shortcuts have available blocks depends on whether the integration is loaded; public signatures do not depend on Mekanism classes.
+Port family factories collect blocks available for structure use by registered family ID, direction, and matching capability binding. No-argument `ports()` collects all registered ports with valid family declarations that are available for structure use, including extension families; overloads with arguments match only the specified ports. `parallelControllers`, `factoryController`, `smartInterface`, `dataStorage`, and `networkInterface` correspond to their respective built-in blocks. Whether Mekanism family shortcuts have available blocks depends on whether the integration is loaded; public signatures do not depend on Mekanism classes.
 
-Source: [BlockConditions](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/publicapi/structure/BlockConditions.java).
+Source: [BlockConditions](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/6f9d7070dcbddbd7556da6f0b8c56ff9a1814187/src/main/java/cn/howxu/mmcr/publicapi/structure/BlockConditions.java), [Port family matching implementation](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/6f9d7070dcbddbd7556da6f0b8c56ff9a1814187/src/main/java/cn/howxu/mmcr/api/machine/definition/InterfacePredicates.java).
 
 ### `PortLimits`
 
@@ -619,7 +619,7 @@ The builder rejects blank keys but does not verify that other keys are registere
 ### `PortTierLimits`
 
 ```java
-enum PortCategory { ITEM, FLUID, ENERGY, CHEMICAL, RADIOACTIVE_CHEMICAL, HEAT }
+enum PortCategory { ITEM, FLUID, ENERGY, CHEMICAL, RADIOACTIVE_CHEMICAL, HEAT, CUSTOM }
 enum ItemTier {
     TINY, SMALL, NORMAL, REINFORCED, BIG, HUGE, LUDICROUS;
     public String id();
@@ -637,6 +637,7 @@ enum ChemicalTier {
     public String id();
 }
 
+static PortTierLimits parse(String expression);
 static PortTierLimits none();
 static Builder builder();
 static PortTierLimits combine(PortTierLimits... declarations);
@@ -680,6 +681,7 @@ List<RequirementView> requirements();
 
 // PortTierLimits.RequirementView
 PortCategory category();
+String familyId();
 IoDirection ioType();
 int minTier();
 String minTierId();
@@ -719,7 +721,37 @@ PortTierLimits build();
 | `radioactiveChemical` / `radioactiveChemicalInput` / `radioactiveChemicalOutput` | No string tier overload; use the no-argument factory or direction overload. | No tier enum. |
 | `heat` / `heatInput` / `heatOutput` | No string tier overload; use the no-argument factory or direction overload. | No tier enum. |
 
-String tier names are case-insensitive, but whitespace is not trimmed; `null`, blank strings, or names outside the family throw `IllegalArgumentException`. For example, `chemicalInput("ADVANCED")` is valid, while `chemicalInput("normal")` and `chemicalInput(" advanced ")` are invalid. `id()` returns lowercase names. The string overload only accepts existing tier names; it does not register new tiers or accept KubeJS list syntax such as `chemical_input_hatch>=advanced`.
+Factories such as `item(String)` and `chemicalInput(String)` accept case-insensitive tier names; `null`, blank strings, or names outside the family throw `IllegalArgumentException`. For example, `chemicalInput("ADVANCED")` is valid, while `chemicalInput("normal")` and `chemicalInput(" advanced ")` are invalid. `id()` returns lowercase names. These factories accept only tier names, not complete expressions; pass `chemical_input_hatch>=advanced` to the new `parse(String expression)` instead.
+
+#### `parse` and extension port families
+
+`parse` shares its parser with KubeJS's `api.portTierRequirements(...)`, but parses one entry at a time and returns a `PortTierLimits` declaration. Existing factories and Builder methods remain unchanged.
+
+| Syntax | Meaning |
+| --- | --- |
+| Built-in family aliases such as `item_input_bus>=normal` and `chemical_input_hatch>=advanced` | Use the named tiers in the table above; radioactive chemicals and heat use only the alias, without `>=`. |
+| `registered_alias>=N` | For extension families outside the six categories above, use their registered counting alias and a numeric minimum detection tier. |
+| `namespace:family@input>=N` / `namespace:family@output>=N` | Identify an extension family by its registered family ID and direction without relying on an alias; the direction must be lowercase `input` or `output`. |
+
+Namespaced syntax can also identify registered built-in families, but their existing rules still apply: items, fluids, energy, and regular chemicals use named tiers, while radioactive chemicals and heat omit `>=`. Legacy built-in aliases can be parsed even when the integration is not loaded; registered aliases and namespaced forms must resolve to a family and direction in the current port registry.
+
+For extension families, `N` is a decimal integer from `0` to `2147483647` in canonical form, such as `0` or `3`; `03`, `+3`, negative numbers, and fractions are not accepted. Higher detection-tier numbers mean higher tiers, and the actual tier must be `>= N`. Parsing matches strings exactly without trimming spaces; unknown families, unregistered directions, ambiguous aliases, invalid tiers, or invalid formats throw `IllegalArgumentException`. Specific model IDs do not automatically become tier aliases; only declared family aliases or family IDs with a direction can be used for parsing.
+
+The following assumes an addon has registered the input family `example:shard` with the counting alias `shard_in`:
+
+```java
+PortTierLimits limits = PortTierLimits.parse("example:shard@input>=3");
+// With the same registration, PortTierLimits.parse("shard_in>=3") produces the same requirement.
+PortTierLimits.RequirementView requirement = limits.requirements().getFirst();
+// category() == PortCategory.CUSTOM; familyId() is "example:shard"
+// ioType() == IoDirection.INPUT; minTier() is 3; minTierId() is "3"
+```
+
+`RequirementView.familyId()` returns the namespaced family ID as a string. `CUSTOM` is only a category; use `familyId()` to read or distinguish specific extension families. Code that iterates over `PortCategory` or uses exhaustive branches must handle the new `CUSTOM` value.
+
+`parse` does not register families or ports, nor does it automatically add the requirement to a stage. `StructureStageDraft.portTiers(...)` still accepts only `Consumer<PortTierLimits.Builder>`; there is no overload that directly accepts `PortTierLimits`.
+
+#### Tier detection and stage configuration
 
 Tiers can only be compared within the same family; do not compare ordinals across families. Item, fluid, and energy detection tiers start at 0; the chemical detection tiers `basic`, `advanced`, `elite`, and `ultimate` are 2, 3, 4, and 5 respectively, so `ChemicalTier.ordinal()` cannot substitute for them. `anyItem...` / `anyFluid...` / `anyEnergy...` is equivalent to the lowest tier, `TINY`, in that direction; `anyChemical...` is equivalent to `BASIC`. Radioactive chemicals and heat only check that a port of the corresponding family and direction exists. Their `RequirementView` reports `0` / `"any"` for `minTier()` / `minTierId()`; `"any"` is not a tier name accepted by the string factory.
 
@@ -732,7 +764,7 @@ stage.ports(ports -> ports.range("chemical_input_hatch", 1, 2)
                 .anyHeatOutput());
 ```
 
-This snippet configures stage constraints; the pattern must also allow these ports through `BlockConditions`. Source code: [public tier factories and enums](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/c2563c4110cd15bad0218dc4fa5a4f091fbccc87/src/main/java/cn/howxu/mmcr/publicapi/structure/PortTierLimits.java), [string tier parsing](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/c2563c4110cd15bad0218dc4fa5a4f091fbccc87/src/main/java/cn/howxu/mmcr/api/machine/definition/InterfaceTiers.java).
+This snippet configures stage constraints; the pattern must also allow these ports through `BlockConditions`. Source (`6f9d7070`): [Public tier factories and enums](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/6f9d7070dcbddbd7556da6f0b8c56ff9a1814187/src/main/java/cn/howxu/mmcr/publicapi/structure/PortTierLimits.java), [Shared expression parser](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/6f9d7070dcbddbd7556da6f0b8c56ff9a1814187/src/main/java/cn/howxu/mmcr/api/machine/definition/PortTiers.java), [Registered family parsing and validation tests](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/6f9d7070dcbddbd7556da6f0b8c56ff9a1814187/src/test/java/cn/howxu/mmcr/api/machine/PortTierRequirementSpecTest.java).
 
 ### `StructureConstraints`
 
@@ -1412,7 +1444,11 @@ boolean cancelled();
 
 The current execution can be adjusted before inputs are consumed; registered recipes are not changed. Duration must be positive. Exact input replacement changes only the first input whose quantity equals expected and whose ingredient resolves exclusively to the specified item. It does not replace tag inputs that include multiple items.
 
-`setRequirements` re-derives built-in item/fluid outputs, but throws `IllegalStateException` if a registered custom output is currently present; do not assume it automatically rebuilds all extension outputs. `setOutputs` converts outputs into corresponding OUTPUT requirements through their registered output types and preserves the corresponding template tags. Output extensions must support that conversion correctly. Modifying a copied list does not automatically write changes back; use a setter. `snapshot()` returns this execution's duration, requirements, and outputs.
+`setRequirements` re-derives outputs through the output registry and is no longer limited to built-in items/fluids. Before applying changes, it checks whether every current output can make a lossless round trip through "output → requirement → output", preserving its output type, resource quantity, chance, and other information. If any output cannot be rebuilt, it throws `IllegalStateException`. Registering an extension output type does not guarantee round-trip support; do not assume all extension outputs can be rebuilt automatically. `replaceExactItemInputCount` ultimately calls this method and has the same restriction.
+
+`setOutputs` converts outputs into corresponding OUTPUT requirements through their registered output types and preserves the corresponding template tags. Output extensions must support that conversion correctly. Both setters validate the new requirement list before replacing the current requirements and outputs; a validation failure should not leave the context partially updated. Modifying a copied list does not automatically write changes back; use a setter. `snapshot()` returns this execution's duration, requirements, and outputs.
+
+Source (`6f9d7070`): [Start context](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/6f9d7070dcbddbd7556da6f0b8c56ff9a1814187/src/main/java/cn/howxu/mmcr/api/machine/definition/RecipeStartContext.java), [Output round-trip checks](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/6f9d7070dcbddbd7556da6f0b8c56ff9a1814187/src/main/java/cn/howxu/mmcr/api/recipe/OutputRegistry.java).
 
 ### `RecipeTickContext`
 

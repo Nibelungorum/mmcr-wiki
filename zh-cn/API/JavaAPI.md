@@ -4,7 +4,7 @@ title: JavaAPI
 
 # Java 公共 API 参考
 
-本页集中列出 Java 公共层的入口、声明、运行时视图和扩展契约。
+本页集中列出 Java 公共层的入口、声明、运行时视图和扩展契约，对应 **Minecraft 26.1.2**，源码基线为提交 [`6f9d7070`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/6f9d7070dcbddbd7556da6f0b8c56ff9a1814187/gradle.properties)。
 
 ## 包路径与边界
 
@@ -578,9 +578,9 @@ List<BlockCondition> alternatives();
 
 启动期引用其他 Mod 的方块时，优先使用 `block(Identifier)` 或 `state(String/Identifier)`，不要提前取得方块对象。`block`、`port`、带参数的 `ports` 不再接受字符串 ID；`state(String)` 仍保留，用于 `minecraft:oak_log[axis=y]` 这类状态表达式。`state(...)` 创建声明时只校验资源 ID 和括号形式；方块是否存在、属性名和属性值是否有效，延迟到读取 `blockState()` 或转换为运行时谓词时校验。未知方块会报错，不会静默退回空气。此行为属于 Java 公共声明层，不代表 KubeJS 的 `api.state(...)` 也延迟查询注册表。
 
-端口族工厂从对应注册族收集方块；`ports()` 无参返回端口集合，带参数版本只匹配指定端口。`parallelControllers`、`factoryController`、`smartInterface`、`dataStorage`、`networkInterface` 对应各自内置方块。Mekanism 族快捷条件是否有可用方块取决于联动加载，公共签名不依赖 Mekanism 类。
+端口族工厂按已注册的族 ID、方向和匹配的能力绑定收集可用于结构的方块。`ports()` 无参收集所有具有有效族声明、可用于结构的已注册端口，也包含扩展族；带参数版本只匹配指定端口。`parallelControllers`、`factoryController`、`smartInterface`、`dataStorage`、`networkInterface` 对应各自内置方块。Mekanism 族快捷条件是否有可用方块取决于联动加载，公共签名不依赖 Mekanism 类。
 
-源码：[BlockConditions](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/5912f92f611da4a94d85f26644a3f9b99e534d27/src/main/java/cn/howxu/mmcr/publicapi/structure/BlockConditions.java)。
+源码：[BlockConditions](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/6f9d7070dcbddbd7556da6f0b8c56ff9a1814187/src/main/java/cn/howxu/mmcr/publicapi/structure/BlockConditions.java)、[端口族匹配实现](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/6f9d7070dcbddbd7556da6f0b8c56ff9a1814187/src/main/java/cn/howxu/mmcr/api/machine/definition/InterfacePredicates.java)。
 
 ### `PortLimits`
 
@@ -619,7 +619,7 @@ PortLimits build();
 ### `PortTierLimits`
 
 ```java
-enum PortCategory { ITEM, FLUID, ENERGY, CHEMICAL, RADIOACTIVE_CHEMICAL, HEAT }
+enum PortCategory { ITEM, FLUID, ENERGY, CHEMICAL, RADIOACTIVE_CHEMICAL, HEAT, CUSTOM }
 enum ItemTier {
     TINY, SMALL, NORMAL, REINFORCED, BIG, HUGE, LUDICROUS;
     public String id();
@@ -637,6 +637,7 @@ enum ChemicalTier {
     public String id();
 }
 
+static PortTierLimits parse(String expression);
 static PortTierLimits none();
 static Builder builder();
 static PortTierLimits combine(PortTierLimits... declarations);
@@ -680,6 +681,7 @@ List<RequirementView> requirements();
 
 // PortTierLimits.RequirementView
 PortCategory category();
+String familyId();
 IoDirection ioType();
 int minTier();
 String minTierId();
@@ -719,7 +721,37 @@ PortTierLimits build();
 | `radioactiveChemical` / `radioactiveChemicalInput` / `radioactiveChemicalOutput` | 无字符串等级重载，使用无参工厂或方向重载。 | 无等级枚举。 |
 | `heat` / `heatInput` / `heatOutput` | 无字符串等级重载，使用无参工厂或方向重载。 | 无等级枚举。 |
 
-字符串等级名不区分大小写，但不去除空格；`null`、空白或不属于该族的名称抛出 `IllegalArgumentException`。例如 `chemicalInput("ADVANCED")` 有效，`chemicalInput("normal")` 和 `chemicalInput(" advanced ")` 无效。`id()` 返回小写名称。字符串重载只接受已有等级名，不是新等级注册入口，也不接收 `chemical_input_hatch>=advanced` 这种 KubeJS 列表语法。
+`item(String)`、`chemicalInput(String)` 等工厂的等级名不区分大小写；`null`、空白或不属于该族的名称抛出 `IllegalArgumentException`。例如 `chemicalInput("ADVANCED")` 有效，`chemicalInput("normal")` 和 `chemicalInput(" advanced ")` 无效。`id()` 返回小写名称。这些工厂只接受等级名，不接受完整表达式；`chemical_input_hatch>=advanced` 应交给新增的 `parse(String expression)`。
+
+#### `parse` 与扩展端口族
+
+`parse` 和 KubeJS 的 `api.portTierRequirements(...)` 共用解析器，但每次只解析一项，返回 `PortTierLimits` 声明。原有工厂与 Builder 方法保留不变。
+
+| 写法 | 含义 |
+| --- | --- |
+| `item_input_bus>=normal`、`chemical_input_hatch>=advanced` 等内置族别名 | 沿用上表的命名等级；放射性化学品与热量只写别名，不带 `>=`。 |
+| `注册别名>=N` | 对不属于上述六类的扩展族，使用其已注册的统计别名和数字最低检测等级。 |
+| `namespace:family@input>=N` / `namespace:family@output>=N` | 通过已注册的族 ID 与方向定位扩展族，不依赖别名；方向必须写小写 `input` 或 `output`。 |
+
+带命名空间的写法也可定位已注册的内置族，但仍遵守该族原有规则：物品、流体、能量与普通化学品使用命名等级，放射性化学品与热量不带 `>=`。内置历史别名可在联动未加载时解析；注册别名和带命名空间的写法则必须能在当前端口注册表中找到对应族、方向。
+
+扩展族的 `N` 是 `0` 到 `2147483647` 的十进制整数，必须采用规范写法，如 `0`、`3`，不接受 `03`、`+3`、负数或小数。检测等级数值越大越高，实际等级必须 `>= N`。解析按字符串精确匹配，不去除空格；未知族、未注册方向、歧义别名、无效等级或格式抛出 `IllegalArgumentException`。具体型号 ID 不会自动成为等级别名，只有注册声明中的族别名或带方向的族 ID 才能用于解析。
+
+以下假设附属 Mod 已注册输入族 `example:shard`，统计别名为 `shard_in`：
+
+```java
+PortTierLimits limits = PortTierLimits.parse("example:shard@input>=3");
+// 同一注册声明下，PortTierLimits.parse("shard_in>=3") 得到相同需求。
+PortTierLimits.RequirementView requirement = limits.requirements().getFirst();
+// category() == PortCategory.CUSTOM，familyId() 为 "example:shard"
+// ioType() == IoDirection.INPUT，minTier() 为 3，minTierId() 为 "3"
+```
+
+`RequirementView.familyId()` 返回带命名空间的族 ID 字符串；`CUSTOM` 只是分类，读取或区分扩展族时应使用 `familyId()`。遍历 `PortCategory` 或对其做穷尽分支的代码需处理新增的 `CUSTOM`。
+
+`parse` 不注册族或端口，也不会自动把需求写入某个阶段。当前 `StructureStageDraft.portTiers(...)` 仍只接受 `Consumer<PortTierLimits.Builder>`，没有直接接收 `PortTierLimits` 的重载。
+
+#### 等级检测与阶段配置
 
 等级只在同族内比较，不能跨族比较 ordinal。物品、流体、能量的检测等级从 0 开始；化学品 `basic`、`advanced`、`elite`、`ultimate` 的检测等级分别为 2、3、4、5，不能用 `ChemicalTier.ordinal()` 代替。`anyItem...` / `anyFluid...` / `anyEnergy...` 等价于该方向的最低 `TINY`，`anyChemical...` 等价于最低 `BASIC`。放射性化学品与热量仅检查对应族、方向的端口存在，`RequirementView` 的 `minTier()` / `minTierId()` 为 `0` / `"any"`，这不是可传入字符串工厂的等级名。
 
@@ -732,7 +764,7 @@ stage.ports(ports -> ports.range("chemical_input_hatch", 1, 2)
                 .anyHeatOutput());
 ```
 
-该片段配置阶段约束，模式中还需通过 `BlockConditions` 允许放置这些端口。源码：[公共等级工厂与枚举](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/c2563c4110cd15bad0218dc4fa5a4f091fbccc87/src/main/java/cn/howxu/mmcr/publicapi/structure/PortTierLimits.java)、[字符串等级解析](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/c2563c4110cd15bad0218dc4fa5a4f091fbccc87/src/main/java/cn/howxu/mmcr/api/machine/definition/InterfaceTiers.java)。
+该片段配置阶段约束，模式中还需通过 `BlockConditions` 允许放置这些端口。源码（`6f9d7070`）：[公共等级工厂与枚举](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/6f9d7070dcbddbd7556da6f0b8c56ff9a1814187/src/main/java/cn/howxu/mmcr/publicapi/structure/PortTierLimits.java)、[共用表达式解析器](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/6f9d7070dcbddbd7556da6f0b8c56ff9a1814187/src/main/java/cn/howxu/mmcr/api/machine/definition/PortTiers.java)、[注册族解析与校验测试](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/6f9d7070dcbddbd7556da6f0b8c56ff9a1814187/src/test/java/cn/howxu/mmcr/api/machine/PortTierRequirementSpecTest.java)。
 
 ### `StructureConstraints`
 
@@ -1412,7 +1444,11 @@ boolean cancelled();
 
 启动输入消耗前可调整本次执行；不会改写已注册配方。时长必须正数。精确输入替换只改第一个数量等于 expected 且 ingredient 仅解析为指定物品的输入，不会把包含多物品的标签输入也替换。
 
-`setRequirements` 会重新推导内置物品/流体输出；当前存在注册自定义输出时会抛 `IllegalStateException`，不能假定它会自动重建所有扩展输出。`setOutputs` 通过输出注册类型转换对应 OUTPUT 需求并保留相应模板标签，输出扩展必须能正确执行该转换。读取列表后修改副本不会自动回写，应使用 setter。`snapshot()` 返回时长、需求和输出的本次执行快照。
+`setRequirements` 通过输出注册表重新推导输出，不再只支持内置物品/流体。修改前会检查当前每项输出能否经“输出 → 需求 → 输出”无损往返，输出类型、资源数量和概率等必须保留；任一项不能重建时抛 `IllegalStateException`。注册了扩展输出类型不代表一定支持往返转换，不能假定它会自动重建所有扩展输出。`replaceExactItemInputCount` 最终也调用该方法，受同一限制。
+
+`setOutputs` 通过输出注册类型转换对应 OUTPUT 需求并保留相应模板标签，输出扩展必须能正确执行该转换。两个 setter 都先校验新需求列表，成功后才替换当前需求和输出；校验失败不应留下半更新的上下文。读取列表后修改副本不会自动回写，应使用 setter。`snapshot()` 返回时长、需求和输出的本次执行快照。
+
+源码（`6f9d7070`）：[启动上下文](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/6f9d7070dcbddbd7556da6f0b8c56ff9a1814187/src/main/java/cn/howxu/mmcr/api/machine/definition/RecipeStartContext.java)、[输出往返检查](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/6f9d7070dcbddbd7556da6f0b8c56ff9a1814187/src/main/java/cn/howxu/mmcr/api/recipe/OutputRegistry.java)。
 
 ### `RecipeTickContext`
 

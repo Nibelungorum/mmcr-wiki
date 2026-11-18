@@ -185,7 +185,7 @@ api.portTierRequirements([
 ])
 ```
 
-Tiered port families use `port_family>=tier`, for example `item_input_bus>=normal`; the operator is not `=>`. Tier names are case-insensitive, but the port family must exactly match its lowercase name, and the entire entry must contain no spaces. Available tiers for each family are:
+Built-in tiered port families use `port_family>=tier`, for example `item_input_bus>=normal`; the operator is not `=>`. Named tiers are case-insensitive, built-in aliases must exactly match their lowercase names, and the entire entry must contain no spaces. Available tiers for built-in families are:
 
 - Items: `tiny`, `small`, `normal`, `reinforced`, `big`, `huge`, `ludicrous`.
 - Fluids: the above + `vacuum`.
@@ -206,6 +206,8 @@ api.portTierRequirements([
 ```
 
 These requirements can also be created using `chemicalInputTier(String)` / `chemicalOutputTier(String)`, `radioactiveChemicalInputTier()` / `radioactiveChemicalOutputTier()`, and `heatInputTier()` / `heatOutputTier()`; the facade and all three builders provide these convenience factories. See [API: Port Tiers and Port Requirements](../API/KubeJS#port-requirements) for the complete rules. When applying them to a structure, you must also provide installation positions in the pattern and allow the corresponding ports through `.set(...)`; when Mekanism is not loaded, no corresponding ports can satisfy these requirements.
+
+Extension families can now use `registered_alias>=N` or `namespace:family@input>=N` / `namespace:family@output>=N`, rather than being limited to the built-in families above. For example, if an addon has registered the input family `example:shard` with the alias `shard_in`, `shard_in>=3` and `example:shard@input>=3` express the same requirement. `N` is a nonnegative integer detection tier; higher numbers mean higher tiers. The family, direction, and alias must be registered; unknown or ambiguous declarations throw an exception during parsing.
 
 This example requires **at least one port of tier `normal` or higher for each of item input, item output, and energy input**; not every port in the same family needs to meet the threshold. The structure cannot form with only a `tiny` item input bus; if the structure has additional installation positions and also contains an item input port of tier `normal` or higher, lower-tier ports can coexist. Every tier requirement must be satisfied, but the same port can satisfy multiple compatible requirements; constraining counts still requires `portRequirements(...)`.
 
@@ -321,7 +323,7 @@ Count requirements count the total number of matching ports; each tier requireme
 
 In these requirements, `item_input_bus` represents the **item input port family**, not a pattern character. The block predicate bound to `'B'` determines which blocks are allowed at that position; port count and tier requirements then validate the ports actually placed there.
 
-Count requirements can use family aliases or specific model IDs; tier lists accept only the prescribed port-family syntax, so specific model IDs such as `item_input_bus_tiny` cannot appear on the left of `>=`.
+Count requirements can use family aliases or specific model IDs; tier lists use built-in family aliases, registered extension family aliases, or family IDs with a direction. Specific model IDs do not automatically become tier aliases, so model IDs used only for counting, such as `item_input_bus_tiny`, cannot appear on the left of `>=`.
 
 ## Summary
 

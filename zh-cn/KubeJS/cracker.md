@@ -185,7 +185,7 @@ api.portTierRequirements([
 ])
 ```
 
-有等级的端口族使用 `端口族>=等级`，例如 `item_input_bus>=normal`，运算符不是 `=>`。等级名称不区分大小写，但端口族必须按小写名称精确匹配，整项不能加入空格。各族可选等级为：
+内置有等级的端口族使用 `端口族>=等级`，例如 `item_input_bus>=normal`，运算符不是 `=>`。命名等级不区分大小写，内置别名必须按小写名称精确匹配，整项不能加入空格。内置族可选等级为：
 
 - 物品：`tiny`、`small`、`normal`、`reinforced`、`big`、`huge`、`ludicrous`。
 - 流体：上述 + `vacuum`。
@@ -206,6 +206,8 @@ api.portTierRequirements([
 ```
 
 这些需求也可通过 `chemicalInputTier(String)` / `chemicalOutputTier(String)`、`radioactiveChemicalInputTier()` / `radioactiveChemicalOutputTier()`、`heatInputTier()` / `heatOutputTier()` 创建；门面与三个构建器均提供这些快捷工厂。完整规则见 [API：端口等级与端口需求](../API/KubeJS#port-requirements)。应用到结构时，还需在模式中提供安装位并通过 `.set(...)` 允许相应端口；Mekanism 未加载时，没有对应端口能满足这些需求。
+
+扩展族现在也可使用 `注册别名>=N` 或 `namespace:family@input>=N` / `namespace:family@output>=N`，不再限于上述内置族。例如，附属 Mod 已注册输入族 `example:shard` 和别名 `shard_in` 时，`shard_in>=3` 与 `example:shard@input>=3` 表达相同需求。`N` 是非负整数检测等级，数值越大越高。族、方向和别名必须已注册，未知或歧义声明会在解析时抛出异常。
 
 本例要求物品输入、物品输出、能量输入**各至少有一个端口达到 `normal`**，不要求所有同族端口都达标。只有 `tiny` 物品输入总线时无法成型；若结构有额外安装位，同时存在 `normal` 或更高等级的物品输入端口，低等级端口可以共存。每项等级需求都必须满足，但同一个端口可满足多项兼容需求；要限制数量仍需配合 `portRequirements(...)`。
 
@@ -321,7 +323,7 @@ api.portTierRequirements([
 
 `item_input_bus` 在这些需求中表示**物品输入端口族**，不是模式字符。`'B'` 绑定的方块谓词决定该位置允许哪些方块，端口数量与等级需求再校验实际放置的端口。
 
-数量需求可使用族别名或具体型号 ID；等级列表只接受规定的端口族写法，不能把 `item_input_bus_tiny` 等具体型号 ID 放在 `>=` 左侧。
+数量需求可使用族别名或具体型号 ID；等级列表使用内置族别名、已注册的扩展族别名或带方向的族 ID。具体型号 ID 不会自动成为等级别名，不能把 `item_input_bus_tiny` 等仅用于计数的型号 ID 放在 `>=` 左侧。
 
 ## 小结
 

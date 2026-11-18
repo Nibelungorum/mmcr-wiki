@@ -4,7 +4,7 @@ title: KubeJS API
 
 # KubeJS API
 
-This page is a consolidated reference for MMCR's KubeJS integration, targeting **Minecraft 26.1.2**, with commit [`0b4e5f32`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/0b4e5f32265a19314bfca1134b74450f7d2e9018/gradle.properties) as the source baseline. Examples use KubeJS/Rhino JavaScript syntax.
+This page is a consolidated reference for MMCR's KubeJS integration, targeting **Minecraft 26.1.2**, with commit [`6f9d7070`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/6f9d7070dcbddbd7556da6f0b8c56ff9a1814187/gradle.properties) as the source baseline. Examples use KubeJS/Rhino JavaScript syntax.
 
 MMCR's KubeJS API has three declaration windows: machine, tier, modifier, and screen text registration in startup scripts; structure and programmatic recipe registration during server script loading; and data-driven recipe registration in `ServerEvents.recipes`. Changes to startup declarations require a restart; server-side structures and recipes can be replaced during a resource reload. There are also client-side recipe information events.
 
@@ -880,7 +880,7 @@ structure.set("E", api.anyOfEnergyOutput())
 
 ##### Combined Port Predicates
 
-Each method below returns the union of input and output ports in the same family. Port families that require Mekanism match no blocks when Mekanism is not loaded.
+Each method below returns the union of input and output ports in the same family. Matching collects ports available for structure use by registered family ID, direction, and corresponding capability binding, not by implementation class or ID suffix. Extension, composite, and integration ports with matching family declarations are included as well. Mekanism's own ports still require Mekanism to be loaded.
 
 | Method | Matches |
 | --- | --- |
@@ -890,12 +890,14 @@ Each method below returns the union of input and output ports in the same family
 | `anyOfChemicalPorts()` | Mekanism chemical input and output ports. |
 | `anyOfRadioactiveChemicalPorts()` | Mekanism radioactive chemical input and output ports. |
 | `anyOfHeatPorts()` | Mekanism heat input and output ports. |
-| `ports()` | All built-in ports; also includes chemical and heat ports when Mekanism is available. |
+| `ports()` | All registered ports with valid family declarations that are available for structure use, including extension families; not just fixed built-in families such as items, fluids, and energy. |
 
 ```javascript
 structure.set("P", api.anyOfItemPorts())
 structure.set("A", api.ports())
 ```
+
+Source: [Port family matching implementation (`6f9d7070`)](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/6f9d7070dcbddbd7556da6f0b8c56ff9a1814187/src/main/java/cn/howxu/mmcr/api/machine/definition/InterfacePredicates.java).
 
 ##### `anyOfUpgradeBus() → BlockPredicate`
 
@@ -992,7 +994,7 @@ const ports = api.portRequirements({
 })
 ```
 
-**Port Family Counting Aliases (Complete List)**
+**Built-in Port Family Counting Aliases**
 
 Aliases count all ports in the same family and direction, regardless of specific model or tier.
 
@@ -1037,9 +1039,9 @@ The value `0` sets neither a minimum nor a maximum count. To prohibit a port cat
 
 ##### `portTierRequirements(List<String> minimums) → PortTierRequirementSpec`
 
-- **Parameters**: `minimums` (`List<String>`) — Each entry uses the full syntax in the table below. Tiered port families use `port_family>=tier`; single-tier radioactive chemical and heat ports use only the port family name.
-- **Returns**: An immutable minimum port tier requirement object.
-- **Throws**: `IllegalArgumentException` if the format is invalid, the port family is not in the allowed list, or the tier is blank or does not belong to the corresponding port family.
+- **Parameters**: `minimums` (`List<String>`) — Each entry is a minimum-tier expression. Built-in families retain the syntax below; extension families can use `registered_alias>=N` or `namespace:family@input>=N` / `namespace:family@output>=N`.
+- **Returns**: An immutable minimum port tier requirement object, using the same parser as the Java public layer's `PortTierLimits.parse(...)`.
+- **Throws**: `IllegalArgumentException` if the format or tier is invalid, the family or direction is unregistered, or an alias refers to multiple different families or directions.
 - **Default**: An empty list returns `PortTierRequirementSpec.none()`.
 - **Example**:
 
@@ -1054,7 +1056,7 @@ const tiers = api.portTierRequirements([
 ])
 ```
 
-**Allowed Syntax and Tiers (Complete List)**
+**Built-in Family Syntax and Tiers**
 
 `<tier>` is a placeholder that must be replaced with one of the tiers listed in that row. Tiers are ordered from lowest to highest.
 
@@ -1073,9 +1075,27 @@ const tiers = api.portTierRequirements([
 | Mekanism heat input | `heat_input_hatch` | No tier parameter; omit `>=`. |
 | Mekanism heat output | `heat_output_hatch` | No tier parameter; omit `>=`. |
 
-The port family must exactly match the lowercase string in the table. Tier names are **case-insensitive**, so `chemical_input_hatch>=ADVANCED` is valid. The parser does not trim spaces or accept namespaces, specific model IDs, wildcards, or other comparison operators (such as `>`, `<=`, or `=`). The eight tiered forms must contain exactly one `>=` and must specify a tier; the four untiered forms must not have `>=any` or `>=ultimate` appended.
+Built-in aliases must exactly match the lowercase strings in the table. Named tiers are **case-insensitive**, so `chemical_input_hatch>=ADVANCED` is valid. The parser does not trim spaces or support wildcards or other comparison operators (such as `>`, `<=`, or `=`). The eight tiered forms must contain exactly one `>=` and must specify a tier; the four untiered forms must not have `>=any` or `>=ultimate` appended.
 
-For example, `chemical_input_hatch>=normal`, `chemical_input_hatch_basic>=basic`, `chemical_input_hatch`, `heat_input_hatch>=ultimate`, `radioactive_chemical_input_hatch>=any`, and `item_input_bus >= normal` all throw exceptions. Specific port IDs accepted by count requirements cannot be used directly as port families here.
+**Registered Extension Families**
+
+Extension families do not need to be added to the built-in category enum; they are resolved by their declared family ID and direction. The following assumes an addon has registered the input family `example:shard` with the counting alias `shard_in`. This is not a built-in MMCR family, so the example cannot run unchanged without that registration:
+
+```javascript
+const byAlias = api.portTierRequirements(["shard_in>=3"])
+const byId = api.portTierRequirements(["example:shard@input>=3"])
+// Both express the same requirement: at least one shard input port must have a detection tier of 3 or higher.
+structure.portTierRequirements(byId)
+```
+
+- Aliases must exactly match their registration declarations. Namespaced syntax uses `family_id@direction`, not a specific block or port kind ID; the direction must be lowercase `input` / `output`.
+- Extension families use a numeric minimum detection tier `N`, from `0` to `2147483647`, in canonical decimal form such as `0` or `3`. `03`, `+3`, negative numbers, and fractions are invalid. Higher detection-tier numbers mean higher tiers, and the actual tier must be `>= N`; this does not indicate capacity.
+- Registered aliases and family IDs with a direction must already exist in the current port registry. Unknown families or directions are rejected when creating the requirement. An alias that refers to multiple different families or directions is rejected as ambiguous; multiple models in the same family and direction sharing an alias are not ambiguous.
+- Namespaced syntax can also identify registered built-in families, but their named-tier or untiered rules still apply; numeric tiers cannot replace built-in tier names. The legacy aliases above do not depend on whether integration ports have been registered, so these built-in requirements can still be constructed without Mekanism loaded.
+
+For example, `chemical_input_hatch>=normal`, `chemical_input_hatch_basic>=basic`, `chemical_input_hatch`, `heat_input_hatch>=ultimate`, `radioactive_chemical_input_hatch>=any`, and `item_input_bus >= normal` all throw exceptions. Specific model IDs do not automatically become tier aliases; a key accepted by count requirements cannot be used directly on the left of a tier expression unless it is also a registered family alias.
+
+Read requirement entries through `requirements()`. `category()` can now also be `CUSTOM`; use `familyId()` to distinguish specific extension families. Here, `familyId()` returns the underlying `Identifier`, whereas the Java public layer's `PortTierLimits.RequirementView.familyId()` returns `String`.
 
 Tier comparisons use the detection tier declared by the family. Extension, composite, and integration ports can also satisfy requirements through their corresponding family declarations; tiers are not inferred from port ID suffixes. Chemical tiers `basic`, `advanced`, `elite`, and `ultimate` correspond to detection tiers 2, 3, 4, and 5. Radioactive chemical and heat requirements check only the family and direction and offer no tier selection. Even an `ultimate` regular chemical port cannot replace a radioactive chemical port.
 
@@ -1100,7 +1120,7 @@ structure.portTierRequirements(api.chemicalInputTier("advanced"))
 // stage.portTierRequirements(stage.heatOutputTier())
 ```
 
-Source: [String parsing entry point](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/c2563c4110cd15bad0218dc4fa5a4f091fbccc87/src/main/java/cn/howxu/mmcr/compat/kubejs/KubeJSApi.java), [Port kinds and count aliases](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/c2563c4110cd15bad0218dc4fa5a4f091fbccc87/src/main/java/cn/howxu/mmcr/registry/PortKinds.java), [Tier matching rules](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/c2563c4110cd15bad0218dc4fa5a4f091fbccc87/src/main/java/cn/howxu/mmcr/api/machine/PortTierRequirementSpec.java).
+Source (`6f9d7070`): [KubeJS entry point](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/6f9d7070dcbddbd7556da6f0b8c56ff9a1814187/src/main/java/cn/howxu/mmcr/compat/kubejs/KubeJSApi.java), [Shared expression parser](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/6f9d7070dcbddbd7556da6f0b8c56ff9a1814187/src/main/java/cn/howxu/mmcr/api/machine/definition/PortTiers.java), [Tier matching rules](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/6f9d7070dcbddbd7556da6f0b8c56ff9a1814187/src/main/java/cn/howxu/mmcr/api/machine/PortTierRequirementSpec.java), [Registered family parsing and validation tests](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/6f9d7070dcbddbd7556da6f0b8c56ff9a1814187/src/test/java/cn/howxu/mmcr/api/machine/PortTierRequirementSpecTest.java).
 
 #### Recipe Inputs and Outputs
 
@@ -3678,9 +3698,13 @@ Inherits all accessors above and adds `factoryThreadCount() → int`, `paralleli
 
 #### `RecipeStartContext`
 
-`machineContext()`, `recipe()`, `recipeId()`, `requestedParallelism()`, `effectiveParallelism()`, and `duration()` provide information about this start attempt. `setDuration(int)` requires a positive value; `requirements()` returns a list of requirement copies, and `outputs()` returns the output list. `setRequirements(List<MachineRequirement>)` re-derives item/fluid outputs and rejects the operation if registered custom outputs already exist. In that case, use `setOutputs(List<MachineOutput>)`, which also updates the corresponding output requirements through the output registry.
+`machineContext()`, `recipe()`, `recipeId()`, `requestedParallelism()`, `effectiveParallelism()`, and `duration()` provide information about this start attempt. `setDuration(int)` requires a positive value; `requirements()` returns a list of requirement copies, and `outputs()` returns the output list.
 
-`replaceExactItemInputCount(Item, int expectedCount, int replacementCount) → boolean` replaces only the first single-item input with a matching count. Both counts must be positive; it returns `false` if no match is found. It ultimately calls `setRequirements` and is subject to the same custom output restriction. `snapshot()` returns `ExecutionSnapshot(duration, requirements, outputs)`; `cancel()` / `cancelled()` control the cancellation flag for this start attempt.
+`setRequirements(List<MachineRequirement>)` re-derives outputs through the output registry and is no longer limited to items/fluids. Before applying changes, it checks whether every current output can make a lossless round trip through "output → requirement → output", preserving its output type, resource quantity, chance, and other information. If any output cannot be rebuilt, it throws `IllegalStateException`. A registered output type does not guarantee reconstruction support. `setOutputs(List<MachineOutput>)` also updates the corresponding output requirements through the output registry. Both setters validate the new requirement list before replacing the context's requirements and outputs.
+
+`replaceExactItemInputCount(Item, int expectedCount, int replacementCount) → boolean` replaces only the first single-item input with a matching count. Both counts must be positive; it returns `false` if no match is found. It ultimately calls `setRequirements` and is subject to the same lossless reconstruction restriction. `snapshot()` returns `ExecutionSnapshot(duration, requirements, outputs)`; `cancel()` / `cancelled()` control the cancellation flag for this start attempt.
+
+Source (`6f9d7070`): [Start context](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/6f9d7070dcbddbd7556da6f0b8c56ff9a1814187/src/main/java/cn/howxu/mmcr/api/machine/definition/RecipeStartContext.java), [Output round-trip checks](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/6f9d7070dcbddbd7556da6f0b8c56ff9a1814187/src/main/java/cn/howxu/mmcr/api/recipe/OutputRegistry.java).
 
 #### `RecipeTickContext`
 

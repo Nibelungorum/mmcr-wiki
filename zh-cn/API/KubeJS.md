@@ -4,7 +4,7 @@ title: KubeJS API
 
 # KubeJS API
 
-本页是 MMCR 的 KubeJS 集成层的集中参考，固定对应 **Minecraft 26.1.2**，源码基线为提交 [`0b4e5f32`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/0b4e5f32265a19314bfca1134b74450f7d2e9018/gradle.properties)。示例使用 KubeJS/Rhino 的 JavaScript 写法。
+本页是 MMCR 的 KubeJS 集成层的集中参考，固定对应 **Minecraft 26.1.2**，源码基线为提交 [`6f9d7070`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/6f9d7070dcbddbd7556da6f0b8c56ff9a1814187/gradle.properties)。示例使用 KubeJS/Rhino 的 JavaScript 写法。
 
 MMCR 的 KubeJS API 分为三个声明窗口：启动脚本中的机器、等级、修饰符和屏幕文本注册；服务端脚本加载中的结构与编程式配方注册；`ServerEvents.recipes` 中的数据驱动配方注册。启动声明修改后需要重启；服务端结构与配方可随资源重载替换。此外还有客户端配方说明事件。
 
@@ -880,7 +880,7 @@ structure.set("E", api.anyOfEnergyOutput())
 
 ##### 合并端口谓词
 
-以下方法分别返回同族输入和输出端口的并集；需要 Mekanism 的端口族在 Mekanism 未加载时匹配不到方块。
+以下方法分别返回同族输入和输出端口的并集。匹配按已注册的族 ID、方向和对应能力绑定收集可用于结构的端口，不按具体实现类或 ID 后缀判断；扩展 / 复合 / 联动端口只要声明匹配的族，也会被收集。Mekanism 自带端口仍需加载 Mekanism。
 
 | 方法 | 匹配范围 |
 | --- | --- |
@@ -890,12 +890,14 @@ structure.set("E", api.anyOfEnergyOutput())
 | `anyOfChemicalPorts()` | Mekanism 化学品输入与输出端口。 |
 | `anyOfRadioactiveChemicalPorts()` | Mekanism 放射性化学品输入与输出端口。 |
 | `anyOfHeatPorts()` | Mekanism 热量输入与输出端口。 |
-| `ports()` | 所有内置端口；Mekanism 可用时也包含化学品与热量端口。 |
+| `ports()` | 所有具有有效族声明、可用于结构的已注册端口，包括扩展族；不是只收集内置物品、流体、能量等固定族。 |
 
 ```javascript
 structure.set("P", api.anyOfItemPorts())
 structure.set("A", api.ports())
 ```
+
+源码：[端口族匹配实现（`6f9d7070`）](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/6f9d7070dcbddbd7556da6f0b8c56ff9a1814187/src/main/java/cn/howxu/mmcr/api/machine/definition/InterfacePredicates.java)。
 
 ##### `anyOfUpgradeBus() → BlockPredicate`
 
@@ -992,7 +994,7 @@ const ports = api.portRequirements({
 })
 ```
 
-**端口族统计别名（完整列表）**
+**内置端口族统计别名**
 
 别名统计同族、同方向的端口总数，不区分具体型号或等级。
 
@@ -1037,9 +1039,9 @@ AE2 另有 `ae2_me_pattern_interface`，同一个端口提供物品、流体的�
 
 ##### `portTierRequirements(List<String> minimums) → PortTierRequirementSpec`
 
-- **参数表**：`minimums`（`List<String>`）— 每项使用下表的完整写法；有等级的端口族写作 `端口族>=等级`，单等级的放射性化学品与热量端口只写端口族。
-- **返回**：不可变端口最低等级需求对象。
-- **抛出**：`IllegalArgumentException`：格式无效、端口族不在允许列表中、等级为空白或名称不属于对应端口族。
+- **参数表**：`minimums`（`List<String>`）— 每项为一条最低等级表达式；内置族沿用下表写法，扩展族可用 `注册别名>=N` 或 `namespace:family@input>=N` / `namespace:family@output>=N`。
+- **返回**：不可变端口最低等级需求对象，与 Java 公共层的 `PortTierLimits.parse(...)` 共用解析器。
+- **抛出**：`IllegalArgumentException`：格式或等级无效、族或方向未注册、别名对应多个不同族或方向。
 - **默认值**：空列表返回 `PortTierRequirementSpec.none()`。
 - **示例**：
 
@@ -1054,7 +1056,7 @@ const tiers = api.portTierRequirements([
 ])
 ```
 
-**允许的写法与等级（完整列表）**
+**内置族的写法与等级**
 
 `<tier>` 是占位符，必须替换为该行列出的一个等级；等级按从低到高排列。
 
@@ -1073,9 +1075,27 @@ const tiers = api.portTierRequirements([
 | Mekanism 热量输入 | `heat_input_hatch` | 无等级参数，不写 `>=`。 |
 | Mekanism 热量输出 | `heat_output_hatch` | 无等级参数，不写 `>=`。 |
 
-端口族部分必须按表中小写字符串精确匹配；等级名称**不区分大小写**，如 `chemical_input_hatch>=ADVANCED` 有效。解析不会去除空格，不接受命名空间、具体型号 ID、通配符或其他比较符（如 `>`、`<=`、`=`）。有等级的八种写法必须且只能包含一个 `>=`，不能省略等级；四种无等级写法不能追加 `>=any` 或 `>=ultimate`。
+内置别名必须按表中小写字符串精确匹配；命名等级**不区分大小写**，如 `chemical_input_hatch>=ADVANCED` 有效。解析不会去除空格，不支持通配符或其他比较符（如 `>`、`<=`、`=`）。有等级的八种写法必须且只能包含一个 `>=`，不能省略等级；四种无等级写法不能追加 `>=any` 或 `>=ultimate`。
 
-例如 `chemical_input_hatch>=normal`、`chemical_input_hatch_basic>=basic`、`chemical_input_hatch`、`heat_input_hatch>=ultimate`、`radioactive_chemical_input_hatch>=any`、`item_input_bus >= normal` 都会抛出异常。数量需求允许的具体端口 ID 不能直接作为这里的端口族。
+**已注册扩展族**
+
+扩展族不需要加入内置分类枚举，按族声明的 ID 和方向解析。以下假设附属 Mod 已注册输入族 `example:shard`，统计别名为 `shard_in`；这不是 MMCR 内置族，未注册时不能照抄运行：
+
+```javascript
+const byAlias = api.portTierRequirements(["shard_in>=3"])
+const byId = api.portTierRequirements(["example:shard@input>=3"])
+// 两者表达相同需求：至少有一个 shard 输入端口的检测等级达到 3。
+structure.portTierRequirements(byId)
+```
+
+- 别名按注册声明精确匹配；带命名空间的写法为 `族ID@方向`，不是具体方块或端口种类 ID，方向只接受小写 `input` / `output`。
+- 扩展族使用数字最低检测等级 `N`，范围为 `0` 到 `2147483647`，必须写作 `0`、`3` 等规范十进制整数；`03`、`+3`、负数、小数均无效。检测等级数值越大越高，实际等级必须 `>= N`，不能据此推断容量。
+- 注册别名和带方向的族 ID 必须已存在于当前端口注册表；不存在的族或方向在创建需求时就会被拒绝。一个别名若指向多个不同族或方向，会因歧义被拒绝；同族同方向的多个型号共用一个别名不算歧义。
+- 带命名空间的写法也可定位已注册的内置族，但仍遵守该族的命名等级或无等级规则，不能把内置等级换成数字。上表历史别名不依赖联动端口是否已注册，因此 Mekanism 未加载时仍可构造这些内置需求。
+
+例如 `chemical_input_hatch>=normal`、`chemical_input_hatch_basic>=basic`、`chemical_input_hatch`、`heat_input_hatch>=ultimate`、`radioactive_chemical_input_hatch>=any`、`item_input_bus >= normal` 都会抛出异常。具体型号 ID 不会自动成为等级别名；数量需求允许的键不能直接当作等级表达式左侧使用，除非它本身也是已注册的族别名。
+
+需求条目通过 `requirements()` 读取；`category()` 现在还可能为 `CUSTOM`，应使用 `familyId()` 区分具体扩展族。这里的 `familyId()` 返回底层 `Identifier`，Java 公共层的 `PortTierLimits.RequirementView.familyId()` 则返回 `String`。
 
 等级比较使用族声明的检测等级，扩展 / 复合 / 联动端口也可凭对应族声明满足需求，不按端口 ID 的后缀推断等级。化学品 `basic`、`advanced`、`elite`、`ultimate` 对应检测等级 2、3、4、5；放射性化学品与热量需求仅检查族和方向，不提供等级选择，普通化学品即使达到 `ultimate` 也不能代替放射性化学品端口。
 
@@ -1100,7 +1120,7 @@ structure.portTierRequirements(api.chemicalInputTier("advanced"))
 // stage.portTierRequirements(stage.heatOutputTier())
 ```
 
-源码：[字符串解析入口](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/c2563c4110cd15bad0218dc4fa5a4f091fbccc87/src/main/java/cn/howxu/mmcr/compat/kubejs/KubeJSApi.java)、[端口种类与统计别名](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/c2563c4110cd15bad0218dc4fa5a4f091fbccc87/src/main/java/cn/howxu/mmcr/registry/PortKinds.java)、[等级匹配规则](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/c2563c4110cd15bad0218dc4fa5a4f091fbccc87/src/main/java/cn/howxu/mmcr/api/machine/PortTierRequirementSpec.java)。
+源码（`6f9d7070`）：[KubeJS 入口](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/6f9d7070dcbddbd7556da6f0b8c56ff9a1814187/src/main/java/cn/howxu/mmcr/compat/kubejs/KubeJSApi.java)、[共用表达式解析器](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/6f9d7070dcbddbd7556da6f0b8c56ff9a1814187/src/main/java/cn/howxu/mmcr/api/machine/definition/PortTiers.java)、[等级匹配规则](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/6f9d7070dcbddbd7556da6f0b8c56ff9a1814187/src/main/java/cn/howxu/mmcr/api/machine/PortTierRequirementSpec.java)、[注册族解析与校验测试](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/6f9d7070dcbddbd7556da6f0b8c56ff9a1814187/src/test/java/cn/howxu/mmcr/api/machine/PortTierRequirementSpecTest.java)。
 
 #### 配方输入输出
 
@@ -3678,9 +3698,13 @@ machine.preServerTick(ctx => {
 
 #### `RecipeStartContext`
 
-`machineContext()`、`recipe()`、`recipeId()`、`requestedParallelism()`、`effectiveParallelism()`、`duration()` 提供本次启动信息。`setDuration(int)` 要求正数；`requirements()` 返回需求副本列表，`outputs()` 返回输出列表。`setRequirements(List<MachineRequirement>)` 会重新派生物品/流体输出，已有注册型自定义输出时拒绝这样做；此时应使用 `setOutputs(List<MachineOutput>)`，它通过输出注册表同时更新对应输出需求。
+`machineContext()`、`recipe()`、`recipeId()`、`requestedParallelism()`、`effectiveParallelism()`、`duration()` 提供本次启动信息。`setDuration(int)` 要求正数；`requirements()` 返回需求副本列表，`outputs()` 返回输出列表。
 
-`replaceExactItemInputCount(Item, int expectedCount, int replacementCount) → boolean` 只替换首个单一物品且数量匹配的输入，两个数量均需为正，不匹配返回 `false`。它最终调用 `setRequirements`，也受自定义输出限制。`snapshot()` 返回 `ExecutionSnapshot(duration, requirements, outputs)`；`cancel()` / `cancelled()` 控制本次启动取消标志。
+`setRequirements(List<MachineRequirement>)` 通过输出注册表重新派生输出，不再只支持物品/流体。修改前会检查当前每项输出能否经“输出 → 需求 → 输出”无损往返，输出类型、资源数量和概率等必须保留；任一项不能重建时抛 `IllegalStateException`。不能把“已注册输出类型”当成“支持重建”的保证。`setOutputs(List<MachineOutput>)` 则通过输出注册表同时更新对应输出需求。两个 setter 都先校验新需求列表，成功后才替换上下文中的需求和输出。
+
+`replaceExactItemInputCount(Item, int expectedCount, int replacementCount) → boolean` 只替换首个单一物品且数量匹配的输入，两个数量均需为正，不匹配返回 `false`。它最终调用 `setRequirements`，也受同一无损重建限制。`snapshot()` 返回 `ExecutionSnapshot(duration, requirements, outputs)`；`cancel()` / `cancelled()` 控制本次启动取消标志。
+
+源码（`6f9d7070`）：[启动上下文](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/6f9d7070dcbddbd7556da6f0b8c56ff9a1814187/src/main/java/cn/howxu/mmcr/api/machine/definition/RecipeStartContext.java)、[输出往返检查](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/6f9d7070dcbddbd7556da6f0b8c56ff9a1814187/src/main/java/cn/howxu/mmcr/api/recipe/OutputRegistry.java)。
 
 #### `RecipeTickContext`
 

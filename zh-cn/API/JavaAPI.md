@@ -280,7 +280,7 @@ MachineSpec build();
 | `displayNameKey` | 本地化键；不设置时使用 `machine.<namespace>.<path>`。 |
 | `recipePool` | 有序、非空、无重复的配方池列表；不设置时仅使用机器 ID。每条配方仍只属于一个池。 |
 | `controller` / `appearance` / `factory` | 每次传入新选项构建器并自动构建，重复调用会替换相应规格。 |
-| `recipeBehavior` / `tickBehavior` | 选择当前行为模式；后一次模式配置可替换前一次。顶层 `preServerTick` / `postServerTick` 只适用于配方模式；若同时配置了 `RecipeHooks` 内的同名钩子，以顶层配置为准。回调与工厂的区别见[按控制器创建回调](#controller-scoped-hooks)。 |
+| `recipeBehavior` / `tickBehavior` | 选择当前行为模式；后一次模式配置可替换前一次。顶层 `preServerTick` / `postServerTick` 只适用于配方模式；若同时配置了 `RecipeHooks` 内的同名钩子，以顶层配置为准。|
 | `maxParallelism` / `maxParallelAmount` | 均须正数；前者在最终声明构建时校验，后者在设置时校验。 |
 | `parallelizable` | 配方并行能力，与工厂的多个工作线程不是同一概念。 |
 | `allowMultithreading` / `factory` | 声明多线程调度能力与工厂线程规格；不是要求附属 Mod 自己开启 Java 线程。 |

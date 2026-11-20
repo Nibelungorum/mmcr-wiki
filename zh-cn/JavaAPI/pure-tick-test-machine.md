@@ -16,7 +16,7 @@ order: 14
 | --- | --- |
 | `Machines` / `Structures` | 声明 `MachineSpec` / `StructureSpec` |
 | `RegisterMachineDefinitionsEvent` / `RegisterMachineStructuresEvent` | 定义与结构注册事件 |
-| `TickHooks` / `TickContext` | [回调配置](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/publicapi/behavior/TickHooks.java) / [直 Tick 上下文](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/publicapi/behavior/TickContext.java) |
+| `TickHooks` / `TickContext` | [回调配置](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/b2c87dcd78966d175f6f8266d02d16150e80430e/src/main/java/cn/howxu/mmcr/publicapi/behavior/TickHooks.java) / [直 Tick 上下文](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/publicapi/behavior/TickContext.java) |
 | `MachineContext` | [世界、位置、文本与 IO 视图](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/publicapi/behavior/MachineContext.java) |
 | `IoTransaction` / `IoSnapshot` | [一次性计划](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/publicapi/runtime/IoTransaction.java) / [能力集合视图](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/publicapi/runtime/IoSnapshot.java) |
 | `Requirements` / `IoValues` / `IoDirection` | [需求工厂](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/publicapi/recipe/requirement/Requirements.java) / [物品与流体 IO 值工厂](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/publicapi/recipe/IoValues.java) / 输入输出方向 |
@@ -56,7 +56,24 @@ public static void registerDefinitions(RegisterMachineDefinitionsEvent event) {
 
 `ControllerTexts.register` 绑定文本回调，并返回可 `unregister()` 的注册句柄。此处注册两行 `CONTROLLER` 文本，运行回调再用 `replace` 更新。注册回调的 `ControllerTextContext` 与机器 Tick 回调的 `TickContext` 是不同接口。
 
-公共配置入口 `tickBehavior` 接收 `TickHooks` 配置；`serverTick` 的签名为 `TickHooks serverTick(Consumer<TickContext> callback)`。**不是**要求附属实现某个底层 `MachineBehavior.TickCallback`，也不是调用一个公共 `TickBehavior.Builder.build()`。
+本例把无状态的 `Consumer<TickContext>` 直接传给 `serverTick`。若要用字段记录每台机器已执行的 tick 数，可改传工厂：`h.serverTick(RunTimer::new)` 在每个控制器首次执行钩子时创建一个 `RunTimer`，而 `h.serverTick(new RunTimer())` 会让使用同一机器定义的控制器共用一个计数器。
+
+```java
+class RunTimer implements java.util.function.Consumer<TickContext> {
+    private int ticks;
+
+    @Override
+    public void accept(TickContext ctx) {
+        if (++ticks == 20) {
+            ctx.jadeText().append(Identifier.parse("my_mod:timer"), Component.literal("20 ticks"));
+        }
+    }
+}
+
+machine.tickBehavior(h -> h.serverTick(RunTimer::new));
+```
+
+这里使用的都是公共 API，无需实现底层 `MachineBehavior.TickCallback`。
 
 本例调用了 `allowMultithreading()` 并设置 `maxParallelism` 上限，但没有调用 `parallelizable(true)`；设置上限不等于开启并行。回调里的一次物品转换仍显式写为 1 个铁锭、1 个金粒，不会因为 `maxParallelism` 就自动变成任意数量。
 

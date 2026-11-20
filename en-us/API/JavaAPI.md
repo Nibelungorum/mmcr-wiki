@@ -4,7 +4,7 @@ title: JavaAPI
 
 # Java Public API Reference
 
-This page lists the Java public layer's entry points, declarations, runtime views, and extension contracts for **Minecraft 26.1.2**, with commit [`6f9d7070`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/6f9d7070dcbddbd7556da6f0b8c56ff9a1814187/gradle.properties) as the source baseline.
+This page lists the Java public layer's entry points, declarations, runtime views, and extension contracts for **Minecraft 26.1.2**, with commit [`b2c87dcd`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/b2c87dcd78966d175f6f8266d02d16150e80430e/gradle.properties) as the source baseline.
 
 ## Package paths and boundaries
 
@@ -246,9 +246,12 @@ MachineDraft controller(Consumer<ControllerOptions> configure);
 MachineDraft appearance(Consumer<AppearanceOptions> configure);
 MachineDraft factory(Consumer<FactoryOptions> configure);
 MachineDraft recipeBehavior(Consumer<RecipeHooks> configure);
+<T> MachineDraft recipeBehavior(Supplier<T> factory, Consumer<RecipeHooks.ForInstance<T>> configure);
 MachineDraft tickBehavior(Consumer<TickHooks> configure);
 MachineDraft preServerTick(Consumer<MachineContext> callback);
+MachineDraft preServerTick(Supplier<? extends Consumer<MachineContext>> factory);
 MachineDraft postServerTick(Consumer<MachineContext> callback);
+MachineDraft postServerTick(Supplier<? extends Consumer<MachineContext>> factory);
 MachineDraft role(MachineKind kind);
 MachineDraft acceptedModule(Identifier id);
 MachineDraft networkInterface(int maxCount, int maxConnections);
@@ -277,7 +280,7 @@ MachineSpec build();
 | `displayNameKey` | Localization key; `machine.<namespace>.<path>` is used when not set. |
 | `recipePool` | An ordered, non-empty, non-duplicate list of recipe pools; only machine ID is used when not set. Each recipe still belongs to only one pool. |
 | `controller` / `appearance` / `factory` | Each time a new option builder is passed in and built automatically, repeated calls will replace the corresponding specifications. |
-| `recipeBehavior` / `tickBehavior` | Select the current behavior mode; the latter mode configuration can replace the previous one. Top-level pre/post tick hooks only work in recipe mode. |
+| `recipeBehavior` / `tickBehavior` | Select the current behavior mode; the latter mode configuration can replace the previous one. Top-level `preServerTick` and `postServerTick` hooks only work in recipe mode and override the corresponding hooks configured through `RecipeHooks`. For the difference between passing a callback and passing a factory, see [Using custom classes as hook callbacks](#using-custom-classes-as-hook-callbacks). |
 | `maxParallelism` / `maxParallelAmount` | Both must be positive; the former is validated when the final declaration is built, and the latter when set. |
 | `parallelizable` | Recipe parallelism is not the same concept as multiple worker threads in a factory. |
 | `allowMultithreading` / `factory` | Declares multithreaded scheduling capabilities and factory thread specifications; add-on mods do not need to start Java threads themselves. |
@@ -1372,14 +1375,32 @@ machine.smartInterface(SmartInterfaces.type("speed", 1F, 1F, 4F, 0,
 ```java
 // RecipeHooks
 RecipeHooks idleStart(Consumer<MachineContext> callback);
+RecipeHooks idleStart(Supplier<? extends Consumer<MachineContext>> factory);
 RecipeHooks idleEnd(Consumer<MachineContext> callback);
+RecipeHooks idleEnd(Supplier<? extends Consumer<MachineContext>> factory);
 RecipeHooks beforeStart(Consumer<RecipeStartContext> callback);
+RecipeHooks beforeStart(Supplier<? extends Consumer<RecipeStartContext>> factory);
 RecipeHooks recipeTick(Consumer<RecipeTickContext> callback);
+RecipeHooks recipeTick(Supplier<? extends Consumer<RecipeTickContext>> factory);
 RecipeHooks beforeFinish(Consumer<RecipeFinishContext> callback);
+RecipeHooks beforeFinish(Supplier<? extends Consumer<RecipeFinishContext>> factory);
 RecipeHooks preServerTick(Consumer<MachineContext> callback);
+RecipeHooks preServerTick(Supplier<? extends Consumer<MachineContext>> factory);
 RecipeHooks postServerTick(Consumer<MachineContext> callback);
+RecipeHooks postServerTick(Supplier<? extends Consumer<MachineContext>> factory);
+
+// RecipeHooks.ForInstance<T>
+ForInstance<T> idleStart(BiConsumer<T, MachineContext> callback);
+ForInstance<T> idleEnd(BiConsumer<T, MachineContext> callback);
+ForInstance<T> beforeStart(BiConsumer<T, RecipeStartContext> callback);
+ForInstance<T> recipeTick(BiConsumer<T, RecipeTickContext> callback);
+ForInstance<T> beforeFinish(BiConsumer<T, RecipeFinishContext> callback);
+ForInstance<T> preServerTick(BiConsumer<T, MachineContext> callback);
+ForInstance<T> postServerTick(BiConsumer<T, MachineContext> callback);
+
 // TickHooks
 TickHooks serverTick(Consumer<TickContext> callback);
+TickHooks serverTick(Supplier<? extends Consumer<TickContext>> factory);
 ```
 
 The configuration handle is provided by `Consumer` of `MachineDraft.recipeBehavior`/`tickBehavior` and is not implemented by itself. Recipe hooks are executed around idle search, startup consumption, recipe tick, and completion output; direct tick mode is driven by `serverTick`. Callbacks should be short and not blocked waiting for external tasks.
@@ -1397,6 +1418,42 @@ machine.recipeBehavior(hooks -> hooks
             }
         }));
 ```
+
+#### Using custom classes as hook callbacks
+
+You can still pass a `Consumer` directly, as in `start -> ...` above. All controllers using the same machine definition use the callback supplied at registration; each controller does not get its own copy. If your callback needs mutable fields such as counters, choose a registration method based on which hooks need that state:
+
+| Who needs the state? | How to register |
+| --- | --- |
+| One hook | Pass the hook a no-argument factory that returns a new `Consumer`. Each controller creates its callback the first time it runs that hook and reuses it thereafter. Passing the same factory to two hooks still creates two independent registrations. |
+| Several recipe hooks | Use `machine.recipeBehavior(factory, hooks -> ...)`. The first time a controller runs any of those hooks, it creates one `T` instance shared by all hooks in that registration. MMCR supplies the `RecipeHooks.ForInstance<T>` handle. Each `BiConsumer` receives the instance as its first argument and the current context as its second. |
+
+This counter tracks how often a controller attempts to start a recipe. The post-tick hook uses the count to update the Jade text every 20 ticks. Different controllers keep separate counts. All lanes of the same factory controller share one count; there is no separate counter per recipe.
+
+```java
+class StartCounter {
+    private int attempts;
+
+    void onStart(RecipeStartContext ctx) { attempts++; }
+
+    void report(MachineContext ctx) {
+        if (ctx.isDue(20)) {
+            ctx.jadeText().append(Identifier.parse("my_mod:start_attempts"),
+                    Component.literal(Integer.toString(attempts)));
+        }
+    }
+}
+
+machine.recipeBehavior(StartCounter::new, hooks -> hooks
+        .beforeStart(StartCounter::onStart)
+        .postServerTick(StartCounter::report));
+```
+
+The factory does not run at registration, and skipping a hook does not trigger instance creation. The factory must return a non-null object; returning a shared singleton will not isolate state between controllers. If construction fails, including when the factory returns `null`, the failure is not cached. The next invocation retries construction. Both the factory and the callback run on the controller tick thread that executes the hook, and each callback invocation receives the current context.
+
+The instance survives pauses and reformation of the same machine after its structure becomes invalid. It is discarded when the chunk unloads, the controller is removed or destroyed, the world changes, or the controller is bound to a different machine. Instance fields are not saved automatically. To retain a value across unloads, explicitly write it to the bound data store through `MachineContext.dataStorage()` and read it back in the new instance. If no store is bound, the method returns `null`; you can still use transient instance fields.
+
+Source (`b2c87dcd`): [MachineDraft](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/b2c87dcd78966d175f6f8266d02d16150e80430e/src/main/java/cn/howxu/mmcr/publicapi/machine/MachineDraft.java), [RecipeHooks](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/b2c87dcd78966d175f6f8266d02d16150e80430e/src/main/java/cn/howxu/mmcr/publicapi/behavior/RecipeHooks.java), [TickHooks](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/b2c87dcd78966d175f6f8266d02d16150e80430e/src/main/java/cn/howxu/mmcr/publicapi/behavior/TickHooks.java), [Instance cache](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/b2c87dcd78966d175f6f8266d02d16150e80430e/src/main/java/cn/howxu/mmcr/internal/tile/MachineControllerRuntime.java), [Controller lifecycle](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/b2c87dcd78966d175f6f8266d02d16150e80430e/src/main/java/cn/howxu/mmcr/internal/tile/MachineControllerBlockEntity.java).
 
 ### `MachineContext`
 

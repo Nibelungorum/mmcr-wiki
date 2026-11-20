@@ -16,7 +16,7 @@ This machine registers three recipes and inserts custom logic in five lifecycle 
 | --- | --- |
 | `Machines` / `Structures` / `Recipes` | [Machine](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/publicapi/Machines.java), [structure](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/publicapi/Structures.java), and [recipe](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/publicapi/Recipes.java) entry points |
 | `RegisterMachineDefinitionsEvent` / `RegisterMachineStructuresEvent` / `RegisterMachineRecipesEvent` | Register `MachineSpec`, `StructureSpec`, and `RecipeSpec` |
-| `RecipeHooks` | [Configuration signatures for seven recipe-mode callbacks](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/publicapi/behavior/RecipeHooks.java) |
+| `RecipeHooks` | [Configuration signatures for seven recipe-mode callbacks](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/b2c87dcd78966d175f6f8266d02d16150e80430e/src/main/java/cn/howxu/mmcr/publicapi/behavior/RecipeHooks.java) |
 | `MachineContext` | Server-side capabilities shared by idle, pre/post tick, and recipe contexts |
 | `RecipeStartContext` | [Edits before startup](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/publicapi/behavior/RecipeStartContext.java); prefer `replaceExactItemInputCount` |
 | `RecipeTickContext` | [Read-only recipe information while running](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/publicapi/behavior/RecipeTickContext.java) |
@@ -64,7 +64,7 @@ public static void registerDefinitions(RegisterMachineDefinitionsEvent event) {
 }
 ```
 
-`recipeBehavior` configures public `RecipeHooks`, without requiring the low-level `RecipeBehavior.Builder`. All seven hooks accept a `Consumer<corresponding context>`; this example uses five of them:
+This example registers `Consumer` callbacks directly with `recipeBehavior(hooks -> ...)` because the callbacks need no state of their own. If only one hook needs per-machine fields, pass a factory to that hook alone. If `beforeStart` and `recipeTick` need to read and write the same fields, use `recipeBehavior(factory, hooks -> ...)` rather than passing a separate factory to each hook. This example uses five of the seven recipe hooks:
 
 | Hook | Parameter type | Purpose |
 | --- | --- | --- |

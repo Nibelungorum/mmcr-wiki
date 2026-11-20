@@ -4,7 +4,7 @@ title: JavaAPI
 
 # Java 公共 API 参考
 
-本页集中列出 Java 公共层的入口、声明、运行时视图和扩展契约，对应 **Minecraft 26.1.2**，源码基线为提交 [`6f9d7070`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/6f9d7070dcbddbd7556da6f0b8c56ff9a1814187/gradle.properties)。
+本页集中列出 Java 公共层的入口、声明、运行时视图和扩展契约，对应 **Minecraft 26.1.2**，源码基线为提交 [`b2c87dcd`](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/b2c87dcd78966d175f6f8266d02d16150e80430e/gradle.properties)。
 
 ## 包路径与边界
 
@@ -246,9 +246,12 @@ MachineDraft controller(Consumer<ControllerOptions> configure);
 MachineDraft appearance(Consumer<AppearanceOptions> configure);
 MachineDraft factory(Consumer<FactoryOptions> configure);
 MachineDraft recipeBehavior(Consumer<RecipeHooks> configure);
+<T> MachineDraft recipeBehavior(Supplier<T> factory, Consumer<RecipeHooks.ForInstance<T>> configure);
 MachineDraft tickBehavior(Consumer<TickHooks> configure);
 MachineDraft preServerTick(Consumer<MachineContext> callback);
+MachineDraft preServerTick(Supplier<? extends Consumer<MachineContext>> factory);
 MachineDraft postServerTick(Consumer<MachineContext> callback);
+MachineDraft postServerTick(Supplier<? extends Consumer<MachineContext>> factory);
 MachineDraft role(MachineKind kind);
 MachineDraft acceptedModule(Identifier id);
 MachineDraft networkInterface(int maxCount, int maxConnections);
@@ -277,7 +280,7 @@ MachineSpec build();
 | `displayNameKey` | 本地化键；不设置时使用 `machine.<namespace>.<path>`。 |
 | `recipePool` | 有序、非空、无重复的配方池列表；不设置时仅使用机器 ID。每条配方仍只属于一个池。 |
 | `controller` / `appearance` / `factory` | 每次传入新选项构建器并自动构建，重复调用会替换相应规格。 |
-| `recipeBehavior` / `tickBehavior` | 选择当前行为模式；后一次模式配置可替换前一次。顶层 pre/post tick 钩子只适用于配方模式。 |
+| `recipeBehavior` / `tickBehavior` | 选择当前行为模式；后一次模式配置可替换前一次。顶层 `preServerTick` / `postServerTick` 只适用于配方模式；若同时配置了 `RecipeHooks` 内的同名钩子，以顶层配置为准。回调与工厂的区别见[按控制器创建回调](#controller-scoped-hooks)。 |
 | `maxParallelism` / `maxParallelAmount` | 均须正数；前者在最终声明构建时校验，后者在设置时校验。 |
 | `parallelizable` | 配方并行能力，与工厂的多个工作线程不是同一概念。 |
 | `allowMultithreading` / `factory` | 声明多线程调度能力与工厂线程规格；不是要求附属 Mod 自己开启 Java 线程。 |
@@ -1372,14 +1375,32 @@ machine.smartInterface(SmartInterfaces.type("speed", 1F, 1F, 4F, 0,
 ```java
 // RecipeHooks
 RecipeHooks idleStart(Consumer<MachineContext> callback);
+RecipeHooks idleStart(Supplier<? extends Consumer<MachineContext>> factory);
 RecipeHooks idleEnd(Consumer<MachineContext> callback);
+RecipeHooks idleEnd(Supplier<? extends Consumer<MachineContext>> factory);
 RecipeHooks beforeStart(Consumer<RecipeStartContext> callback);
+RecipeHooks beforeStart(Supplier<? extends Consumer<RecipeStartContext>> factory);
 RecipeHooks recipeTick(Consumer<RecipeTickContext> callback);
+RecipeHooks recipeTick(Supplier<? extends Consumer<RecipeTickContext>> factory);
 RecipeHooks beforeFinish(Consumer<RecipeFinishContext> callback);
+RecipeHooks beforeFinish(Supplier<? extends Consumer<RecipeFinishContext>> factory);
 RecipeHooks preServerTick(Consumer<MachineContext> callback);
+RecipeHooks preServerTick(Supplier<? extends Consumer<MachineContext>> factory);
 RecipeHooks postServerTick(Consumer<MachineContext> callback);
+RecipeHooks postServerTick(Supplier<? extends Consumer<MachineContext>> factory);
+
+// RecipeHooks.ForInstance<T>
+ForInstance<T> idleStart(BiConsumer<T, MachineContext> callback);
+ForInstance<T> idleEnd(BiConsumer<T, MachineContext> callback);
+ForInstance<T> beforeStart(BiConsumer<T, RecipeStartContext> callback);
+ForInstance<T> recipeTick(BiConsumer<T, RecipeTickContext> callback);
+ForInstance<T> beforeFinish(BiConsumer<T, RecipeFinishContext> callback);
+ForInstance<T> preServerTick(BiConsumer<T, MachineContext> callback);
+ForInstance<T> postServerTick(BiConsumer<T, MachineContext> callback);
+
 // TickHooks
 TickHooks serverTick(Consumer<TickContext> callback);
+TickHooks serverTick(Supplier<? extends Consumer<TickContext>> factory);
 ```
 
 配置句柄由 `MachineDraft.recipeBehavior`/`tickBehavior` 的 `Consumer` 提供，不自行实现。配方钩子围绕空闲搜索、启动消耗、配方 tick、完成输出执行；直接 tick 模式由 `serverTick` 驱动。回调应短小，不在其中阻塞等待外部任务。
@@ -1397,6 +1418,42 @@ machine.recipeBehavior(hooks -> hooks
             }
         }));
 ```
+
+#### 自定义类作为回调参数传入对象
+
+直接传入 `Consumer`（如上例的 `start -> ...`）仍然有效。同一机器定义的多个控制器使用注册时传入的回调，不会各自得到它的副本。需要保存计数器等可变字段时，按状态的使用范围选择入口：
+
+| 状态给谁用 | 注册方式 |
+| --- | --- |
+| 单个钩子 | 给该钩子传无参工厂，由它返回新的 `Consumer`。同一控制器首次执行这个钩子时创建回调，以后复用。即使给两个钩子传同一个工厂，它们也是两次独立注册。 |
+| 多个配方钩子 | 用 `machine.recipeBehavior(factory, hooks -> ...)`。首次执行其中任一钩子时创建一个 `T`，同一次配置里的所有钩子共享它。`RecipeHooks.ForInstance<T>` 由 MMCR 提供；每个 `BiConsumer` 的第一个参数是该实例，第二个是本次调用的上下文。 |
+
+例如，下面的计数器记录本控制器尝试启动配方的次数，后置钩子每 20 tick 用它更新 Jade 文本。两个控制器各有一份计数；同一工厂控制器的所有工作线程（lane）共享这一份，不是每条配方各有一份。
+
+```java
+class StartCounter {
+    private int attempts;
+
+    void onStart(RecipeStartContext ctx) { attempts++; }
+
+    void report(MachineContext ctx) {
+        if (ctx.isDue(20)) {
+            ctx.jadeText().append(Identifier.parse("my_mod:start_attempts"),
+                    Component.literal(Integer.toString(attempts)));
+        }
+    }
+}
+
+machine.recipeBehavior(StartCounter::new, hooks -> hooks
+        .beforeStart(StartCounter::onStart)
+        .postServerTick(StartCounter::report));
+```
+
+工厂不在注册时执行；如果钩子被跳过，也不会为它创建实例。工厂必须返回非空对象，不能用共享单例实现控制器隔离。若构造失败（包括返回 `null`），不会缓存失败结果，下次执行该钩子时会重试。工厂和回调都在实际执行钩子的控制器 tick 线程上运行，回调每次接收当前上下文。
+
+暂停、同一机器结构失效后重新成型都保留实例。区块卸载、控制器移除或销毁、切换世界或绑定到不同机器时，实例被丢弃。实例字段不会自动存档；需要跨卸载保留的值应显式写入已绑定的 `MachineContext.dataStorage()`，在新实例中读回。没有绑定数据存储时该方法返回 `null`，不影响使用临时实例字段。
+
+源码（`b2c87dcd`）：[MachineDraft](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/b2c87dcd78966d175f6f8266d02d16150e80430e/src/main/java/cn/howxu/mmcr/publicapi/machine/MachineDraft.java)、[RecipeHooks](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/b2c87dcd78966d175f6f8266d02d16150e80430e/src/main/java/cn/howxu/mmcr/publicapi/behavior/RecipeHooks.java)、[TickHooks](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/b2c87dcd78966d175f6f8266d02d16150e80430e/src/main/java/cn/howxu/mmcr/publicapi/behavior/TickHooks.java)、[实例缓存](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/b2c87dcd78966d175f6f8266d02d16150e80430e/src/main/java/cn/howxu/mmcr/internal/tile/MachineControllerRuntime.java)、[控制器生命周期](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/b2c87dcd78966d175f6f8266d02d16150e80430e/src/main/java/cn/howxu/mmcr/internal/tile/MachineControllerBlockEntity.java)。
 
 ### `MachineContext`
 

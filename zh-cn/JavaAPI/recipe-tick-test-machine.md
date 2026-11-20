@@ -16,7 +16,7 @@ order: 15
 | --- | --- |
 | `Machines` / `Structures` / `Recipes` | [机器](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/publicapi/Machines.java)、[结构](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/publicapi/Structures.java)、[配方](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/publicapi/Recipes.java) 入口 |
 | `RegisterMachineDefinitionsEvent` / `RegisterMachineStructuresEvent` / `RegisterMachineRecipesEvent` | 注册 `MachineSpec`、`StructureSpec`、`RecipeSpec` |
-| `RecipeHooks` | [七个配方模式回调的配置签名](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/publicapi/behavior/RecipeHooks.java) |
+| `RecipeHooks` | [七个配方模式回调的配置签名](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/b2c87dcd78966d175f6f8266d02d16150e80430e/src/main/java/cn/howxu/mmcr/publicapi/behavior/RecipeHooks.java) |
 | `MachineContext` | 空闲、pre/post Tick 与配方上下文共享的服务端能力 |
 | `RecipeStartContext` | [启动前编辑](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/publicapi/behavior/RecipeStartContext.java)，优先使用 `replaceExactItemInputCount` |
 | `RecipeTickContext` | [执行中只读配方信息](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/publicapi/behavior/RecipeTickContext.java) |
@@ -64,7 +64,7 @@ public static void registerDefinitions(RegisterMachineDefinitionsEvent event) {
 }
 ```
 
-`recipeBehavior` 配置公共 `RecipeHooks`，无需使用底层 `RecipeBehavior.Builder`。七个 Hook 都接受 `Consumer<相应上下文>`，本例使用其中五个：
+本例用 `recipeBehavior(hooks -> ...)` 直接注册 `Consumer`，不需要在回调对象中保存状态。如果只有一个钩子需要每台机器独立的字段，可以只给该钩子传工厂；如果 `beforeStart` 和 `recipeTick` 要读写同一份字段，应使用 `recipeBehavior(factory, hooks -> ...)`，而不是分别给两个钩子传工厂。本例使用以下七个配方钩子中的五个：
 
 | Hook | 参数类型 | 用途 |
 | --- | --- | --- |

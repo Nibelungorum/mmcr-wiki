@@ -16,7 +16,7 @@ This machine uses no recipes and is driven directly by `serverTick`. Every 40 ti
 | --- | --- |
 | `Machines` / `Structures` | Declare `MachineSpec` / `StructureSpec` |
 | `RegisterMachineDefinitionsEvent` / `RegisterMachineStructuresEvent` | Definition and structure registration events |
-| `TickHooks` / `TickContext` | [Callback configuration](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/publicapi/behavior/TickHooks.java) / [direct tick context](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/publicapi/behavior/TickContext.java) |
+| `TickHooks` / `TickContext` | [Callback configuration](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/b2c87dcd78966d175f6f8266d02d16150e80430e/src/main/java/cn/howxu/mmcr/publicapi/behavior/TickHooks.java) / [direct tick context](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/publicapi/behavior/TickContext.java) |
 | `MachineContext` | [World, position, text, and IO views](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/publicapi/behavior/MachineContext.java) |
 | `IoTransaction` / `IoSnapshot` | [Single-use plans](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/publicapi/runtime/IoTransaction.java) / [capability collection view](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/publicapi/runtime/IoSnapshot.java) |
 | `Requirements` / `IoValues` / `IoDirection` | [Requirement factory](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/publicapi/recipe/requirement/Requirements.java) / [item and fluid IO value factories](https://github.com/Nibelungorum/ModularMachinery-Community-Refoxed/blob/f234477b/src/main/java/cn/howxu/mmcr/publicapi/recipe/IoValues.java) / input-output direction |
@@ -56,7 +56,24 @@ public static void registerDefinitions(RegisterMachineDefinitionsEvent event) {
 
 `ControllerTexts.register` binds a text callback and returns a registration handle that can be `unregister()`ed. It registers two `CONTROLLER` text lines here, then the runtime callback updates them with `replace`. The registration callback's `ControllerTextContext` and the machine tick callback's `TickContext` are different interfaces.
 
-The public configuration entry point `tickBehavior` accepts `TickHooks`; the signature of `serverTick` is `TickHooks serverTick(Consumer<TickContext> callback)`. It **does not** require an addon to implement a low-level `MachineBehavior.TickCallback`, nor does it call a public `TickBehavior.Builder.build()`.
+This example passes a stateless `Consumer<TickContext>` directly to `serverTick`. To count how many ticks each machine has run, pass a factory instead: `h.serverTick(RunTimer::new)` creates a `RunTimer` the first time each controller runs the hook. In contrast, `h.serverTick(new RunTimer())` shares one counter among all controllers using the same machine definition.
+
+```java
+class RunTimer implements java.util.function.Consumer<TickContext> {
+    private int ticks;
+
+    @Override
+    public void accept(TickContext ctx) {
+        if (++ticks == 20) {
+            ctx.jadeText().append(Identifier.parse("my_mod:timer"), Component.literal("20 ticks"));
+        }
+    }
+}
+
+machine.tickBehavior(h -> h.serverTick(RunTimer::new));
+```
+
+This uses only the public API; there is no need to implement the underlying `MachineBehavior.TickCallback`.
 
 This example calls `allowMultithreading()` and sets a `maxParallelism` limit, but does not call `parallelizable(true)`; setting a limit does not enable parallel processing. The single item conversion in the callback is still explicitly written as 1 iron ingot and 1 gold nugget, and does not automatically become an arbitrary quantity because of `maxParallelism`.
 
